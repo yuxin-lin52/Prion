@@ -404,7 +404,7 @@ fn unexpected_char(line_no: usize, c: char) -> LexError {
             format!("第 {} 行", line_no),
             "解析",
             format!("不认识的字符「{}」", c),
-            "不在 Anle 的词法表里",
+            "不在 Argon 的词法表里",
             "检查拼写（中文近形字：报告 ≠ 报吿）或改用合法符号",
         ),
         Tone::Suggest,

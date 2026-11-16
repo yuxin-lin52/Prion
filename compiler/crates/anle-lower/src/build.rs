@@ -6646,7 +6646,7 @@ thread_local! {
 pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>) -> Result<Program, BuildError> {
     TYPECK.with(|m| *m.borrow_mut() = typeck.clone());
     //nt: 预扫类型名
-    //nt: Anle 删了 us
+    //nt: Argon 删了 us
     //nt: 必须唯一才能指称
     //nt: 和类型变体名同一规则
     let mut types: Vec<StructType> = Vec::new();

@@ -9,7 +9,7 @@ Two forms, both `unsafe` territory (inline assembly is the fourth unsafe use, al
 - **Block-level asm**: `#: name b asm` opens a block whose body is raw assembly text. Compiled as a naked function — no prologue, no epilogue. For interrupt/exception entry points, context switches, and lock/atomic sequences. No parameters, no return value; the ABI convention is the caller's.
 - **Inline asm**: `asm("template" : outputs : inputs : clobbers)` inside a fn, in GCC three-section form — one-to-one with clang's `__asm__("in al, dx" : "=a"(result) : "d"(port) : "memory")`. Outputs are `register -> 名`; read-write uses `<->`; inputs are `register <- expression`; clobbers list `memory` or register names by hand. Named operands are emitted as `%[名]`. A fn whose body ends in inline asm with an output constraint is an expression and may initialize a val.
 
-Rules: the quarantine (the asm parentheses) is parsed by asm's own grammar, not Anle's — constraint words like `in`/`out` do not collide with Anle keywords. The quarantine is ASCII-only: templates, binding names, and clobber lists never contain Chinese. Templates do not cross architectures (`al`/`dx` are x86); gating by `only(x86_64)` / `only(arm64)` is the way to write per-architecture code.
+Rules: the quarantine (the asm parentheses) is parsed by asm's own grammar, not Argon's — constraint words like `in`/`out` do not collide with Argon keywords. The quarantine is ASCII-only: templates, binding names, and clobber lists never contain Chinese. Templates do not cross architectures (`al`/`dx` are x86); gating by `only(x86_64)` / `only(arm64)` is the way to write per-architecture code.
 
 ## Why
 
@@ -23,5 +23,5 @@ Rules: the quarantine (the asm parentheses) is parsed by asm's own grammar, not 
 - asm with runtime-built templates — constraints must be compile-time-known; the alternative is equivalent to unconstrained asm, never
 - Cross-architecture portable asm — instruction sets differ by nature; write per-architecture blocks gated by `only(...)`
 - Implicit constraint inference — inference is guessing, and wrong guesses are dangerous, never
-- Standalone assembly files (Go `.s` style) — would require defining an Anle assembly ABI; inline plus C interoperation covers the cases
+- Standalone assembly files (Go `.s` style) — would require defining an Argon assembly ABI; inline plus C interoperation covers the cases
 - asm in compile-time evaluation — compile-time execution would run target-machine instructions; never

@@ -5859,7 +5859,7 @@ fn 收局部名(stmts: &[AstStmt], out: &mut BTreeSet<String>) {
 //nt: 语法层语句树 → 中
 pub fn build(ast: &AstProgram) -> Result<Program, BuildError> {
     //nt: 预扫类型名
-    //nt: Anle 删了 us
+    //nt: Argon 删了 us
     //nt: 必须唯一才能指称
     //nt: 和类型变体名同一规则
     let mut types: Vec<StructType> = Vec::new();

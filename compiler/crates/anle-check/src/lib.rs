@@ -2450,7 +2450,7 @@ fn check_call(b: &AstBlock, 处: 位置, name: &str, args: &[Vec<Token>], cx: &m
                 )
                 .预期("函数要先建出来，再调它")
                 .详解(
-                    "Anle 是「先建后用」：调用要排在 `add fn` 之后。`add type`（类型）不受这条约束，可以先用后写。",
+                    "Argon 是「先建后用」：调用要排在 `add fn` 之后。`add type`（类型）不受这条约束，可以先用后写。",
                 ),
                 Tone::Fix,
             );
@@ -3182,7 +3182,7 @@ fn calls_expr(b: &AstBlock, 处: 位置, 段: &[Token], cx: &mut Ctx) {
                     .预期("内联汇编只能出现在 unsafe 块里")
                     .详解(
                         "asm 是 unsafe 的第四类能力（与裸地址读写、C 互操作并列）：\
-                         汇编绕开了 Anle 的全部类型与内存规则，只在 `#: 块名 b unsafe` 的块里放行。",
+                         汇编绕开了 Argon 的全部类型与内存规则，只在 `#: 块名 b unsafe` 的块里放行。",
                     ),
                     Tone::Fix,
                 );
@@ -3929,7 +3929,7 @@ fn require_known(b: &AstBlock, 处: 位置, name: &str, cx: &mut Ctx) {
                     )
                     .预期("名字要先建出来，再用它")
                     .详解(
-                        "Anle 是「先建后用」：val 的读和写都要排在它的 `add val` 之后——排在前面会读到还没放值的内存。`add fn`（函数）与 `add type`（类型）是声明，不受这条约束，可以先用后写。",
+                        "Argon 是「先建后用」：val 的读和写都要排在它的 `add val` 之后——排在前面会读到还没放值的内存。`add fn`（函数）与 `add type`（类型）是声明，不受这条约束，可以先用后写。",
                     ),
                     Tone::Fix,
                 );
@@ -3949,7 +3949,7 @@ fn require_known(b: &AstBlock, 处: 位置, name: &str, cx: &mut Ctx) {
         )
         .预期("这里的名字应当是【本块已建过】的 val / 函数")
         .详解(
- "Anle 的规则是「先建后用」：名字要先由 `add val`（值）/ `add fn`（函数）/ `add type`（类型）建出来，才能在表达式里读；如果名字在别的块里，跨块取 val 要写 `call #:块 val \"名\"`；跨块调函数要写 `call #:块 fn \"名\"(…)`；同块直接用。",
+ "Argon 的规则是「先建后用」：名字要先由 `add val`（值）/ `add fn`（函数）/ `add type`（类型）建出来，才能在表达式里读；如果名字在别的块里，跨块取 val 要写 `call #:块 val \"名\"`；跨块调函数要写 `call #:块 fn \"名\"(…)`；同块直接用。",
         ),
         Tone::Fix,
     );
@@ -4806,7 +4806,7 @@ fn types_block(b: &AstBlock, cx: &mut Ctx) {
                                         format!("改成 {} 的值，或把声明改成 {}", decl, got),
                                     )
                                     .预期(format!("右边的值应当是 {} 型（左边声明说了算）", decl))
-                .详解("Anle 不悄悄转换类型：int 不会自动变 str。要换类型请显式写 int(值) / str(值) / float(值) / bool(值) 转换；若是声明写错了，就把左边类型改成右边的型。"),
+                .详解("Argon 不悄悄转换类型：int 不会自动变 str。要换类型请显式写 int(值) / str(值) / float(值) / bool(值) 转换；若是声明写错了，就把左边类型改成右边的型。"),
                                     Tone::Fix,
                                 );
                             }

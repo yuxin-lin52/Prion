@@ -1,6 +1,6 @@
 //! 内联 asm 三段式的隔离区解析
 //!
-//! `asm(模板 : 输出 : 输入 : 破坏)` 括号内是隔离区：约束词不按 Anle 词法，
+//! `asm(模板 : 输出 : 输入 : 破坏)` 括号内是隔离区：约束词不按 Argon 词法，
 //! 由本模块按 asm 自己的微语法解析。check 与 IR 构建共用这一个解析函数——
 //! 同一份内容只准有一套判定。
 
@@ -155,7 +155,7 @@ pub fn 解析隔离区(inner: &[Token]) -> Result<AsmSections, String> {
                 return Err("输出段要写 `寄存器 -> 名`（或 `寄存器 <-> 名`）".into());
             }
             if 名.is_empty() {
-                return Err("输出段右边要写 Anle 名".into());
+                return Err("输出段右边要写 Argon 名".into());
             }
             出项.push((约束, 名, 读写));
         }
@@ -207,7 +207,7 @@ fn 读绑定(项: &[Token]) -> Result<(String, String, bool, usize), String> {
     };
     let 名 = match 项.get(1 + 步) {
         Some(Token::Ident(n)) | Some(Token::Str(n)) => n.clone(),
-        _ => return Err("箭头右边要写 Anle 名".into()),
+        _ => return Err("箭头右边要写 Argon 名".into()),
     };
     let 约束 = 寄存器约束(&寄).ok_or_else(|| format!("寄存器「{}」不在映射表里", 寄))?;
     Ok((约束.to_string(), 名.to_string(), 形 == "<->", 步))

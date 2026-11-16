@@ -352,7 +352,7 @@ fn 一条(行: usize, 列: usize, 长: usize, 文案: &str) -> Value {
         "range": { "start": { "line": l, "character": c },
                    "end": { "line": l, "character": c + w } },
         "severity": 1,
-        "source": "anlec",
+        "source": "argonc",
         "message": 文案
     })
 }

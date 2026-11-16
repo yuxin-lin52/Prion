@@ -4,7 +4,7 @@ Status: implemented.
 
 ## How it works
 
-- The compilation unit is a directory: `anlec build <目录>`. The entry is fixed at the directory root's `main.an` — zero configuration. The boundary is the directory given on the command line; the compiler never searches upward for a project root.
+- The compilation unit is a directory: `argonc build <目录>`. The entry is fixed at the directory root's `main.an` — zero configuration. The boundary is the directory given on the command line; the compiler never searches upward for a project root.
 - One file is one module. The module name is the directory path plus the file name without its extension, with directory separators mapped to `.` (`frontend/tokenize.an` → module `frontend.tokenize`). Path is namespace. Moving a file is renaming it (an accepted cost).
 - The dependency closure is collected by scanning `##:module` prefixes recursively. Each module compiles once; circular references are allowed (harmless under combined-source compilation); an `.an` file referenced by nothing is not compiled.
 - Combined-source compilation: the closure merges into one IR and one executable, invisible to the user.
@@ -27,9 +27,9 @@ Status: implemented.
 Two layers:
 
 - **The base**: the OS's last centimeter as a thin builtin layer, plus a stable runtime symbol contract. The contract is backend-independent — the C backend links `anle_rt.c`, the LLVM backend links the same symbols, and any future backend follows the same rule. The current base (~40 builtins) is frozen.
-- **The upper layer**: pure Anle source, fully backend-independent, introduced through the module system. API shape: module-prefixed functions (`字符串.分割(串, 分隔)`).
+- **The upper layer**: pure Argon source, fully backend-independent, introduced through the module system. API shape: module-prefixed functions (`字符串.分割(串, 分隔)`).
 
-First batch (all zero-base-dependency, pure Anle): string five (split, trim, find-and-replace, case conversion, search); container algorithms three (map, filter, fold — generic free functions, the transform logic is a fn parameter); generic wrappers two (`Result(T, E)`, `Optional(T)`).
+First batch (all zero-base-dependency, pure Argon): string five (split, trim, find-and-replace, case conversion, search); container algorithms three (map, filter, fold — generic free functions, the transform logic is a fn parameter); generic wrappers two (`Result(T, E)`, `Optional(T)`).
 
 ## Not provided
 

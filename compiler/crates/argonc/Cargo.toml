@@ -1,5 +1,5 @@
 [package]
-name = "anlec"
+name = "argonc"
 version.workspace = true
 edition.workspace = true
 

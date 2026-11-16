@@ -1,22 +1,22 @@
-<p align="center"><img src="assets/icon.png" width="112" height="112" alt="Anle"></p>
+<p align="center"><img src="assets/icon.png" width="112" height="112" alt="Argon"></p>
 
-<h1 align="center">Anle</h1>
+<h1 align="center">Argon</h1>
 
-<p align="center"><a href="https://github.com/yuxin-lin52/Anle/actions/workflows/build.yml"><img src="https://github.com/yuxin-lin52/Anle/actions/workflows/build.yml/badge.svg" alt="build"></a></p>
+<p align="center"><a href="https://github.com/yuxin-lin52/Argon/actions/workflows/build.yml"><img src="https://github.com/yuxin-lin52/Argon/actions/workflows/build.yml/badge.svg" alt="build"></a></p>
 
 <p align="center"><a href="README.zh-CN.md">中文</a> | English</p>
 
-Anle is an ahead-of-time compiled language. Memory is managed by the compiler: reclamation points are computed from the program's block structure, and the runtime has no garbage collector, no pauses, and no per-object counting.
+Argon is an ahead-of-time compiled language. Memory is managed by the compiler: reclamation points are computed from the program's block structure, and the runtime has no garbage collector, no pauses, and no per-object counting.
 
 ## Design motivation
 
-Anle is built on a single division of labor: **simple to write, complex to implement.**
+Argon is built on a single division of labor: **simple to write, complex to implement.**
 
 Every language must answer one question: who is responsible for memory? Manual management hands correctness to the programmer. Runtime management removes that work, but adds an extra burden and runtime pauses. Compiler-checked ownership guarantees correctness, at the price of a set of rules the programmer must learn and satisfy.
 
-Anle takes none of these trade-offs. The program is structured as blocks; values live in the block that declares them; all data crossing a block boundary goes through an explicit channel. Given that structure, the compiler computes the lifetime and reclamation point of every value. The programmer writes blocks and states data flow; the compiler does the rest.
+Argon takes none of these trade-offs. The program is structured as blocks; values live in the block that declares them; all data crossing a block boundary goes through an explicit channel. Given that structure, the compiler computes the lifetime and reclamation point of every value. The programmer writes blocks and states data flow; the compiler does the rest.
 
-The same division runs through the whole language. The syntax is small and regular. Direct memory access and explicit early reclamation (`kill`) exist only inside `unsafe` blocks. There is no manual memory allocation. The compiler computes where memory is released from the block structure: each block runs in its own region, and when the block's chain finishes, its segments are handed back to the platform allocator in one step. Anle also provides inline assembly and C ABI interoperability for environments that need their own.
+The same division runs through the whole language. The syntax is small and regular. Direct memory access and explicit early reclamation (`kill`) exist only inside `unsafe` blocks. There is no manual memory allocation. The compiler computes where memory is released from the block structure: each block runs in its own region, and when the block's chain finishes, its segments are handed back to the platform allocator in one step. Argon also provides inline assembly and C ABI interoperability for environments that need their own.
 
 ## Language overview
 
@@ -40,7 +40,7 @@ This prints `5050`. The rules visible in this example:
 * No implicit conversions. `int` and `float` do not mix without an explicit cast.
 * Conditions must be booleans — `if 5:` is a compile error.
 * Indices start at 1, matching the inclusive range operator (`for i in 1\~5` covers 1 through 5).
-* Control-flow bodies are terminated by a lone `;` on its own line. Indentation is purely cosmetic and can never change meaning; a mismatched `;` is a loud parse error. The Anle editor extension ships an auto-formatter that keeps indentation consistent.
+* Control-flow bodies are terminated by a lone `;` on its own line. Indentation is purely cosmetic and can never change meaning; a mismatched `;` is a loud parse error. The Argon editor extension ships an auto-formatter that keeps indentation consistent.
 
 ## Memory model
 
@@ -53,7 +53,7 @@ The model gives every programmer the same simple default: put the code in blocks
 
 ## Download
 
-A prebuilt Windows x64 binary of the C backend is attached to the [latest release](https://github.com/yuxin-lin52/Anle/releases). It still needs a C toolchain: `clang` on `PATH`, or `ANLE_CC` pointing at one. The LLVM backend is not included in the prebuilt binary — build from source for that (see below).
+A prebuilt Windows x64 binary of the C backend is attached to the [latest release](https://github.com/yuxin-lin52/Argon/releases). It still needs a C toolchain: `clang` on `PATH`, or `ARGON_CC` pointing at one. The LLVM backend is not included in the prebuilt binary — build from source for that (see below).
 
 ## Building
 
@@ -61,14 +61,14 @@ The compiler source is in [`compiler/`](compiler) — a Rust workspace of twelve
 
 ```
 cd compiler
-cargo build --release -p anlec --no-default-features --features backend   # C backend only, no LLVM needed
-cargo build --release -p anlec                                   # both backends, needs LLVM 22.1
+cargo build --release -p argonc --no-default-features --features backend   # C backend only, no LLVM needed
+cargo build --release -p argonc                                   # both backends, needs LLVM 22.1
 ```
 
-The C backend lowers the intermediate representation to C source text and hands it to `clang` (path from `ANLE_CC`, otherwise `clang` on `PATH`). The LLVM backend links LLVM 22.1 statically: set `LLVM_SYS_221_PREFIX` to an LLVM 22.1 installation, and add that installation's `deps` directory to the link search path with `RUSTFLAGS="-L native=<prefix>\deps"` — it holds the zlib, zstd and libxml2 import libraries. LLVM is not redistributed here — get it from the upstream release page: <https://github.com/llvm/llvm-project/releases>.
+The C backend lowers the intermediate representation to C source text and hands it to `clang` (path from `ARGON_CC`, otherwise `clang` on `PATH`). The LLVM backend links LLVM 22.1 statically: set `LLVM_SYS_221_PREFIX` to an LLVM 22.1 installation, and add that installation's `deps` directory to the link search path with `RUSTFLAGS="-L native=<prefix>\deps"` — it holds the zlib, zstd and libxml2 import libraries. LLVM is not redistributed here — get it from the upstream release page: <https://github.com/llvm/llvm-project/releases>.
 
 ```
-./target/release/anlec build demos/en/physics-engine/physics-engine
+./target/release/argonc build demos/en/physics-engine/physics-engine
 ```
 
 ## Implementation status

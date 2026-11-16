@@ -31,7 +31,7 @@ case Err("reason"):
 
 ## Why
 
-- The two tracks are the necessary shape: letting a bug continue is meaningless, and an expected failure is part of the flow. The difference between languages is only whether the bug track is deterministic. Anle makes it deterministic: an error with a line number, not undefined behavior.
+- The two tracks are the necessary shape: letting a bug continue is meaningless, and an expected failure is part of the flow. The difference between languages is only whether the bug track is deterministic. Argon makes it deterministic: an error with a line number, not undefined behavior.
 - Errors as ordinary values: zero hidden control flow and zero runtime overhead. Plain return codes lack type support, allow silent ignoring, and need endless boilerplate — sum types with compile-time exhaustive matching close all three.
 - No propagation sugar: sugar depends on the language's expression structure. With fn bodies and match opened up, the verbosity is manageable via helper fns. If a real project proves the pain exceeds the threshold, sugar is evaluated on its own.
 - Exceptions and try/catch never: hidden control flow plus a runtime unwinder, conflicting with AOT, no-runtime, and the binary-decision principle.

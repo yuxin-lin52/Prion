@@ -1,11 +1,11 @@
-//! anlec —— Anle 编译器驱动
+//! argonc —— Argon 编译器驱动
 //!
 //! CLI 规格（对齐 cargo 的命令形态与退出码契约）：
-//!   anlec build [名] [--mode debug|release] [--opt 0-3] [--backend c|llvm]
-//!   anlec run   [名] [--mode …] [--opt …] [--backend …] [-- 参数…]
-//!   anlec check [名]
-//!   anlec clean [名]
-//!   anlec -V / -h
+//!   argonc build [名] [--mode debug|release] [--opt 0-3] [--backend c|llvm]
+//!   argonc run   [名] [--mode …] [--opt …] [--backend …] [-- 参数…]
+//!   argonc check [名]
+//!   argonc clean [名]
+//!   argonc -V / -h
 //!
 //! - 操作数 `[名]` 可省：省略 = 当前目录的项目（有 lib.anle）或目录下唯一的 .an；
 //!   给了 = 按名字找（lib.anle 的包名，或 <名>.an 文件）。
@@ -14,7 +14,7 @@
 //!   `键 = 值`、`#` 注释；命令行旗子覆盖文件值。
 //! - 退出码：0 成功 / 101 失败 / 1 用法错误；run 透传被运行程序的退出码。
 //! - 诊断走 stderr；进度走 stdout。
-//! - 编译器取 `ANLE_CC`，未设则用 PATH 里的 `clang`。MSVC target 与 GNU target 均可，
+//! - 编译器取 `ARGON_CC`，未设则用 PATH 里的 `clang`。MSVC target 与 GNU target 均可，
 //!   前提是它找得到系统头文件与链接器
 
 use std::env;
@@ -53,9 +53,9 @@ fn version_banner() -> String {
     let 包显示 = PACKS.iter().map(|p| format!("+{}", p)).collect::<String>();
     let 包机器 = PACKS.join(",");
     let 名 = match TIER {
-        "dev" => format!("Com for Anle Dev-{}", SYNTAX),
-        "lts" => format!("Com for Anle {} LTS{}", SYNTAX, 包显示),
-        _ => "Com for Anle unreleased".to_string(),
+        "dev" => format!("Com for Argon Dev-{}", SYNTAX),
+        "lts" => format!("Com for Argon {} LTS{}", SYNTAX, 包显示),
+        _ => "Com for Argon unreleased".to_string(),
     };
     let 机器 = match TIER {
         "dev" => format!("syntax=Dev-{} tier=dev compiler={}", SYNTAX, VERSION),
@@ -74,7 +74,7 @@ fn version_banner() -> String {
 //nt: 「同根」= 本可执行
 #[cfg(feature = "backend")]
 fn 找cc() -> String {
-    if let Ok(v) = env::var("ANLE_CC") {
+    if let Ok(v) = env::var("ARGON_CC") {
         if !v.trim().is_empty() {
             return v;
         }
@@ -93,15 +93,15 @@ fn 找cc() -> String {
 }
 
 const USAGE: &str = "\
-anlec —— Anle 编译器
+argonc —— Argon 编译器
 
 用法：
-  anlec build [名] [--mode debug|release] [--opt 0-3] [--backend c|llvm]
-  anlec run   [名] [--mode …] [--opt …] [--backend …] [-- 参数…]
-  anlec check [名]
-  anlec fmt   [路径] [--check]
-  anlec clean [名]
-  anlec -V | anlec -h
+  argonc build [名] [--mode debug|release] [--opt 0-3] [--backend c|llvm]
+  argonc run   [名] [--mode …] [--opt …] [--backend …] [-- 参数…]
+  argonc check [名]
+  argonc fmt   [路径] [--check]
+  argonc clean [名]
+  argonc -V | argonc -h
 
 说明：
   [名]     可省：省略 = 当前目录的项目（有 lib.anle）或目录下唯一的 .an；
@@ -221,7 +221,7 @@ fn dispatch(args: &[String]) -> ExitCode {
             anle_error::CliCode::E501.number(),
             "敲命令",
             &format!("不认识的命令「{}」", other),
-            "用 `anlec -h` 看可用命令（build / run / check / clean）",
+            "用 `argonc -h` 看可用命令（build / run / check / clean）",
         )),
     }
 }
@@ -373,7 +373,7 @@ fn parse_opts(rest: &[String]) -> Result<Opts, String> {
                         anle_error::CliCode::E502.number(),
                         "写选项",
                         &format!("不认识的选项 --{}", other),
-                        "用 `anlec build -h` 看该命令支持的选项",
+                        "用 `argonc build -h` 看该命令支持的选项",
                     ))
                 }
             }
@@ -385,7 +385,7 @@ fn parse_opts(rest: &[String]) -> Result<Opts, String> {
                         anle_error::CliCode::E502.number(),
                         "写选项",
                         &format!("不认识的选项 {}", other),
-                        "用 `anlec build -h` 看该命令支持的选项",
+                        "用 `argonc build -h` 看该命令支持的选项",
                     ))
                 }
             }
@@ -410,7 +410,7 @@ fn command_help(cmd: &str) -> String {
         .find(|(c, _)| *c == cmd)
         .map(|(_, w)| (*w).to_string())
         .unwrap_or_default();
-    format!("anlec {} —— {}", cmd, what)
+    format!("argonc {} —— {}", cmd, what)
 }
 
 
@@ -489,13 +489,13 @@ fn resolve(name: Option<&str>) -> Result<Target, String> {
             anle_error::CliCode::E505.number(),
             "找源文件",
             "当前目录既没有 lib.anle，也没有 .an 源文件——不知道要编什么",
-            "给个名字（如 `anlec build hello`），或先建一个 .an",
+            "给个名字（如 `argonc build hello`），或先建一个 .an",
         )),
         _ => Err(render_nofile(
             anle_error::CliCode::E505.number(),
             "找源文件",
             "当前目录有多个 .an 文件——不知道编哪个",
-            "给个名字（如 `anlec build hello`）",
+            "给个名字（如 `argonc build hello`）",
         )),
     }
 }
@@ -819,7 +819,7 @@ fn collect_by_tail(root: &Path, tail: &str, dir: &Path, out: &mut Vec<(String, P
 
 //nt: 标准库根
 fn std_root() -> Option<PathBuf> {
-    if let Ok(v) = env::var("ANLE_STD") {
+    if let Ok(v) = env::var("ARGON_STD") {
         if !v.trim().is_empty() {
             return Some(PathBuf::from(v));
         }
@@ -894,8 +894,8 @@ fn load_project(dir: &Path) -> Result<AstProgram, ExitCode> {
                     fail101(render_nofile(
                         anle_error::CliCode::E505.number(),
                         "找标准库",
-                        "找不到标准库根——设 `ANLE_STD`，或按 SDK 布局放 `<SDK>/lib/anle`",
-                        "把标准库目录放到上述位置，或设 ANLE_STD",
+                        "找不到标准库根——设 `ARGON_STD`，或按 SDK 布局放 `<SDK>/lib/anle`",
+                        "把标准库目录放到上述位置，或设 ARGON_STD",
                     ))
                 })?;
                 let p = root
@@ -1373,7 +1373,7 @@ fn do_build_llvm(
             anle_error::EnvCode::E601.number(),
             "调编译器",
             &format!("调不起编译器「{}」：{}", cc, e),
-            "设 ANLE_CC 指向可用的 clang",
+            "设 ARGON_CC 指向可用的 clang",
         ))),
     }
     let obj = dir.join(format!("{}.o", name));
@@ -1405,7 +1405,7 @@ fn do_build_llvm(
             anle_error::EnvCode::E601.number(),
             "调编译器",
             &format!("调不起编译器「{}」：{}", cc, e),
-            "设 ANLE_CC 指向可用的 clang",
+            "设 ARGON_CC 指向可用的 clang",
         ))),
     }
 }
@@ -1424,7 +1424,7 @@ fn do_build(
     _native: bool,
 ) -> Result<(PathBuf, PathBuf), ExitCode> {
     Err(fail101(
-        "这个 anlec 是精简构建（只有诊断与语言服务），不含代码生成——编译请换完整版",
+        "这个 argonc 是精简构建（只有诊断与语言服务），不含代码生成——编译请换完整版",
     ))
 }
 
@@ -1476,7 +1476,7 @@ fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, incr: Option<bool>,
         #[cfg(not(feature = "llvm"))]
         {
             return Err(fail101(
-                "这个 anlec 构建未启用 LLVM 后端——请改用 --backend c，或用默认特性重新构建",
+                "这个 argonc 构建未启用 LLVM 后端——请改用 --backend c，或用默认特性重新构建",
             ));
         }
     }
@@ -1524,7 +1524,7 @@ fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, incr: Option<bool>,
                         anle_error::EnvCode::E601.number(),
                         "调编译器",
                         &format!("调不起编译器「{}」：{}", cc, e),
-                        "设 `ANLE_CC` 指向可用的 clang",
+                        "设 `ARGON_CC` 指向可用的 clang",
                     )))
                 }
             };
@@ -1716,7 +1716,7 @@ fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, incr: Option<bool>,
                     anle_error::EnvCode::E601.number(),
                     "链接",
                     &format!("调不起链接器「{}」：{}", cc, e),
-                    "设 `ANLE_CC` 指向可用的 clang（装了 SDK 的 clang 组件会自动用上）",
+                    "设 `ARGON_CC` 指向可用的 clang（装了 SDK 的 clang 组件会自动用上）",
                 )))
             }
         };
@@ -1755,7 +1755,7 @@ fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, incr: Option<bool>,
                 anle_error::EnvCode::E601.number(),
                 "调编译器",
             &format!("调不起编译器「{}」：{}", cc, e),
-            "设 `ANLE_CC` 指向可用的 clang（MSVC target 与 GNU target 均可；装了 SDK 的 clang 组件会自动用上）",
+            "设 `ARGON_CC` 指向可用的 clang（MSVC target 与 GNU target 均可；装了 SDK 的 clang 组件会自动用上）",
         )))
         }
     };
