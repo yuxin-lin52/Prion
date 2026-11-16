@@ -30,15 +30,15 @@ mod lsp;
 #[global_allocator]
 static ALLOC: alloc_stat::计数 = alloc_stat::计数;
 
-use anle_check::check;
+use argon_check::check;
 #[cfg(feature = "backend")]
-use anle_codegen::lower_to_c;
+use argon_codegen::lower_to_c;
 #[cfg(feature = "llvm")]
-use anle_llvm::emit_object;
+use argon_llvm::emit_object;
 #[cfg(feature = "backend")]
-use anle_lower::build as build_ir;
-use anle_lexer::lex;
-use anle_parser::Program as AstProgram;
+use argon_lower::build as build_ir;
+use argon_lexer::lex;
+use argon_parser::Program as AstProgram;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -139,7 +139,7 @@ fn 主逻辑() -> ExitCode {
             .map(|s| (*s).to_string())
             .or_else(|| info.payload().downcast_ref::<String>().cloned())
             .unwrap_or_else(|| "（无消息）".to_string());
-        let code = anle_error::InternalCode::E701.number();
+        let code = argon_error::InternalCode::E701.number();
         eprintln!(
             "{}",
             render_nofile(code, "", &format!("编译器内部错误：{}", msg), "")
@@ -165,12 +165,12 @@ fn fail101(msg: impl AsRef<str>) -> ExitCode {
 //nt: 无位置报错
 //nt: 码级默认
 fn render_nofile(code: &str, 做: &str, 缺: &str, 改: &str) -> String {
-    let (de, dd) = anle_error::code_defaults(code);
-    let parts = anle_error::DiagParts::full(String::new(), 做, 缺, "", 改)
+    let (de, dd) = argon_error::code_defaults(code);
+    let parts = argon_error::DiagParts::full(String::new(), 做, 缺, "", 改)
         .预期(de)
         .详解(dd);
-    let cx = anle_error::RenderCtx { code, file: "", src_line: "" };
-    anle_error::render_full(&parts, anle_error::Tone::Fix, &cx)
+    let cx = argon_error::RenderCtx { code, file: "", src_line: "" };
+    argon_error::render_full(&parts, argon_error::Tone::Fix, &cx)
 }
 
 //nt: 带文件报错
@@ -179,12 +179,12 @@ fn render_file(code: &str, 做: &str, 缺: &str, 改: &str, src: &std::path::Pat
         .file_name()
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let (de, dd) = anle_error::code_defaults(code);
-    let parts = anle_error::DiagParts::full(String::new(), 做, 缺, "", 改)
+    let (de, dd) = argon_error::code_defaults(code);
+    let parts = argon_error::DiagParts::full(String::new(), 做, 缺, "", 改)
         .预期(de)
         .详解(dd);
-    let cx = anle_error::RenderCtx { code, file: &file, src_line: "" };
-    anle_error::render_full(&parts, anle_error::Tone::Fix, &cx)
+    let cx = argon_error::RenderCtx { code, file: &file, src_line: "" };
+    argon_error::render_full(&parts, argon_error::Tone::Fix, &cx)
 }
 
 //nt: 用法错误
@@ -218,7 +218,7 @@ fn dispatch(args: &[String]) -> ExitCode {
             if 码 == 0 { ExitCode::SUCCESS } else { ExitCode::from(1) }
         }
         other => usage_err(render_nofile(
-            anle_error::CliCode::E501.number(),
+            argon_error::CliCode::E501.number(),
             "敲命令",
             &format!("不认识的命令「{}」", other),
             "用 `argonc -h` 看可用命令（build / run / check / clean）",
@@ -307,7 +307,7 @@ fn parse_opts(rest: &[String]) -> Result<Opts, String> {
                     let v = val!();
                     if v != "debug" && v != "release" {
                         return Err(render_nofile(
-                            anle_error::CliCode::E503.number(),
+                            argon_error::CliCode::E503.number(),
                             "写选项",
                             &format!("`--mode` 只收 debug|release，给了 {}", v),
                             "改成 `--mode debug` 或 `--mode release`",
@@ -323,7 +323,7 @@ fn parse_opts(rest: &[String]) -> Result<Opts, String> {
                     let v = val!();
                     let n: usize = v.parse().map_err(|_| {
                         render_nofile(
-                            anle_error::CliCode::E503.number(),
+                            argon_error::CliCode::E503.number(),
                             "写选项",
                             &format!("`--{}` 只收非负整数，给了 {}", k, v),
                             "改成 0 或正整数；0 表示不设上限",
@@ -336,7 +336,7 @@ fn parse_opts(rest: &[String]) -> Result<Opts, String> {
                     let v = val!();
                     let n: u32 = v.parse().map_err(|_| {
                         render_nofile(
-                            anle_error::CliCode::E503.number(),
+                            argon_error::CliCode::E503.number(),
                             "写选项",
                             &format!("`--opt` 只收 0-3，给了 {}", v),
                             "改成 0-3 之间的数",
@@ -344,7 +344,7 @@ fn parse_opts(rest: &[String]) -> Result<Opts, String> {
                     })?;
                     if n > 3 {
                         return Err(render_nofile(
-                            anle_error::CliCode::E503.number(),
+                            argon_error::CliCode::E503.number(),
                             "写选项",
                             &format!("`--opt` 只收 0-3，给了 {}", n),
                             "改成 0-3 之间的数",
@@ -356,7 +356,7 @@ fn parse_opts(rest: &[String]) -> Result<Opts, String> {
                     let v = val!();
                     if v != "c" && v != "llvm" {
                         return Err(render_nofile(
-                            anle_error::CliCode::E503.number(),
+                            argon_error::CliCode::E503.number(),
                             "写选项",
                             &format!("`--backend` 只收 c|llvm，给了 {}", v),
                             "改成 `--backend llvm`（缺省）或 `--backend c`",
@@ -370,7 +370,7 @@ fn parse_opts(rest: &[String]) -> Result<Opts, String> {
                 "help" => o.help = true,
                 other => {
                     return Err(render_nofile(
-                        anle_error::CliCode::E502.number(),
+                        argon_error::CliCode::E502.number(),
                         "写选项",
                         &format!("不认识的选项 --{}", other),
                         "用 `argonc build -h` 看该命令支持的选项",
@@ -382,7 +382,7 @@ fn parse_opts(rest: &[String]) -> Result<Opts, String> {
                 "-h" => o.help = true,
                 other => {
                     return Err(render_nofile(
-                        anle_error::CliCode::E502.number(),
+                        argon_error::CliCode::E502.number(),
                         "写选项",
                         &format!("不认识的选项 {}", other),
                         "用 `argonc build -h` 看该命令支持的选项",
@@ -393,7 +393,7 @@ fn parse_opts(rest: &[String]) -> Result<Opts, String> {
             o.name = Some(a.to_string());
         } else {
             return Err(render_nofile(
-                anle_error::CliCode::E504.number(),
+                argon_error::CliCode::E504.number(),
                 "写命令行",
                 &format!("多余的参数「{}」", a),
                 "去掉它——一个命令最多给一个名字",
@@ -426,7 +426,7 @@ struct Target {
 fn resolve(name: Option<&str>) -> Result<Target, String> {
     let cwd = env::current_dir().map_err(|e| {
         render_nofile(
-            anle_error::EnvCode::E602.number(),
+            argon_error::EnvCode::E602.number(),
             "读当前目录",
             &format!("拿不到当前目录：{}", e),
             "检查当前目录是否存在、是否有权限",
@@ -453,7 +453,7 @@ fn resolve(name: Option<&str>) -> Result<Target, String> {
                 return project(as_dir, n.to_string());
             }
             return Err(render_nofile(
-                anle_error::CliCode::E505.number(),
+                argon_error::CliCode::E505.number(),
                 "找项目",
                 &format!("目录「{}」里没有 main.an——工程入口固定是 main.an", n),
                 "在目录根放一个 main.an，或把名字指向别的工程",
@@ -467,7 +467,7 @@ fn resolve(name: Option<&str>) -> Result<Target, String> {
             }
         }
         return Err(render_nofile(
-            anle_error::CliCode::E505.number(),
+            argon_error::CliCode::E505.number(),
             "找项目",
             &format!("找不到「{}」——当前目录下没有 {}.an，也没有同名项目目录", n, n),
             &format!("检查名字拼写，或先建 {}.an", n),
@@ -486,13 +486,13 @@ fn resolve(name: Option<&str>) -> Result<Target, String> {
     match ans.len() {
         1 => single(ans.remove(0)),
         0 => Err(render_nofile(
-            anle_error::CliCode::E505.number(),
+            argon_error::CliCode::E505.number(),
             "找源文件",
             "当前目录既没有 lib.anle，也没有 .an 源文件——不知道要编什么",
             "给个名字（如 `argonc build hello`），或先建一个 .an",
         )),
         _ => Err(render_nofile(
-            anle_error::CliCode::E505.number(),
+            argon_error::CliCode::E505.number(),
             "找源文件",
             "当前目录有多个 .an 文件——不知道编哪个",
             "给个名字（如 `argonc build hello`）",
@@ -506,7 +506,7 @@ fn single(f: PathBuf) -> Result<Target, String> {
         .map(|s| s.to_string_lossy().into_owned())
         .ok_or_else(|| {
             render_nofile(
-                anle_error::InternalCode::E701.number(),
+                argon_error::InternalCode::E701.number(),
                 "",
                 &format!("拿不到文件名：{}", f.display()),
                 "",
@@ -526,7 +526,7 @@ fn project(root: PathBuf, name: String) -> Result<Target, String> {
         1 => ans.remove(0),
         0 => {
             return Err(render_nofile(
-                anle_error::CliCode::E505.number(),
+                argon_error::CliCode::E505.number(),
                 "找源文件",
                 &format!("项目「{}」里没有 .an 源文件", name),
                 "项目根下要有一个 .an",
@@ -534,7 +534,7 @@ fn project(root: PathBuf, name: String) -> Result<Target, String> {
         }
         _ => {
             return Err(render_nofile(
-                anle_error::CliCode::E505.number(),
+                argon_error::CliCode::E505.number(),
                 "找源文件",
                 &format!("项目「{}」里有多个 .an——一文件一程序", name),
                 "只留一个 .an",
@@ -547,7 +547,7 @@ fn project(root: PathBuf, name: String) -> Result<Target, String> {
 fn list_an(dir: &Path) -> Result<Vec<PathBuf>, String> {
     let rd = fs::read_dir(dir).map_err(|e| {
         render_nofile(
-            anle_error::EnvCode::E602.number(),
+            argon_error::EnvCode::E602.number(),
             "读目录",
             &format!("读不了 {}：{}", dir.display(), e),
             "检查目录是否存在、是否有读权限",
@@ -603,7 +603,7 @@ fn resolve_config(t: &Target, o: &Opts) -> Result<(String, u32, String), ExitCod
     let mode = o.mode.clone().or(f_mode).unwrap_or_else(|| "debug".into());
     if mode != "debug" && mode != "release" {
         return Err(usage_err(render_nofile(
-            anle_error::CliCode::E503.number(),
+            argon_error::CliCode::E503.number(),
             "写选项",
             &format!("`--mode` 只收 debug|release，给了 {}（`build.anle` 里也一样）", mode),
             "改成 `--mode debug` 或 `--mode release`",
@@ -612,7 +612,7 @@ fn resolve_config(t: &Target, o: &Opts) -> Result<(String, u32, String), ExitCod
     let opt = o.opt.or(f_opt).unwrap_or(if mode == "debug" { 0 } else { 3 });
     if opt > 3 {
         return Err(usage_err(render_nofile(
-            anle_error::CliCode::E503.number(),
+            argon_error::CliCode::E503.number(),
             "写选项",
             &format!("`--opt` 只收 0-3，给了 {}", opt),
             "改成 0-3 之间的数",
@@ -668,7 +668,7 @@ fn do_fmt(args: &[String]) -> ExitCode {
             }
         }
         Err(e) => fail101(render_nofile(
-            anle_error::EnvCode::E602.number(),
+            argon_error::EnvCode::E602.number(),
             "格式化",
             &e,
             "检查路径是否存在、是否有写权限",
@@ -686,9 +686,9 @@ fn run_command(cmd: &str, rest: &[String]) -> ExitCode {
         return ExitCode::SUCCESS;
     }
     //nt: 配额在构建前注入
-    anle_lower::quota::设(
-        o.const_depth.unwrap_or(anle_lower::quota::默认深度),
-        o.const_steps.unwrap_or(anle_lower::quota::默认步数),
+    argon_lower::quota::设(
+        o.const_depth.unwrap_or(argon_lower::quota::默认深度),
+        o.const_steps.unwrap_or(argon_lower::quota::默认步数),
     );
 
     let t = match resolve(o.name.as_deref()) {
@@ -733,22 +733,22 @@ fn run_command(cmd: &str, rest: &[String]) -> ExitCode {
 //nt: 多文件工程
 //nt: 编译单位 = 目录；
 //nt: 取一段记号
-fn collect_module_refs(段: &[anle_lexer::Token], out: &mut Vec<String>) {
+fn collect_module_refs(段: &[argon_lexer::Token], out: &mut Vec<String>) {
     let mut i = 0usize;
     while i < 段.len() {
-        if matches!(段[i], anle_lexer::Token::HashHashColon) {
+        if matches!(段[i], argon_lexer::Token::HashHashColon) {
             //nt: 模块前缀名
             let mut name = String::new();
             let mut j = i + 1;
             while let Some(tok) = 段.get(j) {
                 match tok {
-                    anle_lexer::Token::Ident(n) | anle_lexer::Token::Str(n) => {
+                    argon_lexer::Token::Ident(n) | argon_lexer::Token::Str(n) => {
                         if !name.is_empty() {
                             name.push('.');
                         }
                         name.push_str(n);
                         j += 1;
-                        if matches!(段.get(j), Some(anle_lexer::Token::Sym("."))) {
+                        if matches!(段.get(j), Some(argon_lexer::Token::Sym("."))) {
                             j += 1;
                         } else {
                             break;
@@ -768,12 +768,12 @@ fn collect_module_refs(段: &[anle_lexer::Token], out: &mut Vec<String>) {
 }
 
 //nt: 递归走语句
-fn stmts_module_refs(stmts: &[anle_parser::Stmt], out: &mut Vec<String>) {
+fn stmts_module_refs(stmts: &[argon_parser::Stmt], out: &mut Vec<String>) {
     for s in stmts {
         match s {
-            anle_parser::Stmt::Line { kind, .. } => collect_module_refs(kind.tokens(), out),
-            anle_parser::Stmt::Struct { head, body, .. }
-            | anle_parser::Stmt::Fn { head, body, .. } => {
+            argon_parser::Stmt::Line { kind, .. } => collect_module_refs(kind.tokens(), out),
+            argon_parser::Stmt::Struct { head, body, .. }
+            | argon_parser::Stmt::Fn { head, body, .. } => {
                 collect_module_refs(head, out);
                 stmts_module_refs(body, out);
             }
@@ -841,14 +841,14 @@ fn load_project(dir: &Path) -> Result<AstProgram, ExitCode> {
     let entry = dir.join("main.an");
     if !entry.is_file() {
         return Err(fail101(render_nofile(
-            anle_error::CliCode::E505.number(),
+            argon_error::CliCode::E505.number(),
             "找工程入口",
             &format!("目录「{}」里找不到 main.an——工程入口固定是 main.an", dir.display()),
             "在目录根放一个 main.an",
         )));
     }
     let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
-    let mut blocks: Vec<anle_parser::Block> = Vec::new();
+    let mut blocks: Vec<argon_parser::Block> = Vec::new();
     let mut queue: std::collections::VecDeque<(String, PathBuf)> = std::collections::VecDeque::new();
     queue.push_back((String::new(), entry));
     while let Some((modname, path)) = queue.pop_front() {
@@ -857,7 +857,7 @@ fn load_project(dir: &Path) -> Result<AstProgram, ExitCode> {
         }
         let text = fs::read_to_string(&path).map_err(|e| {
             fail101(render_nofile(
-                anle_error::EnvCode::E602.number(),
+                argon_error::EnvCode::E602.number(),
                 "读源文件",
                 &format!("读不到 {}：{}", path.display(), e),
                 "检查文件是否存在、是否有读权限",
@@ -865,7 +865,7 @@ fn load_project(dir: &Path) -> Result<AstProgram, ExitCode> {
         })?;
         let 段 = lex(&text)
             .map_err(|e| fail101(render_front(&e.code, &e.parts, &path, &text, e.line)))?;
-        let (ast, errs) = anle_parser::parse_all(段);
+        let (ast, errs) = argon_parser::parse_all(段);
         if !errs.is_empty() {
             let 全: Vec<String> = errs
                 .iter()
@@ -892,7 +892,7 @@ fn load_project(dir: &Path) -> Result<AstProgram, ExitCode> {
             if let Some(rest) = dep.strip_prefix("std.") {
                 let root = std_root().ok_or_else(|| {
                     fail101(render_nofile(
-                        anle_error::CliCode::E505.number(),
+                        argon_error::CliCode::E505.number(),
                         "找标准库",
                         "找不到标准库根——设 `ARGON_STD`，或按 SDK 布局放 `<SDK>/lib/anle`",
                         "把标准库目录放到上述位置，或设 ARGON_STD",
@@ -906,7 +906,7 @@ fn load_project(dir: &Path) -> Result<AstProgram, ExitCode> {
                     continue;
                 }
                 return Err(fail101(render_nofile(
-                    anle_error::CliCode::E505.number(),
+                    argon_error::CliCode::E505.number(),
                     "找标准库",
                     &format!("标准库里找不到模块「{}」", dep),
                     &format!("确认 {} 存在", p.display()),
@@ -929,7 +929,7 @@ fn load_project(dir: &Path) -> Result<AstProgram, ExitCode> {
                     _ => {
                         let names: Vec<String> = hits.iter().map(|(m, _)| m.clone()).collect();
                         return Err(fail101(render_nofile(
-                            anle_error::CliCode::E505.number(),
+                            argon_error::CliCode::E505.number(),
                             "找模块",
                             &format!(
                                 "模块「{}」有歧义——{} 都叫这名，请写全路径",
@@ -945,7 +945,7 @@ fn load_project(dir: &Path) -> Result<AstProgram, ExitCode> {
                 Some((full, p)) => queue.push_back((full, p)),
                 None => {
                     return Err(fail101(render_nofile(
-                        anle_error::CliCode::E505.number(),
+                        argon_error::CliCode::E505.number(),
                         "找模块",
                         &format!("模块「{}」找不到——模块名按目录路径映射", dep),
                         &format!("确认 {} 存在，或把引用写全", want),
@@ -966,7 +966,7 @@ fn front(t: &Target) -> Result<AstProgram, ExitCode> {
         Ok(x) => x,
         Err(e) => {
             return Err(fail101(render_nofile(
-                anle_error::EnvCode::E602.number(),
+                argon_error::EnvCode::E602.number(),
                 "读源文件",
                 &format!("读不到 {}：{}", t.src.display(), e),
                 "检查文件是否存在、是否有读权限",
@@ -975,7 +975,7 @@ fn front(t: &Target) -> Result<AstProgram, ExitCode> {
     };
     if text.starts_with('\u{feff}') {
         return Err(fail101(render_file(
-            anle_error::LexCode::E007.number(),
+            argon_error::LexCode::E007.number(),
             "读源文件",
             "源文件带 BOM——契约要求 UTF-8 无 BOM",
             "用编辑器把编码改成「UTF-8（不带 BOM）」再编",
@@ -986,7 +986,7 @@ fn front(t: &Target) -> Result<AstProgram, ExitCode> {
         Ok(x) => x,
         Err(e) => return Err(fail101(render_front(&e.code, &e.parts, &t.src, &text, e.line))),
     };
-    let (ast, errs) = anle_parser::parse_all(段);
+    let (ast, errs) = argon_parser::parse_all(段);
     if !errs.is_empty() {
         let 全: Vec<String> = errs
             .iter()
@@ -1021,18 +1021,18 @@ fn render_coded(code: &str, message: &str, line: usize, err_file: &std::path::Pa
     } else {
         String::new()
     };
-    let (de, dd) = anle_error::code_defaults(code);
-    let parts = anle_error::DiagParts::full(哪, "", message, "", "")
+    let (de, dd) = argon_error::code_defaults(code);
+    let parts = argon_error::DiagParts::full(哪, "", message, "", "")
         .预期(de)
         .详解(dd);
-    let cx = anle_error::RenderCtx { code, file: &file, src_line };
-    anle_error::render_full(&parts, anle_error::Tone::Fix, &cx)
+    let cx = argon_error::RenderCtx { code, file: &file, src_line };
+    argon_error::render_full(&parts, argon_error::Tone::Fix, &cx)
 }
 
 //nt: 词法 / 语法错误
 fn render_front(
     code: &str,
-    parts: &anle_error::DiagParts,
+    parts: &argon_error::DiagParts,
     src: &std::path::Path,
     text: &str,
     line: usize,
@@ -1047,7 +1047,7 @@ fn render_front(
     } else {
         ""
     };
-    let (de, dd) = anle_error::code_defaults(code);
+    let (de, dd) = argon_error::code_defaults(code);
     let mut p = parts.clone();
     if p.预期.is_empty() {
         p.预期 = de.to_string();
@@ -1055,11 +1055,11 @@ fn render_front(
     if p.详解.is_empty() {
         p.详解 = dd.to_string();
     }
-    let cx = anle_error::RenderCtx { code, file: &file, src_line };
-    anle_error::render_full(&p, anle_error::Tone::Fix, &cx)
+    let cx = argon_error::RenderCtx { code, file: &file, src_line };
+    argon_error::render_full(&p, argon_error::Tone::Fix, &cx)
 }
 
-fn print_diags(checks: &anle_check::CheckResult, src_path: &std::path::Path, src_text: &str) {
+fn print_diags(checks: &argon_check::CheckResult, src_path: &std::path::Path, src_text: &str) {
     eprintln!("检查未通过，共 {} 个错误：", checks.errors().len());
     let mut cache: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
     for d in &checks.diags {
@@ -1101,8 +1101,8 @@ fn print_diags(checks: &anle_check::CheckResult, src_path: &std::path::Path, src
         if !哪.is_empty() {
             parts.哪 = 哪;
         }
-        let ctx = anle_error::RenderCtx { code: &d.code, file: &file, src_line };
-        let full = anle_error::render_full(&parts, d.tone, &ctx);
+        let ctx = argon_error::RenderCtx { code: &d.code, file: &file, src_line };
+        let full = argon_error::render_full(&parts, d.tone, &ctx);
         if full.trim().is_empty() || parts.缺.is_empty() {
             eprintln!("  {}", d.message); // 非结构化诊断（如上限提示）：原样输出
         } else {
@@ -1175,8 +1175,8 @@ fn do_frontend(t: &Target) -> ExitCode {
 }
 
 //nt: 令牌类码
-fn 令牌码(t: &anle_lexer::Token) -> u32 {
-    use anle_lexer::Token as T;
+fn 令牌码(t: &argon_lexer::Token) -> u32 {
+    use argon_lexer::Token as T;
     match t {
         T::Newline => 0,
         T::RawAsm(_) => 1,
@@ -1200,14 +1200,14 @@ fn do_dump_tokens(t: &Target) -> ExitCode {
         Ok(s) => s,
         Err(e) => {
             return fail101(render_nofile(
-                anle_error::EnvCode::E602.number(),
+                argon_error::EnvCode::E602.number(),
                 "读源文件",
                 &format!("读不了 {}：{}", src_file.display(), e),
                 "检查路径是否存在、是否有读权限",
             ))
         }
     };
-    match anle_lexer::lex(&src_text) {
+    match argon_lexer::lex(&src_text) {
         Ok(段) => {
             let mut 出 = String::new();
             for t in 段 {
@@ -1231,21 +1231,21 @@ fn do_dump_ast(t: &Target) -> ExitCode {
         Ok(s) => s,
         Err(e) => {
             return fail101(render_nofile(
-                anle_error::EnvCode::E602.number(),
+                argon_error::EnvCode::E602.number(),
                 "读源文件",
                 &format!("读不了 {}：{}", src_file.display(), e),
                 "检查路径是否存在、是否有读权限",
             ))
         }
     };
-    let 段 = match anle_lexer::lex(&src_text) {
+    let 段 = match argon_lexer::lex(&src_text) {
         Ok(v) => v,
         Err(e) => {
             println!("ERR\n{}\n{}", e.line, e.code);
             return ExitCode::from(101);
         }
     };
-    let (ast, errs) = anle_parser::parse_all(段);
+    let (ast, errs) = argon_parser::parse_all(段);
     if let Some(e) = errs.first() {
         println!("ERR\n{}\n{}", e.line, e.code);
         return ExitCode::from(101);
@@ -1259,7 +1259,7 @@ fn do_dump_ast(t: &Target) -> ExitCode {
 }
 
 //nt: 块后序
-fn 快照块(b: &anle_parser::Block, out: &mut String) {
+fn 快照块(b: &argon_parser::Block, out: &mut String) {
     for s in &b.stmts {
         快照句(s, 1, out);
     }
@@ -1276,8 +1276,8 @@ fn 快照块(b: &anle_parser::Block, out: &mut String) {
 }
 
 //nt: 语句后序
-fn 快照句(s: &anle_parser::Stmt, d: usize, out: &mut String) {
-    use anle_parser::Stmt as S;
+fn 快照句(s: &argon_parser::Stmt, d: usize, out: &mut String) {
+    use argon_parser::Stmt as S;
     let (kind, line, col, len, head, body) = match s {
         S::Line { line, col, len, kind, .. } => ("L", *line, *col, *len, kind.tokens(), None),
         S::Struct { line, col, len, head, body, .. } => ("S", *line, *col, *len, head, Some(body)),
@@ -1321,7 +1321,7 @@ fn cc_opt_args(mode: &str, opt: u32, native: bool) -> Vec<String> {
         vec!["-O0".to_string(), "-g".to_string()]
     } else {
         //nt: release 抽护栏
-        vec![format!("-O{}", opt), "-DANLE_NOGUARD".to_string(), "-s".to_string()]
+        vec![format!("-O{}", opt), "-DARGON_NOGUARD".to_string(), "-s".to_string()]
     };
     if native {
         v.push("-march=native".to_string());
@@ -1331,7 +1331,7 @@ fn cc_opt_args(mode: &str, opt: u32, native: bool) -> Vec<String> {
 
 #[cfg(feature = "llvm")]
 fn do_build_llvm(
-    ir: &anle_ir::Program,
+    ir: &argon_ir::Program,
     src_text: &str,
     src_file: &str,
     mode: &str,
@@ -1341,11 +1341,11 @@ fn do_build_llvm(
     name: &str,
 ) -> Result<(), ExitCode> {
     let cc = 找cc();
-    let rt_c = dir.join("anle_rt.c");
-    let rt_o = dir.join("anle_rt.o");
-    if let Err(e) = fs::write(&rt_c, anle_codegen::runtime_c_for(src_file, src_text)) {
+    let rt_c = dir.join("argon_rt.c");
+    let rt_o = dir.join("argon_rt.o");
+    if let Err(e) = fs::write(&rt_c, argon_codegen::runtime_c_for(src_file, src_text)) {
         return Err(fail101(render_nofile(
-            anle_error::EnvCode::E602.number(),
+            argon_error::EnvCode::E602.number(),
             "写运行时",
             &format!("写不出 {}：{}", rt_c.display(), e),
             "检查路径是否有写权限",
@@ -1355,7 +1355,7 @@ fn do_build_llvm(
         //nt: 档位随 opt
         .args(cc_opt_args(mode, opt, false).iter().filter(|a| a.as_str().starts_with("-O")))
         //nt: release 抽护栏
-        .args(if mode == "release" { vec!["-DANLE_NOGUARD".to_string()] } else { vec![] })
+        .args(if mode == "release" { vec!["-DARGON_NOGUARD".to_string()] } else { vec![] })
         .arg("-c")
         .arg(&rt_c)
         .arg("-o")
@@ -1364,13 +1364,13 @@ fn do_build_llvm(
     match st {
         Ok(s) if s.success() => {}
         Ok(_) => return Err(fail101(render_nofile(
-            anle_error::GenCode::E401.number(),
+            argon_error::GenCode::E401.number(),
             "编译运行时",
             "C 运行时编译失败",
             "检查 clang 是否可用",
         ))),
         Err(e) => return Err(fail101(render_nofile(
-            anle_error::EnvCode::E601.number(),
+            argon_error::EnvCode::E601.number(),
             "调编译器",
             &format!("调不起编译器「{}」：{}", cc, e),
             "设 ARGON_CC 指向可用的 clang",
@@ -1378,15 +1378,15 @@ fn do_build_llvm(
     }
     let obj = dir.join(format!("{}.o", name));
     //nt: 扁平路径发射
-    let 发射 = if std::env::var("ANLE_TREE_LLVM").as_deref() == Ok("1") {
-        anle_llvm::emit_object(ir, &obj, opt, mode == "debug", src_file)
+    let 发射 = if std::env::var("ARGON_TREE_LLVM").as_deref() == Ok("1") {
+        argon_llvm::emit_object(ir, &obj, opt, mode == "debug", src_file)
     } else {
-        let flat = anle_ir::flat::from_program(ir);
-        anle_llvm::flat_emit::emit_flat_object(ir, &flat, &obj, opt, mode == "debug", src_file)
+        let flat = argon_ir::flat::from_program(ir);
+        argon_llvm::flat_emit::emit_flat_object(ir, &flat, &obj, opt, mode == "debug", src_file)
     };
     if let Err(e) = 发射 {
         return Err(fail101(render_nofile(
-            anle_error::GenCode::E401.number(),
+            argon_error::GenCode::E401.number(),
             "LLVM 后端",
             &e,
             "修正源码或改用 --backend c",
@@ -1396,13 +1396,13 @@ fn do_build_llvm(
     match st {
         Ok(s) if s.success() => Ok(()),
         Ok(_) => Err(fail101(render_nofile(
-            anle_error::GenCode::E401.number(),
+            argon_error::GenCode::E401.number(),
             "链接",
             "LLVM 目标文件链接失败",
             "检查 clang 是否可用",
         ))),
         Err(e) => Err(fail101(render_nofile(
-            anle_error::EnvCode::E601.number(),
+            argon_error::EnvCode::E601.number(),
             "调编译器",
             &format!("调不起编译器「{}」：{}", cc, e),
             "设 ARGON_CC 指向可用的 clang",
@@ -1444,17 +1444,17 @@ fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, incr: Option<bool>,
         Err(e) => return Err(fail101(render_coded(e.code.as_str(), &e.message, e.line, std::path::Path::new(&e.file), &src_text))),
     };
     //nt: 对象三件套挂名
-    anle_opt::run(&mut ir);
-    anle_walk::drop_pass::对象挂名(&mut ir);
+    argon_opt::run(&mut ir);
+    argon_walk::drop_pass::对象挂名(&mut ir);
     if dump_ir {
         println!("{}", ir.dump());
-        let flat = anle_ir::flat::from_program(&ir);
-        println!("{}", anle_ir::flat::dump(&flat));
+        let flat = argon_ir::flat::from_program(&ir);
+        println!("{}", argon_ir::flat::dump(&flat));
     }
     let dir = t.root.join("build").join(mode);
     if let Err(e) = fs::create_dir_all(&dir) {
         return Err(fail101(render_nofile(
-            anle_error::EnvCode::E602.number(),
+            argon_error::EnvCode::E602.number(),
             "建产物目录",
             &format!("建不了产物目录 {}：{}", dir.display(), e),
             "检查路径是否有写权限",
@@ -1482,8 +1482,8 @@ fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, incr: Option<bool>,
     }
 
     //nt: C 路径经扁平载体还原
-    let flat_ir = anle_ir::flat::from_program(&ir);
-    let ir_c = anle_ir::flat::to_program(&flat_ir, &ir);
+    let flat_ir = argon_ir::flat::from_program(&ir);
+    let ir_c = argon_ir::flat::to_program(&flat_ir, &ir);
     let c_src = match lower_to_c(
         &ir_c,
         &src_file.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default(),
@@ -1505,12 +1505,12 @@ fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, incr: Option<bool>,
         None => 语句数 >= 20000,
     };
     if incr {
-        let (prelude, units) = anle_codegen::split_parts(&c_src);
+        let (prelude, units) = argon_codegen::split_parts(&c_src);
         if units.is_empty() {
             //nt: 没有可拆单元
             if let Err(e) = fs::write(&c_path, &c_src) {
                 return Err(fail101(render_nofile(
-                    anle_error::EnvCode::E602.number(),
+                    argon_error::EnvCode::E602.number(),
                     "写中间产物",
                     &format!("写不出 {}：{}", c_path.display(), e),
                     "检查路径是否有写权限、文件是否被占用",
@@ -1521,7 +1521,7 @@ fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, incr: Option<bool>,
                 Ok(s) => s,
                 Err(e) => {
                     return Err(fail101(render_nofile(
-                        anle_error::EnvCode::E601.number(),
+                        argon_error::EnvCode::E601.number(),
                         "调编译器",
                         &format!("调不起编译器「{}」：{}", cc, e),
                         "设 `ARGON_CC` 指向可用的 clang",
@@ -1530,7 +1530,7 @@ fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, incr: Option<bool>,
             };
             if !st.success() {
                 return Err(fail101(render_nofile(
-                    anle_error::GenCode::E403.number(),
+                    argon_error::GenCode::E403.number(),
                     "编译产物",
                     "编译失败",
                     "把源码与 C 报错一起提交到项目 issue",
@@ -1540,11 +1540,11 @@ fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, incr: Option<bool>,
             return Ok((c_path, exe));
         }
         //nt: 前置段拆头与体
-        let (hdr, defs) = match anle_codegen::split_prelude(&prelude) {
+        let (hdr, defs) = match argon_codegen::split_prelude(&prelude) {
             Ok(v) => v,
             Err(e) => {
                 return Err(fail101(render_nofile(
-                    anle_error::GenCode::E403.number(),
+                    argon_error::GenCode::E403.number(),
                     "拆前置段",
                     &e,
                     "把源码与这条消息一起提交到项目 issue",
@@ -1554,7 +1554,7 @@ fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, incr: Option<bool>,
         let cache = dir.join(".cache");
         if let Err(e) = fs::create_dir_all(&cache) {
             return Err(fail101(render_nofile(
-                anle_error::EnvCode::E602.number(),
+                argon_error::EnvCode::E602.number(),
                 "建缓存目录",
                 &format!("建不了 {}：{}", cache.display(), e),
                 "检查路径是否有写权限",
@@ -1578,7 +1578,7 @@ fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, incr: Option<bool>,
             let rt_c = cache.join(format!("rt-{}.c", rt_key));
             if let Err(e) = fs::write(&rt_c, &defs) {
                 return Err(fail101(render_nofile(
-                    anle_error::EnvCode::E602.number(),
+                    argon_error::EnvCode::E602.number(),
                     "写运行时单元",
                     &format!("写不出 {}：{}", rt_c.display(), e),
                     "检查路径是否有写权限",
@@ -1614,7 +1614,7 @@ fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, incr: Option<bool>,
                 let uc = cache.join(format!("u{}-{}.c", idx, key));
                 if let Err(e) = fs::write(&uc, format!("{}{}", hdr, code)) {
                     return Err(fail101(render_nofile(
-                        anle_error::EnvCode::E602.number(),
+                        argon_error::EnvCode::E602.number(),
                         "写编译单元",
                         &format!("写不出 {}：{}", uc.display(), e),
                         "检查路径是否有写权限",
@@ -1673,7 +1673,7 @@ fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, incr: Option<bool>,
             let 失 = 错.into_inner().unwrap_or(None);
             if let Some(m) = 失 {
                 return Err(fail101(render_nofile(
-                    anle_error::GenCode::E403.number(),
+                    argon_error::GenCode::E403.number(),
                     "编编译单元",
                     &m,
                     "把源码与 C 报错一起提交到项目 issue",
@@ -1697,7 +1697,7 @@ fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, incr: Option<bool>,
             }
             if let Err(e) = fs::write(&rsp, 行) {
                 return Err(fail101(render_nofile(
-                    anle_error::EnvCode::E602.number(),
+                    argon_error::EnvCode::E602.number(),
                     "写响应文件",
                     &format!("写不出 {}：{}", rsp.display(), e),
                     "检查路径是否有写权限",
@@ -1713,7 +1713,7 @@ fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, incr: Option<bool>,
             Ok(s) => s,
             Err(e) => {
                 return Err(fail101(render_nofile(
-                    anle_error::EnvCode::E601.number(),
+                    argon_error::EnvCode::E601.number(),
                     "链接",
                     &format!("调不起链接器「{}」：{}", cc, e),
                     "设 `ARGON_CC` 指向可用的 clang（装了 SDK 的 clang 组件会自动用上）",
@@ -1722,7 +1722,7 @@ fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, incr: Option<bool>,
         };
         if !st.success() {
             return Err(fail101(render_nofile(
-                anle_error::GenCode::E403.number(),
+                argon_error::GenCode::E403.number(),
                 "链接产物",
                 "链接失败",
                 "把源码与上面的 C 报错一起提交到项目 issue",
@@ -1733,7 +1733,7 @@ fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, incr: Option<bool>,
     }
     if let Err(e) = fs::write(&c_path, &c_src) {
         return Err(fail101(render_nofile(
-            anle_error::EnvCode::E602.number(),
+            argon_error::EnvCode::E602.number(),
             "写中间产物",
             &format!("写不出 {}：{}", c_path.display(), e),
             "检查路径是否有写权限、文件是否被占用",
@@ -1752,7 +1752,7 @@ fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, incr: Option<bool>,
         Ok(s) => s,
         Err(e) => {
             return Err(fail101(render_nofile(
-                anle_error::EnvCode::E601.number(),
+                argon_error::EnvCode::E601.number(),
                 "调编译器",
             &format!("调不起编译器「{}」：{}", cc, e),
             "设 `ARGON_CC` 指向可用的 clang（MSVC target 与 GNU target 均可；装了 SDK 的 clang 组件会自动用上）",
@@ -1761,7 +1761,7 @@ fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, incr: Option<bool>,
     };
     if !status.success() {
         return Err(fail101(render_nofile(
-            anle_error::GenCode::E403.number(),
+            argon_error::GenCode::E403.number(),
             "编产物",
             &format!("编译器失败（退出码 {:?}）", status.code()),
             "把源码与上面的 C 报错一起提交到项目 issue",
@@ -1777,7 +1777,7 @@ fn do_run(exe: &Path, args: &[String]) -> ExitCode {
         Ok(s) => s,
         Err(e) => {
             return fail101(render_nofile(
-                anle_error::EnvCode::E603.number(),
+                argon_error::EnvCode::E603.number(),
                 "跑程序",
                 &format!("跑不起 {}：{}", exe.display(), e),
                 "检查产物是否存在、是否有可执行权限",
@@ -1788,13 +1788,13 @@ fn do_run(exe: &Path, args: &[String]) -> ExitCode {
         Some(0) => ExitCode::SUCCESS,
         Some(c) if (1..=255).contains(&c) => ExitCode::from(c as u8),
         Some(c) => fail101(render_nofile(
-            anle_error::EnvCode::E604.number(),
+            argon_error::EnvCode::E604.number(),
             "交退出码",
             &format!("程序退出码 {}（超出 8 位，无法透传）", c),
             "程序退出码要在 0–255 之间才能原样交出去",
         )),
         None => fail101(render_nofile(
-            anle_error::EnvCode::E604.number(),
+            argon_error::EnvCode::E604.number(),
             "交退出码",
             "程序被信号终止（没有可透传的退出码）",
             "看程序是不是被 Ctrl-C 打断、被系统杀掉或自己崩了",
@@ -1805,7 +1805,7 @@ fn do_run(exe: &Path, args: &[String]) -> ExitCode {
 //nt: 去掉 prelude
 //nt: 但它只影响报错行号、
 fn prelude_iface(prelude: &str) -> String {
-    const MARK: &str = "ANLE_SRC[] = {";
+    const MARK: &str = "ARGON_SRC[] = {";
     match prelude.find(MARK) {
         None => prelude.to_string(),
         Some(i) => {
@@ -1844,7 +1844,7 @@ fn do_clean(t: &Target) -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(e) => fail101(render_nofile(
-            anle_error::EnvCode::E602.number(),
+            argon_error::EnvCode::E602.number(),
             "清产物目录",
             &format!("清不了 {}：{}", bd.display(), e),
             "检查是否有权限、目录是否被别的程序占用",

@@ -1,7 +1,0 @@
-[package]
-name = "anle-opt"
-version.workspace = true
-edition.workspace = true
-
-[dependencies]
-anle-ir = { path = "../anle-ir" }

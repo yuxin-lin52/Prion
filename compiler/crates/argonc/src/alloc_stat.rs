@@ -1,6 +1,6 @@
 //! 分配统计
 //!
-//! 包一层全局分配器，统计分配次数与字节数；只在 `ANLE_ALLOC_STAT=1` 时输出。
+//! 包一层全局分配器，统计分配次数与字节数；只在 `ARGON_ALLOC_STAT=1` 时输出。
 //! 计数用原子操作，开销远小于一次分配，可以常开。
 
 use std::alloc::{GlobalAlloc, Layout, System};
@@ -37,7 +37,7 @@ unsafe impl GlobalAlloc for 计数 {
 
 //nt: 打印统计
 pub fn 报告() {
-    if std::env::var("ANLE_ALLOC_STAT").is_err() {
+    if std::env::var("ARGON_ALLOC_STAT").is_err() {
         return;
     }
     let a = 次数.load(Ordering::Relaxed);

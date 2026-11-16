@@ -1,0 +1,9 @@
+[package]
+name = "argon-codegen"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+argon-error = { path = "../argon-error" }
+argon-ir = { path = "../argon-ir" }
+argon-walk = { path = "../argon-walk" }

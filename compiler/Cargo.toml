@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/anle-error", "crates/anle-lexer", "crates/anle-parser", "crates/anle-types", "crates/anle-check", "crates/anle-ir", "crates/anle-lower", "crates/anle-walk", "crates/anle-opt", "crates/anle-codegen", "crates/anle-llvm", "crates/argonc"]
+members = ["crates/argon-error", "crates/argon-lexer", "crates/argon-parser", "crates/argon-types", "crates/argon-check", "crates/argon-ir", "crates/argon-lower", "crates/argon-walk", "crates/argon-opt", "crates/argon-codegen", "crates/argon-llvm", "crates/argonc"]
 
 [workspace.package]
 edition = "2021"

@@ -1,7 +1,0 @@
-[package]
-name = "anle-types"
-version = "0.2.0"
-edition = "2021"
-description = "Argon 类型驻留表与泛型实例身份"
-
-[dependencies]

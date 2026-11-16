@@ -1,0 +1,7 @@
+[package]
+name = "argon-lexer"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+argon-error = { path = "../argon-error" }

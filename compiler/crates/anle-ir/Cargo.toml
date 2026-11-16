@@ -1,8 +1,0 @@
-[package]
-name = "anle-ir"
-version.workspace = true
-edition.workspace = true
-
-[dependencies]
-anle-error = { path = "../anle-error" }
-anle-types = { path = "../anle-types" }

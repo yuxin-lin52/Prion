@@ -1,0 +1,10 @@
+[package]
+name = "argon-check"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+argon-error = { path = "../argon-error" }
+argon-lexer = { path = "../argon-lexer" }
+argon-parser = { path = "../argon-parser" }
+argon-types = { path = "../argon-types" }

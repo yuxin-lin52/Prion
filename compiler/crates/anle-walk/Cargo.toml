@@ -1,7 +1,0 @@
-[package]
-name = "anle-walk"
-version.workspace = true
-edition.workspace = true
-
-[dependencies]
-anle-ir = { path = "../anle-ir" }

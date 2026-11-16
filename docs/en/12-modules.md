@@ -26,7 +26,7 @@ Status: implemented.
 
 Two layers:
 
-- **The base**: the OS's last centimeter as a thin builtin layer, plus a stable runtime symbol contract. The contract is backend-independent — the C backend links `anle_rt.c`, the LLVM backend links the same symbols, and any future backend follows the same rule. The current base (~40 builtins) is frozen.
+- **The base**: the OS's last centimeter as a thin builtin layer, plus a stable runtime symbol contract. The contract is backend-independent — the C backend links `argon_rt.c`, the LLVM backend links the same symbols, and any future backend follows the same rule. The current base (~40 builtins) is frozen.
 - **The upper layer**: pure Argon source, fully backend-independent, introduced through the module system. API shape: module-prefixed functions (`字符串.分割(串, 分隔)`).
 
 First batch (all zero-base-dependency, pure Argon): string five (split, trim, find-and-replace, case conversion, search); container algorithms three (map, filter, fold — generic free functions, the transform logic is a fn parameter); generic wrappers two (`Result(T, E)`, `Optional(T)`).

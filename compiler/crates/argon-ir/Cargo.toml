@@ -1,0 +1,8 @@
+[package]
+name = "argon-ir"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+argon-error = { path = "../argon-error" }
+argon-types = { path = "../argon-types" }

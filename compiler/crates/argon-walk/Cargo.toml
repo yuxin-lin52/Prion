@@ -1,0 +1,7 @@
+[package]
+name = "argon-walk"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+argon-ir = { path = "../argon-ir" }
