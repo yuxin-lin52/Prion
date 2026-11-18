@@ -1,4 +1,4 @@
-//! argon-lexer —— 词法分析器
+//! prion-lexer —— 词法分析器
 //!
 //! 处理层级语法「分号收束」的词法形态：关键字表 / `//` 注释 / 符号与字面量。
 //!
@@ -10,7 +10,7 @@
 //! - 字面量：int（`0x` / `0b` / `0o` + 下划线）/ float / str（转义 `\n` `\t` `\\` `\"`）/ `@"…"` 原样串
 //! - 源文件：UTF-8 无 BOM、LF
 
-use argon_error::{render_lex, DiagParts, LexCode, Tone};
+use prion_error::{render_lex, DiagParts, LexCode, Tone};
 
 pub mod asm;
 
@@ -129,8 +129,8 @@ pub struct Spanned {
 }
 
 impl Spanned {
-    pub fn span(&self) -> argon_error::Span {
-        argon_error::Span { line: self.line, col: self.col, len: self.len }
+    pub fn span(&self) -> prion_error::Span {
+        prion_error::Span { line: self.line, col: self.col, len: self.len }
     }
 }
 
@@ -404,7 +404,7 @@ fn unexpected_char(line_no: usize, c: char) -> LexError {
             format!("第 {} 行", line_no),
             "解析",
             format!("不认识的字符「{}」", c),
-            "不在 Argon 的词法表里",
+            "不在 Prion 的词法表里",
             "检查拼写（中文近形字：报告 ≠ 报吿）或改用合法符号",
         ),
         Tone::Suggest,

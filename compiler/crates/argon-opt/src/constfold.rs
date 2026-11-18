@@ -3,7 +3,7 @@
 //! 两操作数皆为常量的 BinOp 就地折成 Const；整数按 C 语义回绕，
 //! 除零与移位越界不折以保留护栏路径；str 不折。
 
-use argon_ir::{BinOp, Program, Rvalue, Stmt, Value};
+use prion_ir::{BinOp, Program, Rvalue, Stmt, Value};
 
 //nt: 整数二元
 fn 折整(op: &BinOp, a: i64, b: i64) -> Option<i64> {

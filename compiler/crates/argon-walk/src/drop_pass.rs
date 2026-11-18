@@ -1,6 +1,6 @@
 //! 释放点 pass：对象三件套（Alloc / Bind / Drop）的发射
 
-use argon_ir::{is_container_ty, Exit, Function, Local, LocalId, ObjId, ObjEnt, Place, Program, Rvalue, Stmt, StorageClass, Ty, Value};
+use prion_ir::{is_container_ty, Exit, Function, Local, LocalId, ObjId, ObjEnt, Place, Program, Rvalue, Stmt, StorageClass, Ty, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
 fn 是堆型(t: &str) -> bool {
@@ -74,13 +74,13 @@ fn 语句读(s: &Stmt, out: &mut std::collections::BTreeSet<LocalId>) {
 ///nt: 对象三件套挂名
 
 pub fn 对象挂名(prog: &mut Program) {
-    if std::env::var("ARGON_FLAT_DEBUG").is_ok() {
+    if std::env::var("PRION_FLAT_DEBUG").is_ok() {
         eprintln!("平铺集 {:?}", prog.平铺);
     }
     use std::collections::{BTreeMap, BTreeSet};
     prog.objects.clear();
     //nt: 形参观感
-    let 观感 = argon_ir::形参观感(prog);
+    let 观感 = prion_ir::形参观感(prog);
     //nt: 真函数取所有权
     let 真函数: BTreeSet<String> = prog
         .functions
@@ -199,7 +199,7 @@ pub fn 对象挂名(prog: &mut Program) {
                     continue;
                 }
                 if let Stmt::Assign { lhs, rhs } = &st {
-                    if std::env::var("ARGON_OWN_DEBUG").is_ok() {
+                    if std::env::var("PRION_OWN_DEBUG").is_ok() {
                         eprintln!(
                             "assign L{} proj{} 块{} 堆={}",
                             lhs.base,

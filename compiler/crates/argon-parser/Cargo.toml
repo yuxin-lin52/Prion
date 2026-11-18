@@ -1,8 +1,8 @@
 [package]
-name = "argon-parser"
+name = "prion-parser"
 version.workspace = true
 edition.workspace = true
 
 [dependencies]
-argon-error = { path = "../argon-error" }
-argon-lexer = { path = "../argon-lexer" }
+prion-error = { path = "../prion-error" }
+prion-lexer = { path = "../prion-lexer" }

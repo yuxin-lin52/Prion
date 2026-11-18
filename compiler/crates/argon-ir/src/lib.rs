@@ -1,4 +1,4 @@
-//! argon-ir —— 中间表示
+//! prion-ir —— 中间表示
 //!
 //! 结构：程序 = 若干函数；函数 = 局部变量表（带类型）+ 若干基本块；
 //! 基本块 = 块参数（可 0 个）+ 一串语句 + 恰一条出口指令。
@@ -19,7 +19,7 @@ pub mod disposition;
 pub mod flat;
 pub use disposition::形参观感;
 
-use argon_error::Span;
+use prion_error::Span;
 use std::fmt;
 
 //nt: AST
@@ -35,7 +35,7 @@ pub type BlockId = usize;
 //nt: 对象身份
 pub type ObjId = u32;
 
-pub use argon_types::StorageClass;
+pub use prion_types::StorageClass;
 
 //nt: 对象表项
 #[derive(Debug, Clone, PartialEq, Eq)]

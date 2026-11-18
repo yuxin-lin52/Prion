@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/argon-error", "crates/argon-lexer", "crates/argon-parser", "crates/argon-types", "crates/argon-check", "crates/argon-ir", "crates/argon-lower", "crates/argon-walk", "crates/argon-opt", "crates/argon-codegen", "crates/argon-llvm", "crates/argonc"]
+members = ["crates/prion-error", "crates/prion-lexer", "crates/prion-parser", "crates/prion-types", "crates/prion-check", "crates/prion-ir", "crates/prion-lower", "crates/prion-walk", "crates/prion-opt", "crates/prion-codegen", "crates/prion-llvm", "crates/prionc"]
 
 [workspace.package]
 edition = "2021"

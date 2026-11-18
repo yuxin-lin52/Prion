@@ -1,6 +1,6 @@
 //! 中端 pass 框架
 //!
-//! 依赖只到 argon-ir——每个 pass 是纯 IR→IR 变换，可独立测试。
+//! 依赖只到 prion-ir——每个 pass 是纯 IR→IR 变换，可独立测试。
 //! 判据纪律：每加一个 pass，行为不变（矩阵 + 全特性 + guard）。
 
 pub mod conddc;
@@ -11,7 +11,7 @@ pub mod inline;
 pub mod licm;
 pub mod ssa;
 
-use argon_ir::Program;
+use prion_ir::Program;
 
 //nt: pass 名册
 pub fn passes() -> Vec<(&'static str, fn(&mut Program))> {

@@ -4,9 +4,9 @@
 //! 算术 `+ - * / %`、比较、`and` / `or` / `not`、括号。
 //! 含名字、调用、下标的表达式返回 None，交调用方按普通表达式处理。
 
-use argon_lexer::Token;
+use prion_lexer::Token;
 
-use argon_ir::Value;
+use prion_ir::Value;
 
 //nt: 折叠结果
 #[derive(Debug, Clone, PartialEq)]

@@ -6,7 +6,7 @@
 //! 判据：单定义 + 定义点支配全部使用点 + 未被取地址 + 无投影写读。
 //! 满足者不再需要内存槽，后端可直接用 SSA 值。
 
-use argon_ir::{BlockId, Exit, Function, LocalId, Place, Rvalue, Stmt, Value};
+use prion_ir::{BlockId, Exit, Function, LocalId, Place, Rvalue, Stmt, Value};
 use std::collections::BTreeSet;
 
 //nt: 后继块

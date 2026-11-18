@@ -1,4 +1,4 @@
-//! argon-check —— 检查层：名字、类型、内存语义
+//! prion-check —— 检查层：名字、类型、内存语义
 //!
 //! 分三遍：
 //! - 遍 1：名字解析与可见性
@@ -9,10 +9,10 @@
 //!
 //! 错误码 `E2xx`：`E201` 名字 · `E202` 类型 · `E203` 内存语义。
 
-use argon_error::{render_check, CheckCode, DiagParts, Tone};
-use argon_types::StorageClass;
-use argon_lexer::Token;
-use argon_parser::{Block as AstBlock, Expr, Program as AstProgram, Stmt as AstStmt, TokStream};
+use prion_error::{render_check, CheckCode, DiagParts, Tone};
+use prion_types::StorageClass;
+use prion_lexer::Token;
+use prion_parser::{Block as AstBlock, Expr, Program as AstProgram, Stmt as AstStmt, TokStream};
 use std::collections::{BTreeMap, BTreeSet};
 
 //nt: 检查层入口
@@ -43,11 +43,11 @@ pub struct LocalInfo {
     pub ty: String,
     pub class: StorageClass,
     //nt: 块与名的合成键
-    pub 键: (argon_types::Sym, argon_types::Sym),
+    pub 键: (prion_types::Sym, prion_types::Sym),
 }
 
 //nt: 待填的键
-const 空键: (argon_types::Sym, argon_types::Sym) = (argon_types::Sym(0), argon_types::Sym(0));
+const 空键: (prion_types::Sym, prion_types::Sym) = (prion_types::Sym(0), prion_types::Sym(0));
 
 //nt: 符号类别
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -137,14 +137,14 @@ struct Ctx {
     //nt: 当前块所属源文件
     cur_file: String,
     //nt: 名字驻留表
-    names: argon_types::Names,
+    names: prion_types::Names,
     locals: Vec<LocalInfo>,
     //nt: locals 的索引
-    local_idx: std::collections::HashMap<(argon_types::Sym, argon_types::Sym), usize>,
+    local_idx: std::collections::HashMap<(prion_types::Sym, prion_types::Sym), usize>,
     //nt: 扫描期临时「隐身」的
-    suppress_key: Option<(argon_types::Sym, argon_types::Sym)>,
+    suppress_key: Option<(prion_types::Sym, prion_types::Sym)>,
     //nt: 已登记的公式函数
-    fns: BTreeMap<(argon_types::Sym, argon_types::Sym), FnSig>,
+    fns: BTreeMap<(prion_types::Sym, prion_types::Sym), FnSig>,
     //nt: 已登记的积类型
     types: TypeTable,
     //nt: 泛型模板
@@ -164,17 +164,17 @@ struct Ctx {
     //nt: 开块行带 `unsa
     unsafe_blocks: BTreeSet<String>,
     //nt: add val` 的
-    val_decl_line: std::collections::HashMap<(argon_types::Sym, argon_types::Sym), usize>,
+    val_decl_line: std::collections::HashMap<(prion_types::Sym, prion_types::Sym), usize>,
     //nt: add fn` 的声
-    fn_decl_line: std::collections::HashMap<(argon_types::Sym, argon_types::Sym), usize>,
+    fn_decl_line: std::collections::HashMap<(prion_types::Sym, prion_types::Sym), usize>,
     //nt: 跨模块 fn 签名
     fns_mod: BTreeMap<String, FnSig>,
     //nt: 有体的 fn
-    fn_has_body: std::collections::HashSet<(argon_types::Sym, argon_types::Sym)>,
+    fn_has_body: std::collections::HashSet<(prion_types::Sym, prion_types::Sym)>,
     //nt: 裸用合法的占位绑定
     bare_ok: BTreeSet<String>,
     //nt: 已有值的 val
-    val_has_value: std::collections::HashSet<(argon_types::Sym, argon_types::Sym)>,
+    val_has_value: std::collections::HashSet<(prion_types::Sym, prion_types::Sym)>,
 }
 
 //nt: 只许出现在 `uns
@@ -284,7 +284,7 @@ impl std::fmt::Display for 位置 {
 
 impl Ctx {
     //nt: 块名与名转键
-    fn 键(&self, block: &str, name: &str) -> Option<(argon_types::Sym, argon_types::Sym)> {
+    fn 键(&self, block: &str, name: &str) -> Option<(prion_types::Sym, prion_types::Sym)> {
         Some((self.names.lookup(block)?, self.names.lookup(name)?))
     }
 
@@ -348,7 +348,7 @@ impl Ctx {
         //nt: 未逐条定制的「预期/
         let mut parts = parts.clone();
         let code_s = code.number().to_string();
-        let (de, dd) = argon_error::code_defaults(&code_s);
+        let (de, dd) = prion_error::code_defaults(&code_s);
         if parts.预期.is_empty() {
             parts.预期 = de.to_string();
         }
@@ -379,7 +379,7 @@ pub fn check(ast: &AstProgram) -> CheckResult {
     let mut cx = Ctx {
         diags: Vec::new(),
         cur_file: String::new(),
-        names: argon_types::Names::new(),
+        names: prion_types::Names::new(),
         locals: Vec::new(),
         local_idx: std::collections::HashMap::new(),
         suppress_key: None,
@@ -413,7 +413,7 @@ pub fn check(ast: &AstProgram) -> CheckResult {
         let is_unsafe_blk = b.attrs.iter().any(|a| a == "unsafe");
         //nt: 收集本块内 `cal
         //nt: 「被本链调用过」判定
-        let mut called_in_block: std::collections::BTreeSet<argon_lexer::Name> = std::collections::BTreeSet::new();
+        let mut called_in_block: std::collections::BTreeSet<prion_lexer::Name> = std::collections::BTreeSet::new();
         for st3 in &b.stmts {
             if let AstStmt::Line { line: _, col: _, len: _, kind, .. } = st3 {
                 let 段 = kind.tokens();
@@ -492,7 +492,7 @@ pub fn check(ast: &AstProgram) -> CheckResult {
                 //nt: ③ kill 点之后
                 //nt: 精确传播
                 //nt: 递归展开
-                let mut taint: std::collections::BTreeMap<argon_lexer::Name, bool> =
+                let mut taint: std::collections::BTreeMap<prion_lexer::Name, bool> =
                     std::collections::BTreeMap::new();
                 let mut seen_kill = false;
                 let mut violations: Vec<String> = Vec::new();
@@ -500,7 +500,7 @@ pub fn check(ast: &AstProgram) -> CheckResult {
                     let is_kill_line = matches!(tk.first(), Some(Token::Kw("kill")));
 
                     let eq_pos = tk.iter().position(|t| matches!(t, Token::Sym("=")));
-                    let lhs_name: Option<&argon_lexer::Name> = match tk.first() {
+                    let lhs_name: Option<&prion_lexer::Name> = match tk.first() {
                         Some(Token::Kw("add")) => match tk.get(2) {
                             Some(Token::Str(v)) => Some(v),
                             _ => None,
@@ -512,7 +512,7 @@ pub fn check(ast: &AstProgram) -> CheckResult {
                         _ => None,
                     };
                     let rhs_start = eq_pos.map(|p| p + 1).unwrap_or(0);
-                    let rhs_names: Vec<&argon_lexer::Name> = tk[rhs_start..]
+                    let rhs_names: Vec<&prion_lexer::Name> = tk[rhs_start..]
                         .iter()
                         .filter_map(|t| match t {
                             Token::Str(v) => Some(v),
@@ -916,7 +916,7 @@ fn 泛型语句头(h: &[Token]) -> Option<(Vec<(String, Vec<String>)>, Vec<(Stri
 fn 找give(stmts: &[AstStmt], 出: &mut Vec<(usize, TokStream, Vec<Expr>)>) {
     for st in stmts {
         match st {
-            AstStmt::Line { line, exprs, kind, .. } if matches!(*kind, argon_parser::LineKind::Give(_)) => {
+            AstStmt::Line { line, exprs, kind, .. } if matches!(*kind, prion_parser::LineKind::Give(_)) => {
                 出.push((*line, kind.tokens().clone(), exprs.clone()));
             }
             AstStmt::Fn { body, .. } | AstStmt::Struct { body, .. } => 找give(body, 出),
@@ -991,27 +991,27 @@ fn collect_stmts(stmts: &[AstStmt], b: &AstBlock, cx: &mut Ctx) {
                 let 段 = kind.tokens();
                 //nt: 单行绑定
                 collect_inline_case_bindings(b, 段, 0, cx);
-                if matches!(*kind, argon_parser::LineKind::AddVal(_)) {
+                if matches!(*kind, prion_parser::LineKind::AddVal(_)) {
                     collect_val(b, 位置{ 行: *line, 列: *col, 长: *len }, 段, exprs, cx);
                 }
-                if matches!(*kind, argon_parser::LineKind::AddFn(_)) && matches!(段.get(1), Some(Token::Kw("fn"))) {
+                if matches!(*kind, prion_parser::LineKind::AddFn(_)) && matches!(段.get(1), Some(Token::Kw("fn"))) {
                     collect_fn(b, 位置{ 行: *line, 列: *col, 长: *len }, 段, cx);
                 }
-                if matches!(*kind, argon_parser::LineKind::AddOutsFn(_)) {
+                if matches!(*kind, prion_parser::LineKind::AddOutsFn(_)) {
                     collect_outs_fn(b, 位置{ 行: *line, 列: *col, 长: *len }, 段, cx);
                 }
                 //nt: 补体/重绑定行
-                if matches!(*kind, argon_parser::LineKind::AddFn(_)) && matches!(段.first(), Some(Token::Kw("fn"))) {
+                if matches!(*kind, prion_parser::LineKind::AddFn(_)) && matches!(段.first(), Some(Token::Kw("fn"))) {
                     collect_rebind_fn(b, 位置{ 行: *line, 列: *col, 长: *len }, 段, cx);
                 }
                 //nt: 改值/重绑定行
-                if matches!(*kind, argon_parser::LineKind::Assign(_)) {
+                if matches!(*kind, prion_parser::LineKind::Assign(_)) {
                     collect_val_rebind(b, 位置{ 行: *line, 列: *col, 长: *len }, 段, cx);
                 }
             }
             AstStmt::Struct { line, col, len, head, body, kind: sk, .. } => {
                 //nt: 判别统一带括号
-                if *sk == argon_parser::StructKind::Case {
+                if *sk == prion_parser::StructKind::Case {
                     if let Some(Token::Ident(n)) = head.get(1) {
                         if n != "_" && !matches!(head.get(2), Some(Token::Sym("("))) {
                             cx.err(
@@ -1032,7 +1032,7 @@ fn collect_stmts(stmts: &[AstStmt], b: &AstBlock, cx: &mut Ctx) {
                 //nt: case 变体名
                 collect_case_bindings(b, head, cx);
                 //nt: for 循环变量
-                if *sk == argon_parser::StructKind::For {
+                if *sk == prion_parser::StructKind::For {
                     if let Some(Token::Ident(n)) = head.get(1) {
                         cx.err(
                             位置{ 行: *line, 列: *col, 长: *len },
@@ -1198,13 +1198,13 @@ fn collect_val(b: &AstBlock, 处: 位置, 段: &[Token], exprs: &[Expr], cx: &mu
 }
 
 //nt: 局部索引类型
-type 局部索引 = std::collections::HashMap<(argon_types::Sym, argon_types::Sym), usize>;
+type 局部索引 = std::collections::HashMap<(prion_types::Sym, prion_types::Sym), usize>;
 
 //nt: 按键查局部
 fn 查局部<'a>(
     locals: &'a [LocalInfo],
     idx: &局部索引,
-    names: &argon_types::Names,
+    names: &prion_types::Names,
     block: &str,
     name: &str,
 ) -> Option<&'a LocalInfo> {
@@ -1214,7 +1214,7 @@ fn 查局部<'a>(
 }
 
 //nt: for 名 in 源
-fn iter_elem_ty(head: &[Token], locals: &[LocalInfo], idx: &局部索引, names: &argon_types::Names, block: &str) -> String {
+fn iter_elem_ty(head: &[Token], locals: &[LocalInfo], idx: &局部索引, names: &prion_types::Names, block: &str) -> String {
     let mut src: &[Token] = if head.len() >= 4 { &head[3..head.len() - 1] } else { return "int".into() };
     //nt: 剥掉 call 前缀
     if matches!(src.first(), Some(Token::Kw("call")))
@@ -2450,7 +2450,7 @@ fn check_call(b: &AstBlock, 处: 位置, name: &str, args: &[Vec<Token>], cx: &m
                 )
                 .预期("函数要先建出来，再调它")
                 .详解(
-                    "Argon 是「先建后用」：调用要排在 `add fn` 之后。`add type`（类型）不受这条约束，可以先用后写。",
+                    "Prion 是「先建后用」：调用要排在 `add fn` 之后。`add type`（类型）不受这条约束，可以先用后写。",
                 ),
                 Tone::Fix,
             );
@@ -3083,7 +3083,7 @@ fn calls_stmts(stmts: &[AstStmt], b: &AstBlock, cx: &mut Ctx) {
                 let 段 = kind.tokens();
                 //nt: 公式补体行查伪块
                 //nt: 形参已归伪块
-                let fn名 = if matches!(*kind, argon_parser::LineKind::AddFn(_)) {
+                let fn名 = if matches!(*kind, prion_parser::LineKind::AddFn(_)) {
                     //nt: 形参解析失败不查体
                     //nt: 泛型能力型不查体
                     if is_add_fn(段) && parse_params(段).is_err() {
@@ -3165,7 +3165,7 @@ fn calls_expr(b: &AstBlock, 处: 位置, 段: &[Token], cx: &mut Ctx) {
     let mut i = 0usize;
     while i < expr.len() {
         //nt: 内联 asm
-        if argon_lexer::asm::是asm词(&expr[i])
+        if prion_lexer::asm::是asm词(&expr[i])
             && matches!(expr.get(i + 1), Some(Token::Sym("(")))
         {
             if !cx.unsafe_blocks.contains(&b.name) {
@@ -3182,13 +3182,13 @@ fn calls_expr(b: &AstBlock, 处: 位置, 段: &[Token], cx: &mut Ctx) {
                     .预期("内联汇编只能出现在 unsafe 块里")
                     .详解(
                         "asm 是 unsafe 的第四类能力（与裸地址读写、C 互操作并列）：\
-                         汇编绕开了 Argon 的全部类型与内存规则，只在 `#: 块名 b unsafe` 的块里放行。",
+                         汇编绕开了 Prion 的全部类型与内存规则，只在 `#: 块名 b unsafe` 的块里放行。",
                     ),
                     Tone::Fix,
                 );
             }
-            if let Some(内区) = argon_lexer::asm::括号内(expr, i + 1) {
-                if let Err(原因) = argon_lexer::asm::解析隔离区(内区) {
+            if let Some(内区) = prion_lexer::asm::括号内(expr, i + 1) {
+                if let Err(原因) = prion_lexer::asm::解析隔离区(内区) {
                     cx.err(
                         处,
                         CheckCode::E201,
@@ -3197,7 +3197,7 @@ fn calls_expr(b: &AstBlock, 处: 位置, 段: &[Token], cx: &mut Ctx) {
                             "内联汇编",
                             format!("asm 隔离区不合规：{}", 原因),
                             "括号内是隔离区，按 asm 自己的微语法写",
-                            argon_lexer::asm::映射表说明(),
+                            prion_lexer::asm::映射表说明(),
                         ),
                         Tone::Fix,
                     );
@@ -3585,7 +3585,7 @@ fn scan_bare_reads(b: &AstBlock, 处: 位置, expr: &[Token], full: &[Token], cx
     //nt: 内联汇编
     let mut k = 0usize;
     while k < expr.len() {
-        if argon_lexer::asm::是asm词(&expr[k]) && matches!(expr.get(k + 1), Some(Token::Sym("("))) {
+        if prion_lexer::asm::是asm词(&expr[k]) && matches!(expr.get(k + 1), Some(Token::Sym("("))) {
             return;
         }
         k += 1;
@@ -3929,7 +3929,7 @@ fn require_known(b: &AstBlock, 处: 位置, name: &str, cx: &mut Ctx) {
                     )
                     .预期("名字要先建出来，再用它")
                     .详解(
-                        "Argon 是「先建后用」：val 的读和写都要排在它的 `add val` 之后——排在前面会读到还没放值的内存。`add fn`（函数）与 `add type`（类型）是声明，不受这条约束，可以先用后写。",
+                        "Prion 是「先建后用」：val 的读和写都要排在它的 `add val` 之后——排在前面会读到还没放值的内存。`add fn`（函数）与 `add type`（类型）是声明，不受这条约束，可以先用后写。",
                     ),
                     Tone::Fix,
                 );
@@ -3949,7 +3949,7 @@ fn require_known(b: &AstBlock, 处: 位置, name: &str, cx: &mut Ctx) {
         )
         .预期("这里的名字应当是【本块已建过】的 val / 函数")
         .详解(
- "Argon 的规则是「先建后用」：名字要先由 `add val`（值）/ `add fn`（函数）/ `add type`（类型）建出来，才能在表达式里读；如果名字在别的块里，跨块取 val 要写 `call #:块 val \"名\"`；跨块调函数要写 `call #:块 fn \"名\"(…)`；同块直接用。",
+ "Prion 的规则是「先建后用」：名字要先由 `add val`（值）/ `add fn`（函数）/ `add type`（类型）建出来，才能在表达式里读；如果名字在别的块里，跨块取 val 要写 `call #:块 val \"名\"`；跨块调函数要写 `call #:块 fn \"名\"(…)`；同块直接用。",
         ),
         Tone::Fix,
     );
@@ -3968,7 +3968,7 @@ fn 摘掉asm区(段: &[Token]) -> Vec<Token> {
     let mut 出 = Vec::with_capacity(段.len());
     let mut i = 0usize;
     while i < 段.len() {
-        if argon_lexer::asm::是asm词(&段[i]) && matches!(段.get(i + 1), Some(Token::Sym("("))) {
+        if prion_lexer::asm::是asm词(&段[i]) && matches!(段.get(i + 1), Some(Token::Sym("("))) {
             let mut depth = 0i32;
             let mut j = i + 1;
             while j < 段.len() {
@@ -4183,7 +4183,7 @@ fn infer_named(
     段: &[Token],
     locals: &[LocalInfo],
     idx: &局部索引,
-    names: &argon_types::Names,
+    names: &prion_types::Names,
     block: &str,
     types: &TypeTable,
 ) -> Option<String> {
@@ -4327,7 +4327,7 @@ fn infer(
     段: &[Token],
     locals: &[LocalInfo],
     idx: &局部索引,
-    names: &argon_types::Names,
+    names: &prion_types::Names,
     block: &str,
     types: &TypeTable,
 ) -> Option<String> {
@@ -4637,7 +4637,7 @@ fn top_has_float(段: &[Token], locals: &[LocalInfo], block: &str) -> bool {
 }
 
 //nt: 单一操作数
-fn operand_ty(段: &[Token], locals: &[LocalInfo], idx: &局部索引, names: &argon_types::Names, block: &str) -> Option<&'static str> {
+fn operand_ty(段: &[Token], locals: &[LocalInfo], idx: &局部索引, names: &prion_types::Names, block: &str) -> Option<&'static str> {
     match 段.first() {
         Some(Token::Int(_)) => Some("int"),
         Some(Token::Float(_)) => Some("float"),
@@ -4697,7 +4697,7 @@ fn types_block(b: &AstBlock, cx: &mut Ctx) {
                 //nt: 本行表达式
                 let 行式 = exprs.first();
                 //nt: add val "名
-                if matches!(*kind, argon_parser::LineKind::AddVal(_)) {
+                if matches!(*kind, prion_parser::LineKind::AddVal(_)) {
                     let name = match 段.get(2) {
                         Some(Token::Str(n)) | Some(Token::Ident(n)) => n.clone(),
                         _ => continue,
@@ -4806,7 +4806,7 @@ fn types_block(b: &AstBlock, cx: &mut Ctx) {
                                         format!("改成 {} 的值，或把声明改成 {}", decl, got),
                                     )
                                     .预期(format!("右边的值应当是 {} 型（左边声明说了算）", decl))
-                .详解("Argon 不悄悄转换类型：int 不会自动变 str。要换类型请显式写 int(值) / str(值) / float(值) / bool(值) 转换；若是声明写错了，就把左边类型改成右边的型。"),
+                .详解("Prion 不悄悄转换类型：int 不会自动变 str。要换类型请显式写 int(值) / str(值) / float(值) / bool(值) 转换；若是声明写错了，就把左边类型改成右边的型。"),
                                     Tone::Fix,
                                 );
                             }
@@ -4865,7 +4865,7 @@ fn types_block(b: &AstBlock, cx: &mut Ctx) {
                         .unwrap_or_default();
                     let pb = fn_scope_block(b, &fname, body);
                     match body.last() {
-                        Some(AstStmt::Line { line: gl, col, len, exprs: gexprs, kind, .. }) if matches!(*kind, argon_parser::LineKind::Give(_)) => {
+                        Some(AstStmt::Line { line: gl, col, len, exprs: gexprs, kind, .. }) if matches!(*kind, prion_parser::LineKind::Give(_)) => {
                             let _段 = kind.tokens();
                             //nt: give同规则
                             let mut 早: Vec<(usize, TokStream, Vec<Expr>)> = Vec::new();
@@ -4968,7 +4968,7 @@ fn types_block(b: &AstBlock, cx: &mut Ctx) {
             line: *line,
             col: 0,
             len: 0,
-            stmts: vec![AstStmt::Line { line: *line, col: 0, len: 0, kind: argon_parser::line_kind(段), exprs: Vec::new() }],
+            stmts: vec![AstStmt::Line { line: *line, col: 0, len: 0, kind: prion_parser::line_kind(段), exprs: Vec::new() }],
             attrs: Vec::new(),
             asm_lines: Vec::new(),
             module: b.module.clone(),

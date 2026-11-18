@@ -3,11 +3,11 @@
 //! 自然循环内、操作数都在循环外定义的纯表达式，提到循环前置块。
 //! 只处理无副作用的右值；抛错与写内存的一律不动。
 
-use argon_ir::{BinOp, BlockId, Exit, LocalId, Program, Rvalue, Stmt, Value};
+use prion_ir::{BinOp, BlockId, Exit, LocalId, Program, Rvalue, Stmt, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
 //nt: 后继块
-fn 后继(f: &argon_ir::Function, b: usize) -> Vec<BlockId> {
+fn 后继(f: &prion_ir::Function, b: usize) -> Vec<BlockId> {
     match &f.blocks[b].exit {
         Exit::Branch { targets, .. } => targets.iter().map(|s| s.target).collect(),
         _ => Vec::new(),
@@ -15,7 +15,7 @@ fn 后继(f: &argon_ir::Function, b: usize) -> Vec<BlockId> {
 }
 
 //nt: 前驱表
-fn 前驱表(f: &argon_ir::Function) -> Vec<Vec<BlockId>> {
+fn 前驱表(f: &prion_ir::Function) -> Vec<Vec<BlockId>> {
     let mut ps: Vec<Vec<BlockId>> = vec![Vec::new(); f.blocks.len()];
     for i in 0..f.blocks.len() {
         for t in 后继(f, i) {
@@ -66,7 +66,7 @@ fn 求交(idom: &[Option<BlockId>], mut a: BlockId, mut b: BlockId) -> BlockId {
 }
 
 //nt: 立即支配者
-fn 支配树(f: &argon_ir::Function) -> Vec<Option<BlockId>> {
+fn 支配树(f: &prion_ir::Function) -> Vec<Option<BlockId>> {
     let n = f.blocks.len();
     let mut idom: Vec<Option<BlockId>> = vec![None; n];
     if n == 0 {
@@ -156,7 +156,7 @@ fn 纯(r: &Rvalue) -> bool {
 }
 
 //nt: 单函数外提
-fn 外提(f: &mut argon_ir::Function) {
+fn 外提(f: &mut prion_ir::Function) {
     if f.blocks.len() < 2 {
         return;
     }

@@ -3,7 +3,7 @@
 //! 做法：支配边界插块参数（φ），按支配树前序重命名，边实参在出口回填。
 //! 只处理标量局部；参数、被取址者、聚合体一律跳过。
 
-use argon_ir::{BlockId, Exit, Function, Local, Place, Program, Rvalue, Stmt, Value};
+use prion_ir::{BlockId, Exit, Function, Local, Place, Program, Rvalue, Stmt, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
 //nt: 后继块
@@ -141,8 +141,8 @@ fn 是标量(t: &str) -> bool {
 }
 
 //nt: 新建局部
-fn 新局部(f: &mut Function, 名: String, ty: argon_ir::Ty) -> argon_ir::LocalId {
-    let id = f.locals.len() as argon_ir::LocalId;
+fn 新局部(f: &mut Function, 名: String, ty: prion_ir::Ty) -> prion_ir::LocalId {
+    let id = f.locals.len() as prion_ir::LocalId;
     f.locals.push(Local {
         name: Some(名),
         ty,
@@ -158,7 +158,7 @@ fn 新局部(f: &mut Function, 名: String, ty: argon_ir::Ty) -> argon_ir::Local
 }
 
 //nt: 读值替换
-fn 换值(v: &mut Value, 版: &BTreeMap<argon_ir::LocalId, argon_ir::LocalId>) {
+fn 换值(v: &mut Value, 版: &BTreeMap<prion_ir::LocalId, prion_ir::LocalId>) {
     if let Value::Local(id) = v {
         if let Some(n) = 版.get(id) {
             *id = *n;
@@ -167,14 +167,14 @@ fn 换值(v: &mut Value, 版: &BTreeMap<argon_ir::LocalId, argon_ir::LocalId>) {
 }
 
 //nt: 位置基替换
-fn 换位(p: &mut Place, 版: &BTreeMap<argon_ir::LocalId, argon_ir::LocalId>) {
+fn 换位(p: &mut Place, 版: &BTreeMap<prion_ir::LocalId, prion_ir::LocalId>) {
     if let Some(n) = 版.get(&p.base) {
         p.base = *n;
     }
 }
 
 //nt: 右值里的读
-fn 换右值(r: &mut Rvalue, 版: &BTreeMap<argon_ir::LocalId, argon_ir::LocalId>) {
+fn 换右值(r: &mut Rvalue, 版: &BTreeMap<prion_ir::LocalId, prion_ir::LocalId>) {
     match r {
         Rvalue::Use(p) => 换位(p, 版),
         Rvalue::Ref(_) => {}
@@ -218,7 +218,7 @@ fn 换右值(r: &mut Rvalue, 版: &BTreeMap<argon_ir::LocalId, argon_ir::LocalId
 }
 
 //nt: 语句里的读
-fn 换语句(s: &mut Stmt, 版: &BTreeMap<argon_ir::LocalId, argon_ir::LocalId>) {
+fn 换语句(s: &mut Stmt, 版: &BTreeMap<prion_ir::LocalId, prion_ir::LocalId>) {
     match s {
         Stmt::Assign { lhs, rhs } => {
             换右值(rhs, 版);
@@ -256,11 +256,11 @@ fn 换语句(s: &mut Stmt, 版: &BTreeMap<argon_ir::LocalId, argon_ir::LocalId>)
 }
 
 //nt: 可版本化的局部
-fn 待版本化(f: &Function) -> BTreeSet<argon_ir::LocalId> {
+fn 待版本化(f: &Function) -> BTreeSet<prion_ir::LocalId> {
     let n = f.locals.len();
     let mut 写数 = vec![0usize; n];
-    let mut 取址: BTreeSet<argon_ir::LocalId> = BTreeSet::new();
-    let mut 绑对象: BTreeSet<argon_ir::LocalId> = BTreeSet::new();
+    let mut 取址: BTreeSet<prion_ir::LocalId> = BTreeSet::new();
+    let mut 绑对象: BTreeSet<prion_ir::LocalId> = BTreeSet::new();
     for b in &f.blocks {
         for s in &b.stmts {
             if let Stmt::Assign { lhs, rhs } = s {
@@ -281,16 +281,16 @@ fn 待版本化(f: &Function) -> BTreeSet<argon_ir::LocalId> {
         if 写数[i] < 2 {
             continue;
         }
-        if l.is_param || !是标量(&l.ty.0) || 取址.contains(&(i as argon_ir::LocalId)) {
+        if l.is_param || !是标量(&l.ty.0) || 取址.contains(&(i as prion_ir::LocalId)) {
             continue;
         }
-        if 绑对象.contains(&(i as argon_ir::LocalId)) {
+        if 绑对象.contains(&(i as prion_ir::LocalId)) {
             continue;
         }
         if l.name.as_deref().map(|x| x.contains('#')).unwrap_or(false) {
             continue;
         }
-        出.insert(i as argon_ir::LocalId);
+        出.insert(i as prion_ir::LocalId);
     }
     出
 }
@@ -310,10 +310,10 @@ fn 补实参(f: &mut Function, 从: BlockId, 到: BlockId, 值: Value) {
 fn 重命名(
     f: &mut Function,
     块: BlockId,
-    有φ: &[BTreeMap<argon_ir::LocalId, argon_ir::LocalId>],
+    有φ: &[BTreeMap<prion_ir::LocalId, prion_ir::LocalId>],
     子: &[Vec<BlockId>],
-    mut 版: BTreeMap<argon_ir::LocalId, argon_ir::LocalId>,
-    改: &BTreeSet<argon_ir::LocalId>,
+    mut 版: BTreeMap<prion_ir::LocalId, prion_ir::LocalId>,
+    改: &BTreeSet<prion_ir::LocalId>,
     计数: &mut usize,
 ) {
     for (&v, &phi) in &有φ[块 as usize] {
@@ -382,7 +382,7 @@ fn 构造(f: &mut Function) {
     let ps = 前驱表(f);
     let df = 支配边界(f, &idom, &ps);
     //nt: 定义块
-    let mut 定义块: BTreeMap<argon_ir::LocalId, BTreeSet<BlockId>> = BTreeMap::new();
+    let mut 定义块: BTreeMap<prion_ir::LocalId, BTreeSet<BlockId>> = BTreeMap::new();
     for (bi, b) in f.blocks.iter().enumerate() {
         for s in &b.stmts {
             if let Stmt::Assign { lhs, .. } = s {
@@ -394,7 +394,7 @@ fn 构造(f: &mut Function) {
     }
     //nt: 插块参数
     let 块数 = f.blocks.len();
-    let mut 有φ: Vec<BTreeMap<argon_ir::LocalId, argon_ir::LocalId>> = vec![BTreeMap::new(); 块数];
+    let mut 有φ: Vec<BTreeMap<prion_ir::LocalId, prion_ir::LocalId>> = vec![BTreeMap::new(); 块数];
     let mut 计数 = 0usize;
     for (&v, 起点) in &定义块 {
         let ty = f.locals[v as usize].ty.clone();
@@ -447,7 +447,7 @@ fn 消除平凡φ(f: &mut Function) {
                     break;
                 }
                 let 前 = 前驱表(f);
-                let mut 值: Option<argon_ir::LocalId> = None;
+                let mut 值: Option<prion_ir::LocalId> = None;
                 let mut 可消 = true;
                 let mut 边数 = 0;
                 for p in &前[bi] {
@@ -486,7 +486,7 @@ fn 消除平凡φ(f: &mut Function) {
                 }
                 let Some(目标) = 值 else { continue };
                 //nt: 换成目标值
-                let mut 版: BTreeMap<argon_ir::LocalId, argon_ir::LocalId> = BTreeMap::new();
+                let mut 版: BTreeMap<prion_ir::LocalId, prion_ir::LocalId> = BTreeMap::new();
                 版.insert(*pid, 目标);
                 for b in &mut f.blocks {
                     for s in &mut b.stmts {
@@ -520,19 +520,19 @@ fn 消除平凡φ(f: &mut Function) {
 }
 
 //nt: 走值里的局部
-fn 走值<F: FnMut(&mut argon_ir::LocalId)>(v: &mut Value, g: &mut F) {
+fn 走值<F: FnMut(&mut prion_ir::LocalId)>(v: &mut Value, g: &mut F) {
     if let Value::Local(id) = v {
         g(id);
     }
 }
 
 //nt: 走位置基
-fn 走位<F: FnMut(&mut argon_ir::LocalId)>(p: &mut Place, g: &mut F) {
+fn 走位<F: FnMut(&mut prion_ir::LocalId)>(p: &mut Place, g: &mut F) {
     g(&mut p.base);
 }
 
 //nt: 走右值
-fn 走右值<F: FnMut(&mut argon_ir::LocalId)>(r: &mut Rvalue, g: &mut F) {
+fn 走右值<F: FnMut(&mut prion_ir::LocalId)>(r: &mut Rvalue, g: &mut F) {
     match r {
         Rvalue::Use(p) | Rvalue::Ref(p) => 走位(p, g),
         Rvalue::Const(v) => 走值(v, g),
@@ -575,7 +575,7 @@ fn 走右值<F: FnMut(&mut argon_ir::LocalId)>(r: &mut Rvalue, g: &mut F) {
 }
 
 //nt: 走语句
-fn 走语句<F: FnMut(&mut argon_ir::LocalId)>(s: &mut Stmt, g: &mut F) {
+fn 走语句<F: FnMut(&mut prion_ir::LocalId)>(s: &mut Stmt, g: &mut F) {
     match s {
         Stmt::Assign { lhs, rhs } => {
             走位(lhs, g);
@@ -612,7 +612,7 @@ fn 走语句<F: FnMut(&mut argon_ir::LocalId)>(s: &mut Stmt, g: &mut F) {
 }
 
 //nt: 走出口
-fn 走出口<F: FnMut(&mut argon_ir::LocalId)>(e: &mut Exit, g: &mut F) {
+fn 走出口<F: FnMut(&mut prion_ir::LocalId)>(e: &mut Exit, g: &mut F) {
     match e {
         Exit::Return(Some(v)) => 走值(v, g),
         Exit::Branch { cond, targets } => {
@@ -641,13 +641,13 @@ fn 清死局部(f: &mut Function) {
             }
         }
         for s in &mut b.stmts {
-            走语句(s, &mut |id: &mut argon_ir::LocalId| {
+            走语句(s, &mut |id: &mut prion_ir::LocalId| {
                 if (*id as usize) < n {
                     用[*id as usize] = true;
                 }
             });
         }
-        走出口(&mut b.exit, &mut |id: &mut argon_ir::LocalId| {
+        走出口(&mut b.exit, &mut |id: &mut prion_ir::LocalId| {
             if (*id as usize) < n {
                 用[*id as usize] = true;
             }
@@ -659,11 +659,11 @@ fn 清死局部(f: &mut Function) {
             用[i] = true;
         }
     }
-    let mut 映 = vec![0 as argon_ir::LocalId; n];
+    let mut 映 = vec![0 as prion_ir::LocalId; n];
     let mut 新表: Vec<Local> = Vec::new();
     for i in 0..n {
         if 用[i] {
-            映[i] = 新表.len() as argon_ir::LocalId;
+            映[i] = 新表.len() as prion_ir::LocalId;
             新表.push(f.locals[i].clone());
         }
     }
@@ -676,11 +676,11 @@ fn 清死局部(f: &mut Function) {
             *pid = 映[*pid as usize];
         }
         for s in &mut b.stmts {
-            走语句(s, &mut |id: &mut argon_ir::LocalId| {
+            走语句(s, &mut |id: &mut prion_ir::LocalId| {
                 *id = 映[*id as usize];
             });
         }
-        走出口(&mut b.exit, &mut |id: &mut argon_ir::LocalId| {
+        走出口(&mut b.exit, &mut |id: &mut prion_ir::LocalId| {
             *id = 映[*id as usize];
         });
     }

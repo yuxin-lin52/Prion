@@ -1,4 +1,4 @@
-//! argon-error —— Argon 错误体系（最小版：结构化诊断「5 段位」+ 词法错误码 `E0xx`）
+//! prion-error —— Prion 错误体系（最小版：结构化诊断「5 段位」+ 词法错误码 `E0xx`）
 //!
 //! 5 段位（哪/做/缺/致/改）渲染为：`{哪} 处 {做} 的 {缺}「{致}」，{引导词}{改}`
 //!
@@ -148,7 +148,7 @@ pub fn code_defaults(code: &str) -> (&'static str, &'static str) {
     match code {
         "E202" => (
             "两边的类型要一致（要换类型就显式转换）",
-            "Argon 不悄悄转换类型：int / float / bool / str 之间要换，就显式写 int(值) / \
+            "Prion 不悄悄转换类型：int / float / bool / str 之间要换，就显式写 int(值) / \
              float(值) / str(值) / bool(值)；容器按 fn 边界拷贝，X* 复制把手共享同一个对象。",
         ),
         "E203" => (
@@ -168,13 +168,13 @@ pub fn code_defaults(code: &str) -> (&'static str, &'static str) {
         ),
         "E201" => (
             "这里的名字应当是本块已建过的 val / 函数",
-            "Argon 的规则是「先建后用」：名字要先由 add val（值）/ add fn（函数）/ \
+            "Prion 的规则是「先建后用」：名字要先由 add val（值）/ add fn（函数）/ \
              add type（类型）建出来，才能在表达式里读。名字在别的块里时：取 val 写 \
              call #:块 val \"名\"，调函数写 call #:块 fn \"名\"(…)，同块直接用。",
         ),
         "E101" => (
             "结构行开体之后，用独占一行的 ; 收体",
-            "Argon 用「独占一行的 ;」表示结构体结束——if / while / for / match 都一样；\
+            "Prion 用「独占一行的 ;」表示结构体结束——if / while / for / match 都一样；\
              缩进只是装饰，收体必须靠那个单独的 ;。",
         ),
         "E102" => (
@@ -184,7 +184,7 @@ pub fn code_defaults(code: &str) -> (&'static str, &'static str) {
         ),
         "E103" => (
             "名字要先创建才能改值",
-            "Argon 只有 add 一条创建路：先 add val \"名\" 类型 = 初值，之后才能 \
+            "Prion 只有 add 一条创建路：先 add val \"名\" 类型 = 初值，之后才能 \
              val \"名\" = 新值。没建过就直接改值 = 编译报错。",
         ),
         "E104" => (
@@ -197,8 +197,8 @@ pub fn code_defaults(code: &str) -> (&'static str, &'static str) {
             "; 独占一行才是收体；行首 ; 后面再跟内容不是合法语句。",
         ),
         "E001" => (
-            "字符要在 Argon 的词法表里",
-            "Argon 用通用 ASCII：英文关键字、运算符与井号、冒号、引号等 ASCII 符号；中文标点、\
+            "字符要在 Prion 的词法表里",
+            "Prion 用通用 ASCII：英文关键字、运算符与井号、冒号、引号等 ASCII 符号；中文标点、\
              全角空格、特殊 Unicode 符号都不在词表里。若以为是拼写问题，注意中文近形字\
              （报告 ≠ 报吿）。",
         ),
@@ -224,12 +224,12 @@ pub fn code_defaults(code: &str) -> (&'static str, &'static str) {
         ),
         "E006" => (
             "源文件须纯 LF 换行",
-            "Argon 的源码契约：UTF-8 无 BOM + 每行 LF 结束。CRLF（Windows 常见）会让\
+            "Prion 的源码契约：UTF-8 无 BOM + 每行 LF 结束。CRLF（Windows 常见）会让\
              词法器把 \\r 当非法字符——用编辑器另存为「UTF-8 + LF」即可。",
         ),
         "E007" => (
             "源文件要 UTF-8 无 BOM",
-            "Argon 的源码契约：UTF-8 **无 BOM** + LF 换行。Windows 编辑器常默认加 BOM\
+            "Prion 的源码契约：UTF-8 **无 BOM** + LF 换行。Windows 编辑器常默认加 BOM\
              （文件头三个字节 EF BB BF）——用编辑器把编码改成「UTF-8（不带 BOM）」再编。",
         ),
         "E301" => (
@@ -287,11 +287,11 @@ pub fn code_defaults(code: &str) -> (&'static str, &'static str) {
         ),
         "E501" => (
             "命令要是 build / run / check / clean 之一",
-            "`argonc -h` 会列出全部命令。命令是动词，后面跟一个可选的名字（源文件名或项目名）。",
+            "`prionc -h` 会列出全部命令。命令是动词，后面跟一个可选的名字（源文件名或项目名）。",
         ),
         "E502" => (
             "选项要在该命令支持的清单里",
-            "各命令的选项不同：`argonc build -h` 看 build 支持哪些。选项写作 `--名 值` 或 `--名=值`。",
+            "各命令的选项不同：`prionc build -h` 看 build 支持哪些。选项写作 `--名 值` 或 `--名=值`。",
         ),
         "E503" => (
             "选项取值要合法",
@@ -307,7 +307,7 @@ pub fn code_defaults(code: &str) -> (&'static str, &'static str) {
         ),
         "E601" => (
             "环境里要有一个能用的编译器",
-            "Argon 产中间产物后交给后端编译器编。后端取法按顺序：`ARGON_CC` → SDK 同根 \
+            "Prion 产中间产物后交给后端编译器编。后端取法按顺序：`PRION_CC` → SDK 同根 \
              `tools/clang/bin` → PATH 里的 `clang`。三条都没有就报这条；\
              装了 SDK 的 clang 组件会被自动用上。clang 要能编 C 并链接 \
              （Windows 上 MSVC target 与 GNU target 均可），前提是它找得到系统 C 头文件与链接器。",

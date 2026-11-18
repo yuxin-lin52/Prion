@@ -19,13 +19,13 @@ struct 状态 {
 // nt: 一次解析的产物
 struct 分析 {
     源: String,
-    语法错: Vec<argon_parser::ParseError>,
-    检查错: Vec<argon_check::Diag>,
-    符号: Vec<argon_check::SymbolInfo>,
+    语法错: Vec<prion_parser::ParseError>,
+    检查错: Vec<prion_check::Diag>,
+    符号: Vec<prion_check::SymbolInfo>,
     // nt: 令牌原件
     原件: Vec<(usize, usize, usize, u32)>,
     // nt: 名字与类型
-    局部: Vec<argon_check::LocalInfo>,
+    局部: Vec<prion_check::LocalInfo>,
     // nt: 参数名与行域
     域: Vec<(String, usize, usize)>,
 }
@@ -300,17 +300,17 @@ fn 取分析<'a>(态: &'a mut 状态, uri: &str) -> Option<&'a 分析> {
         None => true,
     };
     if 要算 {
-        let Ok(段) = argon_lexer::lex(&源) else { return None };
-        let (ast, 语法错) = argon_parser::parse_all(段);
+        let Ok(段) = prion_lexer::lex(&源) else { return None };
+        let (ast, 语法错) = prion_parser::parse_all(段);
         let (检查错, 符号, 局部) = if 语法错.is_empty() {
-            let r = argon_check::check(&ast);
+            let r = prion_check::check(&ast);
             (r.diags, r.symbols, r.locals)
         } else {
             (Vec::new(), Vec::new(), Vec::new())
         };
         //nt: 有残树就发令牌
         let 原件 = if ast.blocks.is_empty() {
-            词法令牌(&argon_lexer::lex(&源).unwrap_or_default())
+            词法令牌(&prion_lexer::lex(&源).unwrap_or_default())
         } else {
             语义令牌(&ast, &符号)
         };
@@ -352,7 +352,7 @@ fn 一条(行: usize, 列: usize, 长: usize, 文案: &str) -> Value {
         "range": { "start": { "line": l, "character": c },
                    "end": { "line": l, "character": c + w } },
         "severity": 1,
-        "source": "argonc",
+        "source": "prionc",
         "message": 文案
     })
 }
@@ -378,8 +378,8 @@ fn 关键字类(k: &str) -> u32 {
 }
 
 // nt: 符号类别映射
-fn 符号类(k: &argon_check::SymKind) -> u32 {
-    use argon_check::SymKind as K;
+fn 符号类(k: &prion_check::SymKind) -> u32 {
+    use prion_check::SymKind as K;
     match k {
         K::Type | K::Variant => 2,
         K::Fn => 3,
@@ -390,11 +390,11 @@ fn 符号类(k: &argon_check::SymKind) -> u32 {
 
 // nt: 逐语句发令牌
 fn 扫语句(
-    stmts: &[argon_parser::Stmt],
+    stmts: &[prion_parser::Stmt],
     行: &mut Vec<(usize, usize, usize, u32)>,
     表: &std::collections::BTreeMap<String, u32>,
 ) {
-    use argon_parser::Stmt as S;
+    use prion_parser::Stmt as S;
     for s in stmts {
         match s {
             S::Line { line, kind, .. } => 扫一行(*line, kind.tokens(), 行, 表),
@@ -409,11 +409,11 @@ fn 扫语句(
 // nt: 扫一行
 fn 扫一行(
     行号: usize,
-    段: &argon_parser::TokStream,
+    段: &prion_parser::TokStream,
     出: &mut Vec<(usize, usize, usize, u32)>,
     表: &std::collections::BTreeMap<String, u32>,
 ) {
-    use argon_lexer::Token as T;
+    use prion_lexer::Token as T;
     for i in 0..段.len() {
         let Some((t, (c, l))) = 段.get2(i) else { continue };
         if l == 0 {
@@ -425,7 +425,7 @@ fn 扫一行(
             T::Str(s) | T::RawStr(s) => *表.get(s.as_ref()).unwrap_or(&7),
             T::Ident(s) => {
                 //nt: 内置函数
-                if argon_check::BUILTINS.iter().any(|u| *u == s.as_ref()) {
+                if prion_check::BUILTINS.iter().any(|u| *u == s.as_ref()) {
                     9
                 } else {
                     *表.get(s.as_ref()).unwrap_or(&4)
@@ -438,12 +438,12 @@ fn 扫一行(
 }
 
 //nt: 声明表
-fn 声明表(ast: &argon_parser::Program) -> std::collections::BTreeMap<String, u32> {
-    use argon_lexer::Token as T;
-    use argon_parser::Stmt as S;
+fn 声明表(ast: &prion_parser::Program) -> std::collections::BTreeMap<String, u32> {
+    use prion_lexer::Token as T;
+    use prion_parser::Stmt as S;
     fn 扫(stmts: &[S], 表: &mut std::collections::BTreeMap<String, u32>) {
         for s in stmts {
-            let (head, body): (&[argon_lexer::Token], &[S]) = match s {
+            let (head, body): (&[prion_lexer::Token], &[S]) = match s {
                 //nt: 单行公式 fn
                 S::Line { kind, .. } => (kind.tokens(), &[]),
                 S::Struct { head, body, .. } | S::Fn { head, body, .. } => (head, body),
@@ -469,7 +469,7 @@ fn 声明表(ast: &argon_parser::Program) -> std::collections::BTreeMap<String, 
 }
 
 // nt: 生成语义令牌
-pub fn 语义令牌(ast: &argon_parser::Program, 符号: &[argon_check::SymbolInfo]) -> Vec<(usize, usize, usize, u32)> {
+pub fn 语义令牌(ast: &prion_parser::Program, 符号: &[prion_check::SymbolInfo]) -> Vec<(usize, usize, usize, u32)> {
     let mut 表: std::collections::BTreeMap<String, u32> = std::collections::BTreeMap::new();
     for s in 符号 {
         表.insert(s.name.clone(), 符号类(&s.kind));
@@ -507,8 +507,8 @@ fn 取语义(态: &mut 状态, 参: &Value) -> Vec<u32> {
     }
 }
 //nt: 纯词法令牌
-fn 词法令牌(段: &[argon_lexer::Spanned]) -> Vec<(usize, usize, usize, u32)> {
-    use argon_lexer::Token as T;
+fn 词法令牌(段: &[prion_lexer::Spanned]) -> Vec<(usize, usize, usize, u32)> {
+    use prion_lexer::Token as T;
     let mut 出: Vec<(usize, usize, usize, u32)> = Vec::new();
     for t in 段 {
         if t.len == 0 {
@@ -613,9 +613,9 @@ fn 找词(a: &分析, 行: usize, 列: usize) -> Option<(String, u32, usize, usi
 }
 
 // nt: 收集 fn 参数域
-fn 参数域(ast: &argon_parser::Program) -> Vec<(String, usize, usize)> {
-    use argon_lexer::Token as T;
-    use argon_parser::Stmt as S;
+fn 参数域(ast: &prion_parser::Program) -> Vec<(String, usize, usize)> {
+    use prion_lexer::Token as T;
+    use prion_parser::Stmt as S;
     // nt: 语句最大行
     fn 最大行(stmts: &[S]) -> usize {
         let mut 大 = 0;
@@ -632,7 +632,7 @@ fn 参数域(ast: &argon_parser::Program) -> Vec<(String, usize, usize)> {
         大
     }
     // nt: 从 fn 头取参数
-    fn 收参(段: &[argon_lexer::Token], 起: usize, 止: usize, 出: &mut Vec<(String, usize, usize)>) {
+    fn 收参(段: &[prion_lexer::Token], 起: usize, 止: usize, 出: &mut Vec<(String, usize, usize)>) {
         let mut 深 = 0i32;
         let mut 段起 = false;
         for t in 段.iter() {
@@ -700,8 +700,8 @@ fn 找域(a: &分析, 词: &str, 行: usize) -> Option<(usize, usize)> {
 }
 
 // nt: 选声明符号
-fn 选符号<'a>(a: &'a 分析, 词: &str) -> Option<&'a argon_check::SymbolInfo> {
-    use argon_check::SymKind as K;
+fn 选符号<'a>(a: &'a 分析, 词: &str) -> Option<&'a prion_check::SymbolInfo> {
+    use prion_check::SymKind as K;
     a.符号
         .iter()
         .find(|s| s.name == 词 && !matches!(s.kind, K::Param))
@@ -709,8 +709,8 @@ fn 选符号<'a>(a: &'a 分析, 词: &str) -> Option<&'a argon_check::SymbolInfo
 }
 
 // nt: 符号种类名
-fn 种类名(k: &argon_check::SymKind) -> &'static str {
-    use argon_check::SymKind as K;
+fn 种类名(k: &prion_check::SymKind) -> &'static str {
+    use prion_check::SymKind as K;
     match k {
         K::Type => "类型",
         K::Variant => "变体",
@@ -848,8 +848,8 @@ fn 取重命名(态: &mut 状态, 参: &Value, 新名: &str) -> Value {
 }
 
 // nt: 大纲类别码
-fn 类别码(k: &argon_check::SymKind) -> u32 {
-    use argon_check::SymKind as K;
+fn 类别码(k: &prion_check::SymKind) -> u32 {
+    use prion_check::SymKind as K;
     match k {
         K::Type => 5,
         K::Variant => 22,

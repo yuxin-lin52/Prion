@@ -1,8 +1,8 @@
 [package]
-name = "argon-ir"
+name = "prion-ir"
 version.workspace = true
 edition.workspace = true
 
 [dependencies]
-argon-error = { path = "../argon-error" }
-argon-types = { path = "../argon-types" }
+prion-error = { path = "../prion-error" }
+prion-types = { path = "../prion-types" }

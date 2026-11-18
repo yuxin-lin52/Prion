@@ -5,7 +5,7 @@
 //! push 实参 / 下标写值则保持把手布局。
 //! 结果进 `Program.平铺`，两后端按其改布局。
 
-use argon_ir::{LocalId, Program, Rvalue, Stmt, Value};
+use prion_ir::{LocalId, Program, Rvalue, Stmt, Value};
 
 //nt: 序列元素类型
 fn 序元素型(t: &str) -> Option<String> {
@@ -102,8 +102,8 @@ pub fn run(prog: &mut Program) {
                 }
                 //nt: 出口实参
                 match &b.exit {
-                    argon_ir::Exit::Return(Some(v)) => 摘值(v, &元源, &mut 犯),
-                    argon_ir::Exit::Branch { targets, .. } => {
+                    prion_ir::Exit::Return(Some(v)) => 摘值(v, &元源, &mut 犯),
+                    prion_ir::Exit::Branch { targets, .. } => {
                         for s in targets {
                             for a in &s.args {
                                 摘值(a, &元源, &mut 犯);

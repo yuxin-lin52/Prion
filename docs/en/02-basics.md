@@ -8,7 +8,7 @@ All code lives in blocks. A block opens with `#: name b` (born) and closes with 
 
 At run time, blocks chain: every block nobody references is a chain root, and all chains run top-to-bottom in source order; referenced blocks run where they are called. Mutually-calling blocks with no root are rejected at compile time.
 
-Indentation is decorative. Argon is not sensitive to it — a block is delimited by `:` and the `;` that closes it on a line of its own, not by leading whitespace. Every example in this documentation is still indented, because that makes block boundaries easier to scan. The editor extension for Argon ships an auto-formatter that keeps it consistent.
+Indentation is decorative. Prion is not sensitive to it — a block is delimited by `:` and the `;` that closes it on a line of its own, not by leading whitespace. Every example in this documentation is still indented, because that makes block boundaries easier to scan. The editor extension for Prion ships an auto-formatter that keeps it consistent.
 
 ## Creation and re-binding
 

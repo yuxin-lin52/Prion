@@ -1,11 +1,11 @@
-//! argon-llvm —— 后端之一：中间表示 → LLVM IR → 目标文件
+//! prion-llvm —— 后端之一：中间表示 → LLVM IR → 目标文件
 //!
-//! 另一条 lower 在 `argon-codegen`。
+//! 另一条 lower 在 `prion-codegen`。
 //!
 //! 覆盖：与 C 后端同一套 IR 输入；产出 `.ll` 与 `.o`，由外部 clang 链接。
 //! 静态链接 LLVM 22.1；运行期不依赖 LLVM 动态库。
 
-use argon_ir::{AsmForm, BinOp, Exit, Function, LocalId, Place, Proj, Program, Rvalue, Stmt, Ty, Value};
+use prion_ir::{AsmForm, BinOp, Exit, Function, LocalId, Place, Proj, Program, Rvalue, Stmt, Ty, Value};
 pub mod flat_emit;
 use inkwell::AddressSpace;
 use inkwell::builder::Builder;
@@ -188,11 +188,11 @@ struct Lower<'ctx> {
     ///nt: 调试信息
     dbg: Option<Dbg<'ctx>>,
     ///nt: 容器拥有的元素对象
-    owned: std::collections::BTreeMap<argon_ir::ObjId, Vec<argon_ir::ObjId>>,
+    owned: std::collections::BTreeMap<prion_ir::ObjId, Vec<prion_ir::ObjId>>,
     //nt: 循环元数据登记表
     循环环: std::cell::RefCell<Vec<(FunctionValue<'ctx>, String, u64)>>,
     //nt: 值装箱容器对象
-    值入列: std::collections::BTreeSet<argon_ir::ObjId>,
+    值入列: std::collections::BTreeSet<prion_ir::ObjId>,
 }
 
 ///nt: 调试信息上下文
@@ -207,7 +207,7 @@ impl<'ctx> Lower<'ctx> {
     ///nt: 先占名再填体
     fn declare_types(&mut self, p: &Program) -> Result<(), String> {
         for (i, st) in p.types.iter().enumerate() {
-            let t = self.ctx.opaque_struct_type(&format!("argon_st_{}", i));
+            let t = self.ctx.opaque_struct_type(&format!("prion_st_{}", i));
             self.structs.insert(st.name.clone(), t);
             self.type_fields.insert(st.name.clone(), st.fields.clone());
         }
@@ -230,7 +230,7 @@ impl<'ctx> Lower<'ctx> {
 
     fn declare(&mut self, p: &Program) -> Result<(), String> {
         //nt: 无别名标注
-        let 观感 = argon_ir::形参观感(p);
+        let 观感 = prion_ir::形参观感(p);
         let 发布 = self.release;
         for (i, f) in p.functions.iter().enumerate() {
             let name = if f.name == "main" {
@@ -293,7 +293,7 @@ impl<'ctx> Lower<'ctx> {
                 BasicMetadataTypeEnum::from(pty),
             ];
             let sfty = self.ctx.void_type().fn_type(&sps, false);
-            let sfv = self.module.add_function("argon_args_set", sfty, None);
+            let sfv = self.module.add_function("prion_args_set", sfty, None);
             let _ = self
                 .builder
                 .build_call(sfv, &[argc.into(), argv.into()], "")
@@ -537,7 +537,7 @@ impl<'ctx> Lower<'ctx> {
         //nt: 清调试位置
         self.builder.unset_current_debug_location();
         //nt: 当前源文件
-        let fg = self.ptr_global("argon_cur_file");
+        let fg = self.ptr_global("prion_cur_file");
         let 文件名 = f.file.rsplit(['/', '\\']).next().unwrap_or("");
         let fval = if 文件名.is_empty() {
             self.ctx.ptr_type(AddressSpace::default()).const_null()
@@ -653,11 +653,11 @@ impl<'ctx> Lower<'ctx> {
                     self.builder
                         .build_store(g.as_pointer_value(), self.ctx.i64_type().const_int(ln as u64, false))
                         .map_err(|e| e.to_string())?;
-                    let gc = self.i64_global("argon_col");
+                    let gc = self.i64_global("prion_col");
                     self.builder
                         .build_store(gc.as_pointer_value(), self.ctx.i64_type().const_int(sp.col as u64, false))
                         .map_err(|e| e.to_string())?;
-                    let gl = self.i64_global("argon_len");
+                    let gl = self.i64_global("prion_len");
                     self.builder
                         .build_store(gl.as_pointer_value(), self.ctx.i64_type().const_int(sp.len as u64, false))
                         .map_err(|e| e.to_string())?;
@@ -674,7 +674,7 @@ impl<'ctx> Lower<'ctx> {
                     } else {
                         self.fmt(&行文本)
                     };
-                    let gs = self.ptr_global("argon_src");
+                    let gs = self.ptr_global("prion_src");
                     self.builder.build_store(gs.as_pointer_value(), sv).map_err(|e| e.to_string())?;
                 }
                 self.stmt(f, &allocas, s)?;
@@ -696,7 +696,7 @@ impl<'ctx> Lower<'ctx> {
                                         if !已逃 {
                                             let size = self.td.get_store_size(&st) as i64;
                                             let c = self.call_rt(
-                                                "argon_copy_to_parent",
+                                                "prion_copy_to_parent",
                                                 &[self.pty(), self.ity()],
                                                 Some(self.pty()),
                                                 &[pv.into(), self.ci(size)],
@@ -992,7 +992,7 @@ impl<'ctx> Lower<'ctx> {
         &mut self,
         f: &Function,
         allocas: &[Option<PointerValue<'ctx>>],
-        s: &argon_ir::Succ,
+        s: &prion_ir::Succ,
         from: inkwell::basic_block::BasicBlock<'ctx>,
     ) -> Result<(), String> {
         if s.args.is_empty() {
@@ -1119,7 +1119,7 @@ impl<'ctx> Lower<'ctx> {
         rhs: &Rvalue,
     ) -> Result<(), String> {
         let ty = self.local_ty(f, lhs.base).0;
-        if !argon_ir::is_container_ty(&ty) {
+        if !prion_ir::is_container_ty(&ty) {
             return Ok(());
         }
         let 源 = match rhs {
@@ -1164,7 +1164,7 @@ impl<'ctx> Lower<'ctx> {
             .map(|b| self.structs.contains_key(b))
             .unwrap_or(false)
             || ty == "str";
-        if !argon_ir::is_container_ty(&ty) && !把手 {
+        if !prion_ir::is_container_ty(&ty) && !把手 {
             return Ok(());
         }
         //nt: 取局部值
@@ -1214,7 +1214,7 @@ impl<'ctx> Lower<'ctx> {
             let fv = self.rt_map_free();
             let _ = fv;
             self.call_rt(
-                "argon_map_free",
+                "prion_map_free",
                 &[self.pty(), self.ity()],
                 None,
                 &[p.into(), self.ci(if vstr { 1 } else { 0 })],
@@ -1343,13 +1343,13 @@ impl<'ctx> Lower<'ctx> {
     }
 
     fn rt_map_free(&mut self) -> FunctionValue<'ctx> {
-        if let Some(f) = self.module.get_function("argon_map_free") {
+        if let Some(f) = self.module.get_function("prion_map_free") {
             return f;
         }
         let pt = self.ctx.ptr_type(AddressSpace::default());
         let ps = [pt.into(), self.ctx.i64_type().into()];
         let fty = self.ctx.void_type().fn_type(&ps, false);
-        self.module.add_function("argon_map_free", fty, None)
+        self.module.add_function("prion_map_free", fty, None)
     }
 
     fn load_place(
@@ -1420,7 +1420,7 @@ impl<'ctx> Lower<'ctx> {
                     .map_err(|e| e.to_string())?
                     .into_pointer_value();
                 let isnull = self.builder.build_is_null(pv, "null").map_err(|e| e.to_string())?;
-                let copied = self.call_rt("argon_str_copy", &[self.pty()], Some(self.pty()), &[pv.into()])?;
+                let copied = self.call_rt("prion_str_copy", &[self.pty()], Some(self.pty()), &[pv.into()])?;
                 let nullv = self.ctx.ptr_type(AddressSpace::default()).const_null().into();
                 let picked = self
                     .builder
@@ -1443,7 +1443,7 @@ impl<'ctx> Lower<'ctx> {
                 } else {
                     0
                 };
-                let 函数 = if base == "map" { "argon_dc_map" } else { "argon_dc_list" };
+                let 函数 = if base == "map" { "prion_dc_map" } else { "prion_dc_list" };
                 let fp = self
                     .builder
                     .build_struct_gep(st, tmp, i as u32, "dcc")
@@ -1585,7 +1585,7 @@ impl<'ctx> Lower<'ctx> {
                 self.want = None;
                 //nt: str 赋值即堆副本
                 let v = if self.place_ty(f, lhs).0 == "str" && !matches!(rhs, Rvalue::BinOp { .. }) {
-                    self.call_rt("argon_str_copy", &[self.pty()], Some(self.pty()), &[v])?
+                    self.call_rt("prion_str_copy", &[self.pty()], Some(self.pty()), &[v])?
                 } else {
                     v
                 };
@@ -1643,7 +1643,7 @@ impl<'ctx> Lower<'ctx> {
                 let m = self.fmt(msg);
                 let fx = self.fmt(fix);
                 self.call_rt(
-                    "argon_die",
+                    "prion_die",
                     &[self.ctx.i32_type().into(), self.ity(), self.pty(), self.pty()],
                     None,
                     &[self.ctx.i32_type().const_int(code, false).into(), self.ci(self.cur_line as i64), m.into(), fx.into()],
@@ -1664,19 +1664,19 @@ impl<'ctx> Lower<'ctx> {
                     let a = self.alloca(st, "as").map_err(|e| e.to_string())?;
                     self.builder.build_store(a, vv).map_err(|e| e.to_string())?;
                     self.call_rt(
-                        "argon_list_setat_from",
+                        "prion_list_setat_from",
                         &[self.pty(), self.ity(), self.pty()],
                         None,
                         &[lv, iv, a.into()],
                     )?
                 } else {
                     let slot = if et == "str" {
-                        let c = self.call_rt("argon_str_copy", &[self.pty()], Some(self.pty()), &[vv])?;
+                        let c = self.call_rt("prion_str_copy", &[self.pty()], Some(self.pty()), &[vv])?;
                         self.to_slot(c)?
                     } else {
                         self.to_slot(vv)?
                     };
-                    self.call_rt("argon_list_setat", &[self.pty(), self.ity(), self.ity()], None, &[lv, iv, slot.into()])?
+                    self.call_rt("prion_list_setat", &[self.pty(), self.ity(), self.ity()], None, &[lv, iv, slot.into()])?
                 };
             }
             Stmt::MapSet { map, key, value } => {
@@ -1687,12 +1687,12 @@ impl<'ctx> Lower<'ctx> {
                 let kv = self.key_ll(kv)?;
                 let vv = self.value(f, allocas, value)?;
                 let slot = if vt == "str" {
-                    let c = self.call_rt("argon_str_copy", &[self.pty()], Some(self.pty()), &[vv])?;
+                    let c = self.call_rt("prion_str_copy", &[self.pty()], Some(self.pty()), &[vv])?;
                     self.to_slot(c)?
                 } else {
                     self.to_slot(vv)?
                 };
-                self.call_rt("argon_map_set", &[self.pty(), self.ity(), self.ity()], None, &[mv, kv, slot.into()])?;
+                self.call_rt("prion_map_set", &[self.pty(), self.ity(), self.ity()], None, &[mv, kv, slot.into()])?;
             }
             Stmt::Asm(form) => self.asm_stmt(f, allocas, form)?,
         }
@@ -1974,7 +1974,7 @@ impl<'ctx> Lower<'ctx> {
                 let 宽 = self.聚合宽(&et);
                 if elems.is_empty() {
                     return self.call_rt(
-                        "argon_list_new",
+                        "prion_list_new",
                         &[self.ity(), self.ity()],
                         Some(self.pty()),
                         &[self.ci(宽.unwrap_or(esz)), self.ci(sgn)],
@@ -1994,7 +1994,7 @@ impl<'ctx> Lower<'ctx> {
                         self.builder.build_store(ep, v).map_err(|e| e.to_string())?;
                     }
                     return self.call_rt(
-                        "argon_list_lit_from",
+                        "prion_list_lit_from",
                         &[self.ity(), self.pty(), self.ity()],
                         Some(self.pty()),
                         &[
@@ -2014,7 +2014,7 @@ impl<'ctx> Lower<'ctx> {
                     }
                     let arr = self.stack_ptr_arr(&ptrs)?;
                     return self.call_rt(
-                        "argon_list_lit_s",
+                        "prion_list_lit_s",
                         &[self.ity(), self.pty()],
                         Some(self.pty()),
                         &[self.ci(elems.len() as i64), arr.into()],
@@ -2027,7 +2027,7 @@ impl<'ctx> Lower<'ctx> {
                 }
                 let arr = self.stack_i64_arr(&vals)?;
                 self.call_rt(
-                    "argon_list_lit",
+                    "prion_list_lit",
                     &[self.ity(), self.pty(), self.ity(), self.ity()],
                     Some(self.pty()),
                     &[self.ci(elems.len() as i64), arr.into(), self.ci(esz), self.ci(sgn)],
@@ -2042,7 +2042,7 @@ impl<'ctx> Lower<'ctx> {
                     //nt: 聚合整块拷
                     let a = self.alloca(st, "ae").map_err(|e| e.to_string())?;
                     self.call_rt(
-                        "argon_list_copy_at",
+                        "prion_list_copy_at",
                         &[self.pty(), self.ity(), self.pty()],
                         None,
                         &[lv, iv, a.into()],
@@ -2053,7 +2053,7 @@ impl<'ctx> Lower<'ctx> {
                 //nt: 调试态走检查函数
                 if self.dbg.is_some() {
                     let c = self.call_rt(
-                        "argon_list_at",
+                        "prion_list_at",
                         &[self.pty(), self.ity()],
                         Some(self.ity()),
                         &[lv.into(), iv.into()],
@@ -2104,8 +2104,8 @@ impl<'ctx> Lower<'ctx> {
                 let mut vs = Vec::new();
                 for (k, v) in pairs {
                     let g: inkwell::values::IntValue<'ctx> = match k {
-                        argon_ir::MapKey::Int(n) => self.ctx.i64_type().const_int(*n as u64, false),
-                        argon_ir::MapKey::Str(s) => {
+                        prion_ir::MapKey::Int(n) => self.ctx.i64_type().const_int(*n as u64, false),
+                        prion_ir::MapKey::Str(s) => {
                             let g = self.builder.build_global_string_ptr(&s, "mk").map_err(|e| e.to_string())?;
                             self.builder
                                 .build_ptr_to_int(g.as_pointer_value(), self.ctx.i64_type(), "k2i")
@@ -2115,7 +2115,7 @@ impl<'ctx> Lower<'ctx> {
                     ks.push(g);
                     let vv = self.value(f, allocas, v)?;
                     let vv = if vt == "str" {
-                        self.call_rt("argon_str_copy", &[self.pty()], Some(self.pty()), &[vv])?
+                        self.call_rt("prion_str_copy", &[self.pty()], Some(self.pty()), &[vv])?
                     } else {
                         vv
                     };
@@ -2124,7 +2124,7 @@ impl<'ctx> Lower<'ctx> {
                 let karr = self.stack_i64_arr(&ks)?;
                 let varr = self.stack_i64_arr(&vs)?;
                 self.call_rt(
-                    "argon_map_lit",
+                    "prion_map_lit",
                     &[self.ity(), self.pty(), self.pty(), self.ity(), self.ity(), self.ity()],
                     Some(self.pty()),
                     &[self.ci(pairs.len() as i64), karr.into(), varr.into(), self.ci(esz), self.ci(sgn), self.ci(kty)],
@@ -2136,7 +2136,7 @@ impl<'ctx> Lower<'ctx> {
                 let mv = self.value(f, allocas, map)?;
                 let kv = self.value(f, allocas, key)?;
                 let kv = self.key_ll(kv)?;
-                let raw = self.call_rt("argon_map_at", &[self.pty(), self.ity()], Some(self.ity()), &[mv, kv])?;
+                let raw = self.call_rt("prion_map_at", &[self.pty(), self.ity()], Some(self.ity()), &[mv, kv])?;
                 self.from_slot(raw, &vt)
             }
         }
@@ -2227,17 +2227,17 @@ impl<'ctx> Lower<'ctx> {
     }
 
     fn rt_str_eq(&mut self) -> FunctionValue<'ctx> {
-        if let Some(f) = self.module.get_function("argon_str_eq") {
+        if let Some(f) = self.module.get_function("prion_str_eq") {
             return f;
         }
         let ptr = self.ctx.ptr_type(AddressSpace::default());
         let ps = [BasicMetadataTypeEnum::from(ptr), BasicMetadataTypeEnum::from(ptr)];
         let fty = self.ctx.i64_type().fn_type(&ps, false);
-        self.module.add_function("argon_str_eq", fty, None)
+        self.module.add_function("prion_str_eq", fty, None)
     }
 
     fn line_global(&mut self) -> GlobalValue<'ctx> {
-        self.i64_global("argon_line")
+        self.i64_global("prion_line")
     }
 
     fn i64_global(&mut self, name: &str) -> GlobalValue<'ctx> {
@@ -2261,7 +2261,7 @@ impl<'ctx> Lower<'ctx> {
     //nt: 跨块槽全局
     //nt: 同键共用一份存储
     fn slot_global(&mut self, _key: &str, ty: &Ty, idx: usize) -> Result<PointerValue<'ctx>, String> {
-        let name = format!("argon_slot_{}", idx);
+        let name = format!("prion_slot_{}", idx);
         if let Some(g) = self.module.get_global(&name) {
             return Ok(g.as_pointer_value());
         }
@@ -2330,7 +2330,7 @@ impl<'ctx> Lower<'ctx> {
             let 是串 = lt == "str" || rt == "str";
             return match op {
                 BinOp::Add => {
-                    let fv = self.rt_ptr2("argon_concat");
+                    let fv = self.rt_ptr2("prion_concat");
                     let c = self.builder.build_call(fv, &[pa.into(), pb.into()], "concat").map_err(|e| e.to_string())?;
                     Ok(c.try_as_basic_value().basic().ok_or_else(|| "concat 无返回值".to_string())?)
                 }
@@ -2383,11 +2383,11 @@ impl<'ctx> Lower<'ctx> {
             }
             BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Mod => {
                 let n = match op {
-                    BinOp::Add => "argon_sadd",
-                    BinOp::Sub => "argon_ssub",
-                    BinOp::Mul => "argon_smul",
-                    BinOp::Div => "argon_div",
-                    _ => "argon_mod",
+                    BinOp::Add => "prion_sadd",
+                    BinOp::Sub => "prion_ssub",
+                    BinOp::Mul => "prion_smul",
+                    BinOp::Div => "prion_div",
+                    _ => "prion_mod",
                 };
                 let fv = self.runtime_i64_i64(n)?;
                 let c = self.builder
@@ -2559,34 +2559,34 @@ impl<'ctx> Lower<'ctx> {
                 let v = self.value(f, allocas, a)?;
                 match k {
                     "list_s" => {
-                        self.call_rt("argon_list_print_s", &[self.pty()], None, &[v])?;
+                        self.call_rt("prion_list_print_s", &[self.pty()], None, &[v])?;
                     }
                     "list_f" => {
-                        self.call_rt("argon_list_print_f", &[self.pty()], None, &[v])?;
+                        self.call_rt("prion_list_print_f", &[self.pty()], None, &[v])?;
                     }
                     "list" => {
-                        self.call_rt("argon_list_print", &[self.pty()], None, &[v])?;
+                        self.call_rt("prion_list_print", &[self.pty()], None, &[v])?;
                     }
                     "que" | "stack" | "que_f" | "stack_f" | "que_s" | "stack_s" => {
                         let tag = if k.starts_with("que") { "que" } else { "stack" };
                         let tv = self.fmt(tag);
                         let name = if k.ends_with("_f") {
-                            "argon_list_print_tag_f"
+                            "prion_list_print_tag_f"
                         } else if k.ends_with("_s") {
-                            "argon_list_print_tag_s"
+                            "prion_list_print_tag_s"
                         } else {
-                            "argon_list_print_tag"
+                            "prion_list_print_tag"
                         };
                         self.call_rt(name, &[self.pty(), self.pty()], None, &[v, tv.into()])?;
                     }
                     "map_f" => {
-                        self.call_rt("argon_map_print_f", &[self.pty()], None, &[v])?;
+                        self.call_rt("prion_map_print_f", &[self.pty()], None, &[v])?;
                     }
                     "map_s" => {
-                        self.call_rt("argon_map_print_s", &[self.pty()], None, &[v])?;
+                        self.call_rt("prion_map_print_s", &[self.pty()], None, &[v])?;
                     }
                     _ => {
-                        self.call_rt("argon_map_print", &[self.pty()], None, &[v])?;
+                        self.call_rt("prion_map_print", &[self.pty()], None, &[v])?;
                     }
                 }
                 continue;
@@ -2638,12 +2638,12 @@ impl<'ctx> Lower<'ctx> {
     }
 
     fn runtime_bool_str(&mut self) -> FunctionValue<'ctx> {
-        if let Some(f) = self.module.get_function("argon_bool_str") {
+        if let Some(f) = self.module.get_function("prion_bool_str") {
             return f;
         }
         let ps = [BasicMetadataTypeEnum::from(self.ctx.i64_type())];
         let fty = self.ctx.ptr_type(AddressSpace::default()).fn_type(&ps, false);
-        self.module.add_function("argon_bool_str", fty, None)
+        self.module.add_function("prion_bool_str", fty, None)
     }
 
     ///nt: 内置函数分派
@@ -2696,20 +2696,20 @@ impl<'ctx> Lower<'ctx> {
                                 _ => return Err("列表 len 字段不是整数".into()),
                             }
                         }
-                        _ => self.call_rt("argon_list_len", &[self.pty()], Some(self.ity()), &vals)?,
+                        _ => self.call_rt("prion_list_len", &[self.pty()], Some(self.ity()), &vals)?,
                     }
                 } else if t0.starts_with("map") {
-                    self.call_rt("argon_map_len", &[self.pty()], Some(self.ity()), &vals)?
+                    self.call_rt("prion_map_len", &[self.pty()], Some(self.ity()), &vals)?
                 } else {
-                    self.call_rt("argon_str_char_len", &[self.pty()], Some(self.ity()), &vals)?
+                    self.call_rt("prion_str_char_len", &[self.pty()], Some(self.ity()), &vals)?
                 }
             }
-            "len_utf8" => self.call_rt("argon_str_byte_len", &[self.pty()], Some(self.ity()), &vals)?,
+            "len_utf8" => self.call_rt("prion_str_byte_len", &[self.pty()], Some(self.ity()), &vals)?,
             "empty" => {
                 let n = if t0.starts_with("map") {
-                    self.call_rt("argon_map_len", &[self.pty()], Some(self.ity()), &vals)?
+                    self.call_rt("prion_map_len", &[self.pty()], Some(self.ity()), &vals)?
                 } else {
-                    self.call_rt("argon_list_len", &[self.pty()], Some(self.ity()), &vals)?
+                    self.call_rt("prion_list_len", &[self.pty()], Some(self.ity()), &vals)?
                 };
                 let ni = match n {
                     BasicValueEnum::IntValue(i) => i,
@@ -2730,7 +2730,7 @@ impl<'ctx> Lower<'ctx> {
                             if !已逃 {
                                 let size = self.td.get_store_size(&st) as i64;
                                 let c = self.call_rt(
-                                    "argon_copy_to_parent",
+                                    "prion_copy_to_parent",
                                     &[self.pty(), self.ity()],
                                     Some(self.pty()),
                                     &[pv.into(), self.ci(size)],
@@ -2753,25 +2753,25 @@ impl<'ctx> Lower<'ctx> {
                     let a = self.alloca(st, "ap").map_err(|e| e.to_string())?;
                     self.builder.build_store(a, sv).map_err(|e| e.to_string())?;
                     return Ok(Some(self.call_rt(
-                        "argon_list_push_from",
+                        "prion_list_push_from",
                         &[self.pty(), self.pty()],
                         Some(self.ity()),
                         &[vals[0], a.into()],
                     )?));
                 }
                 let slot = if elem == "str" {
-                    let c = self.call_rt("argon_str_copy", &[self.pty()], Some(self.pty()), &[a1])?;
+                    let c = self.call_rt("prion_str_copy", &[self.pty()], Some(self.pty()), &[a1])?;
                     self.to_slot(c)?
                 } else {
                     self.to_slot(a1)?
                 };
-                self.call_rt("argon_list_push", &[self.pty(), self.ity()], Some(self.ity()), &[vals[0], slot.into()])?
+                self.call_rt("prion_list_push", &[self.pty(), self.ity()], Some(self.ity()), &[vals[0], slot.into()])?
             }
             "pop" => {
                 let raw = if t0.starts_with("que") {
-                    self.call_rt("argon_list_remove", &[self.pty(), self.ity()], Some(self.ity()), &[vals[0], self.ci(1)])?
+                    self.call_rt("prion_list_remove", &[self.pty(), self.ity()], Some(self.ity()), &[vals[0], self.ci(1)])?
                 } else {
-                    self.call_rt("argon_list_pop", &[self.pty()], Some(self.ity()), &[vals[0]])?
+                    self.call_rt("prion_list_pop", &[self.pty()], Some(self.ity()), &[vals[0]])?
                 };
                 self.from_slot(raw, &elem)?
             }
@@ -2783,7 +2783,7 @@ impl<'ctx> Lower<'ctx> {
                     let a = self.alloca(st, "ai").map_err(|e| e.to_string())?;
                     self.builder.build_store(a, sv).map_err(|e| e.to_string())?;
                     return Ok(Some(self.call_rt(
-                        "argon_list_insert_from",
+                        "prion_list_insert_from",
                         &[self.pty(), self.ity(), self.pty()],
                         Some(self.ity()),
                         &[vals[0], vals[1], a.into()],
@@ -2791,7 +2791,7 @@ impl<'ctx> Lower<'ctx> {
                 }
                 let slot = self.to_slot(a2)?;
                 self.call_rt(
-                    "argon_list_insert",
+                    "prion_list_insert",
                     &[self.pty(), self.ity(), self.ity()],
                     Some(self.ity()),
                     &[vals[0], vals[1], slot.into()],
@@ -2800,10 +2800,10 @@ impl<'ctx> Lower<'ctx> {
             "remove" => {
                 if t0.starts_with("map") {
                     let k = self.key_ll(vals[1])?;
-                    self.call_rt("argon_map_remove", &[self.pty(), self.ity()], Some(self.ity()), &[vals[0], k])?
+                    self.call_rt("prion_map_remove", &[self.pty(), self.ity()], Some(self.ity()), &[vals[0], k])?
                 } else {
                     let raw = self.call_rt(
-                        "argon_list_remove",
+                        "prion_list_remove",
                         &[self.pty(), self.ity()],
                         Some(self.ity()),
                         &[vals[0], vals[1]],
@@ -2812,12 +2812,12 @@ impl<'ctx> Lower<'ctx> {
                 }
             }
             "sort" => {
-                let n = if elem == "str" { "argon_list_sort_s" } else { "argon_list_sort" };
+                let n = if elem == "str" { "prion_list_sort_s" } else { "prion_list_sort" };
                 self.call_rt(n, &[self.pty()], None, &vals)?;
                 self.ci(0)
             }
             "clear" => {
-                let n = if t0.starts_with("map") { "argon_map_clear" } else { "argon_list_clear" };
+                let n = if t0.starts_with("map") { "prion_map_clear" } else { "prion_list_clear" };
                 self.call_rt(n, &[self.pty()], None, &vals)?;
                 self.ci(0)
             }
@@ -2825,41 +2825,41 @@ impl<'ctx> Lower<'ctx> {
                 if t0.starts_with("map") {
                     let k = self.key_ll(vals[1])?;
                     if name == "has" {
-                        self.call_rt("argon_map_contains", &[self.pty(), self.ity()], Some(self.ity()), &[vals[0], k])?
+                        self.call_rt("prion_map_contains", &[self.pty(), self.ity()], Some(self.ity()), &[vals[0], k])?
                     } else {
                         let vt = Self::map_value_ty(&t0).unwrap_or_else(|| "int".into());
-                        let raw = self.call_rt("argon_map_at", &[self.pty(), self.ity()], Some(self.ity()), &[vals[0], k])?;
+                        let raw = self.call_rt("prion_map_at", &[self.pty(), self.ity()], Some(self.ity()), &[vals[0], k])?;
                         self.from_slot(raw, &vt)?
                     }
                 } else if elem == "str" {
-                    let n = if name == "has" { "argon_list_contains_s" } else { "argon_list_index_s" };
+                    let n = if name == "has" { "prion_list_contains_s" } else { "prion_list_index_s" };
                     self.call_rt(n, &[self.pty(), self.pty()], Some(self.ity()), &vals[0..2])?
                 } else {
-                    let n = if name == "has" { "argon_list_contains" } else { "argon_list_index" };
+                    let n = if name == "has" { "prion_list_contains" } else { "prion_list_index" };
                     let slot = self.to_slot(vals[1])?;
                     self.call_rt(n, &[self.pty(), self.ity()], Some(self.ity()), &[vals[0], slot.into()])?
                 }
             }
             "slice" => {
                 if t0 == "str" {
-                    self.call_rt("argon_sub_str", &[self.pty(), self.ity(), self.ity()], Some(self.pty()), &vals[0..3])?
+                    self.call_rt("prion_sub_str", &[self.pty(), self.ity(), self.ity()], Some(self.pty()), &vals[0..3])?
                 } else {
-                    self.call_rt("argon_list_slice", &[self.pty(), self.ity(), self.ity()], Some(self.pty()), &vals[0..3])?
+                    self.call_rt("prion_list_slice", &[self.pty(), self.ity(), self.ity()], Some(self.pty()), &vals[0..3])?
                 }
             }
-            "keys" => self.call_rt("argon_map_keys", &[self.pty()], Some(self.pty()), &vals)?,
-            "vals" => self.call_rt("argon_map_values", &[self.pty()], Some(self.pty()), &vals)?,
+            "keys" => self.call_rt("prion_map_keys", &[self.pty()], Some(self.pty()), &vals)?,
+            "vals" => self.call_rt("prion_map_values", &[self.pty()], Some(self.pty()), &vals)?,
             "put" => {
                 let vt = Self::map_value_ty(&t0).unwrap_or_else(|| "int".into());
                 let a2 = *vals.get(2).ok_or_else(|| "put 要 3 个参数".to_string())?;
                 let slot = if vt == "str" {
-                    let c = self.call_rt("argon_str_copy", &[self.pty()], Some(self.pty()), &[a2])?;
+                    let c = self.call_rt("prion_str_copy", &[self.pty()], Some(self.pty()), &[a2])?;
                     self.to_slot(c)?
                 } else {
                     self.to_slot(a2)?
                 };
                 let k = self.key_ll(vals[1])?;
-                self.call_rt("argon_map_put", &[self.pty(), self.ity(), self.ity()], None, &[vals[0], k, slot.into()])?;
+                self.call_rt("prion_map_put", &[self.pty(), self.ity(), self.ity()], None, &[vals[0], k, slot.into()])?;
                 self.ci(0)
             }
             "que" | "stack" => {
@@ -2868,7 +2868,7 @@ impl<'ctx> Lower<'ctx> {
                     let et = Self::seq_elem_ty(&wty).unwrap_or_else(|| "int".into());
                     let (esz, sgn) = Self::elem_esz_sgn(&et);
                     self.call_rt(
-                        "argon_list_new",
+                        "prion_list_new",
                         &[self.ity(), self.ity()],
                         Some(self.pty()),
                         &[self.ci(esz), self.ci(sgn)],
@@ -2881,9 +2881,9 @@ impl<'ctx> Lower<'ctx> {
                 let is_float = matches!(args.first(), Some(Value::Float(_))) || t0 == "float";
                 if is_float {
                     let ps = [BasicTypeEnum::from(self.ctx.f64_type())];
-                    self.call_rt("argon_str_of_float", &ps, Some(self.pty()), &vals)?
+                    self.call_rt("prion_str_of_float", &ps, Some(self.pty()), &vals)?
                 } else {
-                    self.call_rt("argon_str_of_int", &[self.ity()], Some(self.pty()), &vals)?
+                    self.call_rt("prion_str_of_int", &[self.ity()], Some(self.pty()), &vals)?
                 }
             }
             "int" => {
@@ -2899,14 +2899,14 @@ impl<'ctx> Lower<'ctx> {
                         .build_float_to_signed_int(f, self.ctx.i64_type(), "i")
                         .map_err(|e| e.to_string())?
                         .into(),
-                    _ => self.call_rt("argon_int_of_str", &[self.pty()], Some(self.ity()), &vals)?,
+                    _ => self.call_rt("prion_int_of_str", &[self.pty()], Some(self.ity()), &vals)?,
                 }
             }
             "float" => {
                 //nt: 按型转float
                 match vals[0] {
                     BasicValueEnum::PointerValue(_) => {
-                        self.call_rt("argon_float_of_str", &[self.pty()], Some(BasicTypeEnum::from(self.ctx.f64_type())), &vals)?
+                        self.call_rt("prion_float_of_str", &[self.pty()], Some(BasicTypeEnum::from(self.ctx.f64_type())), &vals)?
                     }
                     BasicValueEnum::IntValue(i) => self
                         .builder
@@ -2925,24 +2925,24 @@ impl<'ctx> Lower<'ctx> {
                 let c = self.builder.build_int_compare(IntPredicate::NE, i, z, "b").map_err(|e| e.to_string())?;
                 self.builder.build_int_z_extend(c, self.ctx.i64_type(), "bool").map_err(|e| e.to_string())?.into()
             }
-            "code" => self.call_rt("argon_char_code", &[self.pty()], Some(self.ity()), &vals)?,
-            "char" => self.call_rt("argon_code_char", &[self.ity()], Some(self.pty()), &vals)?,
+            "code" => self.call_rt("prion_char_code", &[self.pty()], Some(self.ity()), &vals)?,
+            "char" => self.call_rt("prion_code_char", &[self.ity()], Some(self.pty()), &vals)?,
             "concat" => {
-                self.call_rt("argon_concat", &[self.pty(), self.pty()], Some(self.pty()), &vals[0..2])?
+                self.call_rt("prion_concat", &[self.pty(), self.pty()], Some(self.pty()), &vals[0..2])?
             }
-            "sub_str" => self.call_rt("argon_sub_str", &[self.pty(), self.ity(), self.ity()], Some(self.pty()), &vals[0..3])?,
-            "nth_char" => self.call_rt("argon_nth_char", &[self.pty(), self.ity()], Some(self.pty()), &vals[0..2])?,
+            "sub_str" => self.call_rt("prion_sub_str", &[self.pty(), self.ity(), self.ity()], Some(self.pty()), &vals[0..3])?,
+            "nth_char" => self.call_rt("prion_nth_char", &[self.pty(), self.ity()], Some(self.pty()), &vals[0..2])?,
             //nt: 串顺序取字符
             "#str_iter_start" => {
-                self.call_rt("argon_str_iter_start", &[self.pty()], None, &vals[0..1])?;
+                self.call_rt("prion_str_iter_start", &[self.pty()], None, &vals[0..1])?;
                 self.ctx.i64_type().const_int(0, false).into()
             }
             "#str_iter_next" => {
-                self.call_rt("argon_str_iter_next", &[self.pty(), self.ity()], Some(self.pty()), &vals[0..2])?
+                self.call_rt("prion_str_iter_next", &[self.pty(), self.ity()], Some(self.pty()), &vals[0..2])?
             }
-            "#str_copy" => self.call_rt("argon_str_copy", &[self.pty()], Some(self.pty()), &vals)?,
-            "#dc_list" => self.call_rt("argon_dc_list", &[self.pty(), self.ity()], Some(self.pty()), &vals[0..2])?,
-            "#dc_map" => self.call_rt("argon_dc_map", &[self.pty(), self.ity()], Some(self.pty()), &vals[0..2])?,
+            "#str_copy" => self.call_rt("prion_str_copy", &[self.pty()], Some(self.pty()), &vals)?,
+            "#dc_list" => self.call_rt("prion_dc_list", &[self.pty(), self.ity()], Some(self.pty()), &vals[0..2])?,
+            "#dc_map" => self.call_rt("prion_dc_map", &[self.pty(), self.ity()], Some(self.pty()), &vals[0..2])?,
             //nt: 结构体深拷
             n if n.starts_with("#dcdeep_") => {
                 let 型 = n.trim_start_matches("#dcdeep_").to_string();
@@ -2951,9 +2951,9 @@ impl<'ctx> Lower<'ctx> {
                     _ => return Err("深拷目标不是结构体".into()),
                 }
             }
-            "args" => self.call_rt("argon_args", &[], Some(self.pty()), &[])?,
-            "read_file" => self.call_rt("argon_read_file", &[self.pty()], Some(self.pty()), &vals)?,
-            "save_file" => self.call_rt("argon_save_file", &[self.pty(), self.pty()], Some(self.ity()), &vals[0..2])?,
+            "args" => self.call_rt("prion_args", &[], Some(self.pty()), &[])?,
+            "read_file" => self.call_rt("prion_read_file", &[self.pty()], Some(self.pty()), &vals)?,
+            "save_file" => self.call_rt("prion_save_file", &[self.pty(), self.pty()], Some(self.ity()), &vals[0..2])?,
             "run" => {
                 //nt: 缺省为空
                 let p0 = *vals.first().ok_or_else(|| "run 要 1 个参数".to_string())?;
@@ -2967,19 +2967,19 @@ impl<'ctx> Lower<'ctx> {
                     None => self.fmt("").into(),
                 };
                 self.call_rt(
-                    "argon_run",
+                    "prion_run",
                     &[self.pty(), self.pty(), self.pty(), self.pty()],
                     Some(self.ity()),
                     &[p0, a1, a2, a3],
                 )?
             }
-            "rnd" => self.call_rt("argon_random", &[self.ity()], Some(self.ity()), &vals)?,
+            "rnd" => self.call_rt("prion_random", &[self.ity()], Some(self.ity()), &vals)?,
             "sle_ms" => {
-                self.call_rt("argon_sleep", &[self.ity()], None, &vals)?;
+                self.call_rt("prion_sleep", &[self.ity()], None, &vals)?;
                 self.ci(0)
             }
             "str_to_c" => {
-                let p = self.call_rt("argon_to_c_str", &[self.pty()], Some(self.pty()), &vals)?;
+                let p = self.call_rt("prion_to_c_str", &[self.pty()], Some(self.pty()), &vals)?;
                 let pv = match p {
                     BasicValueEnum::PointerValue(p) => p,
                     _ => return Err("to_c_str 返回类型不对".into()),
@@ -2998,7 +2998,7 @@ impl<'ctx> Lower<'ctx> {
                     .builder
                     .build_int_to_ptr(i, self.ctx.ptr_type(AddressSpace::default()), "cptr")
                     .map_err(|e| e.to_string())?;
-                self.call_rt("argon_from_c_str", &[self.pty()], Some(self.pty()), &[p.into()])?
+                self.call_rt("prion_from_c_str", &[self.pty()], Some(self.pty()), &[p.into()])?
             }
             "read_8" | "read_16" | "read_32" | "read_64" => {
                 let i = match vals[0] {
@@ -3084,17 +3084,17 @@ impl<'ctx> Lower<'ctx> {
 
 //nt: SSA 值局部筛选
 fn 单选局部(f: &Function) -> std::collections::BTreeSet<usize> {
-    argon_walk::ssa::ssa值局部(f)
+    prion_walk::ssa::ssa值局部(f)
 }
 
 impl<'ctx> Lower<'ctx> {
     //nt: 列表结构体
     //nt: len 空槽哨兵
     fn len_zero_global(&mut self) -> inkwell::values::GlobalValue<'ctx> {
-        if let Some(g) = self.module.get_global("argon_len_zero") {
+        if let Some(g) = self.module.get_global("prion_len_zero") {
             return g;
         }
-        let g = self.module.add_global(self.ctx.i64_type(), None, "argon_len_zero");
+        let g = self.module.add_global(self.ctx.i64_type(), None, "prion_len_zero");
         g.set_linkage(inkwell::module::Linkage::Internal);
         g.set_initializer(&self.ctx.i64_type().const_zero());
         g

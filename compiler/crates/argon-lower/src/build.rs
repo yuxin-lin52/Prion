@@ -9,13 +9,13 @@
 //!
 //! 容器字面量与 `pop` / `sort` 遇到即报错。
 
-use argon_error::Span;
-use argon_lexer::Token;
-use argon_parser::{Block as AstBlock, Expr, Program as AstProgram, Stmt as AstStmt, TokStream};
+use prion_error::Span;
+use prion_lexer::Token;
+use prion_parser::{Block as AstBlock, Expr, Program as AstProgram, Stmt as AstStmt, TokStream};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 
-use argon_ir::{
+use prion_ir::{
     AsmForm, BinOp, Block, BlockId, ExternFn, Exit, Function, Local, LocalId, MapKey, Place, Proj,
     Program, Rvalue, Stmt, StructType, Succ, Ty, Value, Variant,
 };
@@ -24,7 +24,7 @@ use argon_ir::{
 #[derive(Debug, Clone, PartialEq)]
 pub struct BuildError {
     pub message: String,
-    pub code: argon_error::Code,
+    pub code: prion_error::Code,
     //nt: 源行号
     pub line: usize,
     //nt: 错误所在的**源文件
@@ -340,7 +340,7 @@ fn 核能力(
                         "泛型 fn「{}」的类型参数「{}」声明了能力「{}」，但实参类型「{}」不支持",
                         名, 参数, op, 实
                     ),
-                    code: argon_error::Code::E201,
+                    code: prion_error::Code::E201,
                     line: CUR_LINE.with(|c| c.get()),
                     file: String::new(),
                 });
@@ -499,8 +499,8 @@ fn 建fn实例(
     行.extend(类型串转token(&返串));
     行.push(Token::Sym("="));
     行.extend(替换类型参数token(体, 类型参数, 实参类型));
-    let 行流 = argon_parser::TokStream::无位(行.clone());
-    let 行种 = argon_parser::line_kind(&行流);
+    let 行流 = prion_parser::TokStream::无位(行.clone());
+    let 行种 = prion_parser::line_kind(&行流);
     bx.line(&行种, &行, &[])
 }
 
@@ -656,7 +656,7 @@ fn collect_ast_lines_ln<'a>(stmts: &'a [AstStmt], out: &mut Vec<(usize, &'a TokS
 fn err<T>(m: impl Into<String>) -> Result<T, BuildError> {
     Err(BuildError {
         message: m.into(),
-        code: argon_error::Code::E309,
+        code: prion_error::Code::E309,
         line: CUR_LINE.with(|c| c.get()),
         file: String::new(),
     })
@@ -977,7 +977,7 @@ impl Builder {
                 cands.join("、"),
                 cands[0]
             ),
-            code: argon_error::Code::E304,
+            code: prion_error::Code::E304,
             line: CUR_LINE.with(|c| c.get()),
             file: String::new(),
         })
@@ -996,7 +996,7 @@ impl Builder {
                 "块「{}」（模块 {}）是私有的——跨模块只能调标了 pub 的块",
                 blk, blk_mod
             ),
-            code: argon_error::Code::E201,
+            code: prion_error::Code::E201,
             line: CUR_LINE.with(|c| c.get()),
             file: String::new(),
         })
@@ -1189,7 +1189,7 @@ impl Builder {
                         "{} 没有字段——字段访问（.名）只对 add type 定义的积类型用；和类型请用 match 解构",
                         cur_ty
                     ),
-                    code: argon_error::Code::E303,
+                    code: prion_error::Code::E303,
                     line: CUR_LINE.with(|c| c.get()),
                     file: String::new(),
                 });
@@ -1253,7 +1253,7 @@ impl Builder {
                         None => {
                             return Err(BuildError {
                                 message: format!("fn 要用本块 val「{}」——本块还没建它", vn),
-                                code: argon_error::Code::E304,
+                                code: prion_error::Code::E304,
                                 line: CUR_LINE.with(|c| c.get()),
                                 file: String::new(),
                             })
@@ -1280,7 +1280,7 @@ impl Builder {
                                         "块「{}」的 val「{}」不存在——先 add val 建它，sle 块还要先 call #:{}",
                                         blk, vn, blk
                                     ),
-                                    code: argon_error::Code::E304,
+                                    code: prion_error::Code::E304,
                                     line: CUR_LINE.with(|c| c.get()),
                                     file: String::new(),
                                 })
@@ -1447,7 +1447,7 @@ impl Builder {
             .cloned()
             .ok_or_else(|| BuildError {
                 message: format!("类型「{}」没登记", 名),
-                code: argon_error::Code::E304,
+                code: prion_error::Code::E304,
                 line: CUR_LINE.with(|c| c.get()),
                 file: String::new(),
             })?;
@@ -1475,7 +1475,7 @@ impl Builder {
                     "泛型类型「{}」推不出类型参数——给每个实参一个明确的类型（字面量或带类型的 val）",
                     名
                 ),
-                code: argon_error::Code::E201,
+                code: prion_error::Code::E201,
                 line: CUR_LINE.with(|c| c.get()),
                 file: String::new(),
             });
@@ -1488,7 +1488,7 @@ impl Builder {
                     "泛型实例「{}」还没生成——请先写一条带类型的声明 `add val \"x\" {}(…) = …`",
                     实例名, 实例名
                 ),
-                code: argon_error::Code::E201,
+                code: prion_error::Code::E201,
                 line: CUR_LINE.with(|c| c.get()),
                 file: String::new(),
             });
@@ -1549,9 +1549,9 @@ impl Builder {
 
     //nt: 内联 asm
     fn 建asm(&mut self, 内区: &[Token]) -> Result<AsmForm, BuildError> {
-        let 段 = argon_lexer::asm::解析隔离区(内区).map_err(|e| BuildError {
+        let 段 = prion_lexer::asm::解析隔离区(内区).map_err(|e| BuildError {
             message: e,
-            code: argon_error::Code::E201,
+            code: prion_error::Code::E201,
             line: CUR_LINE.with(|c| c.get()),
             file: String::new(),
         })?;
@@ -1559,7 +1559,7 @@ impl Builder {
         for (约束, 名, 读写) in 段.outs {
             let id = *self.names.get(&名).ok_or_else(|| BuildError {
                 message: format!("asm 输出绑定的名字「{}」本块没有——先 add val 建它", 名),
-                code: argon_error::Code::E304,
+                code: prion_error::Code::E304,
                 line: CUR_LINE.with(|c| c.get()),
                 file: String::new(),
             })?;
@@ -1581,7 +1581,7 @@ impl Builder {
     //nt: 表达式树求值
     //nt: 吃树不走token
     fn expr_tree(&mut self, e: &Expr) -> Result<Value, BuildError> {
-        use argon_parser::expr::{ExprKind, Target, Verb, UnOp};
+        use prion_parser::expr::{ExprKind, Target, Verb, UnOp};
         match &e.kind {
             ExprKind::Int(n) => Ok(Value::Int(*n)),
             ExprKind::Float(x) => Ok(Value::Float(*x)),
@@ -1701,25 +1701,25 @@ impl Builder {
                 let l = self.expr_tree(lhs)?;
                 let r = self.expr_tree(rhs)?;
                 let ir_op = match op {
-                    argon_parser::expr::BinOp::Add => BinOp::Add,
-                    argon_parser::expr::BinOp::Sub => BinOp::Sub,
-                    argon_parser::expr::BinOp::Mul => BinOp::Mul,
-                    argon_parser::expr::BinOp::Div => BinOp::Div,
-                    argon_parser::expr::BinOp::Mod => BinOp::Mod,
-                    argon_parser::expr::BinOp::Eq => BinOp::Eq,
-                    argon_parser::expr::BinOp::Ne => BinOp::Ne,
-                    argon_parser::expr::BinOp::Lt => BinOp::Lt,
-                    argon_parser::expr::BinOp::Le => BinOp::Le,
-                    argon_parser::expr::BinOp::Gt => BinOp::Gt,
-                    argon_parser::expr::BinOp::Ge => BinOp::Ge,
-                    argon_parser::expr::BinOp::And => BinOp::And,
-                    argon_parser::expr::BinOp::Or => BinOp::Or,
-                    argon_parser::expr::BinOp::BitAnd => BinOp::BitAnd,
-                    argon_parser::expr::BinOp::BitOr => BinOp::BitOr,
-                    argon_parser::expr::BinOp::BitXor => BinOp::BitXor,
-                    argon_parser::expr::BinOp::Shl => BinOp::Shl,
-                    argon_parser::expr::BinOp::Shr => BinOp::Shr,
-                    argon_parser::expr::BinOp::Range => return err("范围符不做二元运算"),
+                    prion_parser::expr::BinOp::Add => BinOp::Add,
+                    prion_parser::expr::BinOp::Sub => BinOp::Sub,
+                    prion_parser::expr::BinOp::Mul => BinOp::Mul,
+                    prion_parser::expr::BinOp::Div => BinOp::Div,
+                    prion_parser::expr::BinOp::Mod => BinOp::Mod,
+                    prion_parser::expr::BinOp::Eq => BinOp::Eq,
+                    prion_parser::expr::BinOp::Ne => BinOp::Ne,
+                    prion_parser::expr::BinOp::Lt => BinOp::Lt,
+                    prion_parser::expr::BinOp::Le => BinOp::Le,
+                    prion_parser::expr::BinOp::Gt => BinOp::Gt,
+                    prion_parser::expr::BinOp::Ge => BinOp::Ge,
+                    prion_parser::expr::BinOp::And => BinOp::And,
+                    prion_parser::expr::BinOp::Or => BinOp::Or,
+                    prion_parser::expr::BinOp::BitAnd => BinOp::BitAnd,
+                    prion_parser::expr::BinOp::BitOr => BinOp::BitOr,
+                    prion_parser::expr::BinOp::BitXor => BinOp::BitXor,
+                    prion_parser::expr::BinOp::Shl => BinOp::Shl,
+                    prion_parser::expr::BinOp::Shr => BinOp::Shr,
+                    prion_parser::expr::BinOp::Range => return err("范围符不做二元运算"),
                 };
                 Ok(self.bin(ir_op, l, r))
             }
@@ -1816,7 +1816,7 @@ impl Builder {
             let key = format!("{}|{}|{}", self.module, tb, name);
             let sig = self.fns.get(&key).or_else(|| self.global_fns.get(&key)).cloned().ok_or_else(|| BuildError {
                 message: format!("还没建过 fn「{}」——先用 add fn 建", name),
-                code: argon_error::Code::E304,
+                code: prion_error::Code::E304,
                 line: CUR_LINE.with(|c| c.get()),
                 file: String::new(),
             })?;
@@ -1892,7 +1892,7 @@ impl Builder {
         }
         let sig = self.fns.get(&key).or_else(|| self.global_fns.get(&key)).cloned().ok_or_else(|| BuildError {
             message: format!("还没建过 fn「{}」——先用 add fn 建", name),
-            code: argon_error::Code::E304,
+            code: prion_error::Code::E304,
             line: CUR_LINE.with(|c| c.get()),
             file: String::new(),
         })?;
@@ -1911,14 +1911,14 @@ impl Builder {
     fn expr_tree_indirect(&mut self, name: &str, args: Vec<Value>) -> Result<Value, BuildError> {
         let id = *self.names.get(name).ok_or_else(|| BuildError {
             message: format!("val「{}」没建过", name),
-            code: argon_error::Code::E304,
+            code: prion_error::Code::E304,
             line: CUR_LINE.with(|c| c.get()),
             file: String::new(),
         })?;
         let fty = self.f.locals.get(id).map(|l| l.ty.0.clone()).unwrap_or_default();
         let ret = fn_ret_of(&fty).ok_or_else(|| BuildError {
             message: format!("val「{}」不是函数类型——不能直接调", name),
-            code: argon_error::Code::E201,
+            code: prion_error::Code::E201,
             line: CUR_LINE.with(|c| c.get()),
             file: String::new(),
         })?;
@@ -1957,7 +1957,7 @@ impl Builder {
     fn expr_tree_variant(&mut self, name: &str, vals: &[Value], root_id: u32) -> Result<Value, BuildError> {
         let (模板型, tag0, 模板载荷) = self.sum_variants.get(name).cloned().ok_or_else(|| BuildError {
             message: format!("变体「{}」没登记", name),
-            code: argon_error::Code::E201,
+            code: prion_error::Code::E201,
             line: CUR_LINE.with(|c| c.get()),
             file: String::new(),
         })?;
@@ -2034,7 +2034,7 @@ impl Builder {
     fn construct命名(&mut self, 实例: &str, name: &str, vals: &[Value]) -> Result<Value, BuildError> {
         let idx = *self.type_idx.get(实例).ok_or_else(|| BuildError {
             message: format!("类型「{}」没登记", 实例),
-            code: argon_error::Code::E201,
+            code: prion_error::Code::E201,
             line: CUR_LINE.with(|c| c.get()),
             file: String::new(),
         })?;
@@ -2080,7 +2080,7 @@ impl Builder {
                             "「{}」是编译期常量，要用 `call fix \"{}\"` 读，不能用 call val",
                             n, n
                         ),
-                        code: argon_error::Code::E201,
+                        code: prion_error::Code::E201,
                         line: CUR_LINE.with(|c| c.get()),
                         file: String::new(),
                     });
@@ -2147,7 +2147,7 @@ impl Builder {
                     if self.hidden_items.contains(&format!("{}|{}|fix|{}", m, b, n)) {
                         return Err(BuildError {
                             message: format!("常量「{}」被 hide 剔除，跨模块取不到", n),
-                            code: argon_error::Code::E201,
+                            code: prion_error::Code::E201,
                             line: CUR_LINE.with(|c| c.get()),
                             file: String::new(),
                         });
@@ -2155,7 +2155,7 @@ impl Builder {
                 }
                 let c = self.常量值.borrow().get::<str>(n.as_ref()).cloned().ok_or_else(|| BuildError {
                     message: format!("没有常量「{}」——先用 add fix 声明", n),
-                    code: argon_error::Code::E304,
+                    code: prion_error::Code::E304,
                     line: CUR_LINE.with(|c| c.get()),
                     file: String::new(),
                 })?;
@@ -2172,13 +2172,13 @@ impl Builder {
             return self.expr(&段[1..]);
         }
         //nt: 内联汇编
-        if 段.first().map(argon_lexer::asm::是asm词).unwrap_or(false)
+        if 段.first().map(prion_lexer::asm::是asm词).unwrap_or(false)
             && matches!(段.get(1), Some(Token::Sym("(")))
         {
-            let 内区 = argon_lexer::asm::括号内(段, 1)
+            let 内区 = prion_lexer::asm::括号内(段, 1)
                 .ok_or_else(|| BuildError {
                     message: "asm 的括号没闭合".into(),
-                    code: argon_error::Code::E301,
+                    code: prion_error::Code::E301,
                     line: CUR_LINE.with(|c| c.get()),
                     file: String::new(),
                 })?
@@ -2201,7 +2201,7 @@ impl Builder {
                 .skip(i + 1)
                 .find(|(_, t)| matches!(t, Token::Sym(":")))
                 .map(|(k, _)| k)
-                .ok_or_else(|| BuildError { message: "三元缺 `:`".into() , code: argon_error::Code::E301 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
+                .ok_or_else(|| BuildError { message: "三元缺 `:`".into() , code: prion_error::Code::E301 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
             let then_toks: Vec<Token> = 段[i + 1..colon].to_vec();
             let else_toks: Vec<Token> = 段[colon + 1..].to_vec();
             let tmp = self.temp(Ty("int".into()));
@@ -2379,7 +2379,7 @@ impl Builder {
                 _ => {}
             }
         }
-        let close = close.ok_or_else(|| BuildError { message: "下标缺 ]".into() , code: argon_error::Code::E302 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
+        let close = close.ok_or_else(|| BuildError { message: "下标缺 ]".into() , code: prion_error::Code::E302 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
         if t[*i + 1..close].iter().any(|tk| *tk == Token::Sym("~")) {
             let pos = t[*i + 1..close].iter().position(|tk| *tk == Token::Sym("~")).unwrap();
             let a = self.expr(&t[*i + 1..*i + 1 + pos])?;
@@ -2509,7 +2509,7 @@ impl Builder {
                         _ => {}
                     }
                 }
-                let end = end.ok_or_else(|| BuildError { message: "括号没闭合".into() , code: argon_error::Code::E301 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
+                let end = end.ok_or_else(|| BuildError { message: "括号没闭合".into() , code: prion_error::Code::E301 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
                 let inner: Vec<Token> = t[*i + 1..end].to_vec();
                 *i = end + 1;
                 self.expr(&inner)
@@ -2523,7 +2523,7 @@ impl Builder {
                 let Some(c) = self.常量值.borrow().get(&vname).cloned() else {
                     return Err(BuildError {
                         message: format!("还没建过常量「{}」——先用 add fix 建", vname),
-                        code: argon_error::Code::E304,
+                        code: prion_error::Code::E304,
                         line: CUR_LINE.with(|c| c.get()),
                         file: String::new(),
                     });
@@ -2544,7 +2544,7 @@ impl Builder {
                             "「{}」是编译期常量，要用 `call fix \"{}\"` 读，不能用 call val",
                             vname, vname
                         ),
-                        code: argon_error::Code::E201,
+                        code: prion_error::Code::E201,
                         line: CUR_LINE.with(|c| c.get()),
                         file: String::new(),
                     });
@@ -2580,14 +2580,14 @@ impl Builder {
                             "「{}」是编译期常量，要用 `call fix \"{}\"` 读，不能用 call val",
                             vname, vname
                         ),
-                        code: argon_error::Code::E201,
+                        code: prion_error::Code::E201,
                         line: CUR_LINE.with(|c| c.get()),
                         file: String::new(),
                     });
                 }
                 let id = *self.names.get(&vname).ok_or_else(|| BuildError {
                     message: format!("本块没有 val「{}」——同块取 val 取的是本块的", vname),
-                    code: argon_error::Code::E304,
+                    code: prion_error::Code::E304,
                     line: CUR_LINE.with(|c| c.get()),
                     file: String::new(),
                 })?;
@@ -2601,7 +2601,7 @@ impl Builder {
                         .unwrap_or_default();
                     let ret = fn_ret_of(&fty).ok_or_else(|| BuildError {
                         message: format!("val「{}」不是函数类型——不能直接调", vname),
-                        code: argon_error::Code::E201,
+                        code: prion_error::Code::E201,
                         line: CUR_LINE.with(|c| c.get()),
                         file: String::new(),
                     })?;
@@ -2739,7 +2739,7 @@ impl Builder {
                                 "块「{}」的 val「{}」不存在——先 add val 建它，sle 块还要先 call #:{}",
                                 blk, vname, blk
                             ),
-                            code: argon_error::Code::E309,
+                            code: prion_error::Code::E309,
                             line: CUR_LINE.with(|c| c.get()),
                             file: String::new(),
                         })
@@ -2858,7 +2858,7 @@ impl Builder {
                     .cloned()
                     .ok_or_else(|| BuildError {
                     message: format!("还没建过 fn「{}」——先用 add fn 建", fname),
-                    code: argon_error::Code::E304,
+                    code: prion_error::Code::E304,
                     line: CUR_LINE.with(|c| c.get()),
                     file: String::new(),
                 })?;
@@ -2930,7 +2930,7 @@ impl Builder {
                 let key = format!("{}|{}|{}", self.module, blk, fname);
                 let sig = self.global_fns.get(&key).cloned().ok_or_else(|| BuildError {
                     message: format!("块「{}」里没有 fn「{}」", blk, fname),
-                    code: argon_error::Code::E304,
+                    code: prion_error::Code::E304,
                     line: CUR_LINE.with(|c| c.get()),
                     file: String::new(),
                 })?;
@@ -3042,7 +3042,7 @@ impl Builder {
                             "fn「{}」在块「{}」（模块 {}）里被 hide 了——它的公开面里没有这项",
                             fname, blk, full_mod
                         ),
-                        code: argon_error::Code::E201,
+                        code: prion_error::Code::E201,
                         line: CUR_LINE.with(|c| c.get()),
                         file: String::new(),
                     });
@@ -3055,7 +3055,7 @@ impl Builder {
                         let Some((带能力, 形参, 返回, 体, _模, _块)) = 模板 else {
                             return Err(BuildError {
                                 message: format!("模块「{}」的块「{}」里没有 fn「{}」", module, blk, fname),
-                                code: argon_error::Code::E304,
+                                code: prion_error::Code::E304,
                                 line: CUR_LINE.with(|c| c.get()),
                                 file: String::new(),
                             });
@@ -3099,7 +3099,7 @@ impl Builder {
                         调用键 = 实例键.clone();
                         self.fns.get(&实例键).cloned().ok_or_else(|| BuildError {
                             message: format!("模块「{}」的块「{}」里没有 fn「{}」", module, blk, fname),
-                            code: argon_error::Code::E304,
+                            code: prion_error::Code::E304,
                             line: CUR_LINE.with(|c| c.get()),
                             file: String::new(),
                         })?
@@ -3219,7 +3219,7 @@ impl Builder {
                         _ => {}
                     }
                 }
-                let end = end.ok_or_else(|| BuildError { message: "map 字面量缺 }".into() , code: argon_error::Code::E302 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
+                let end = end.ok_or_else(|| BuildError { message: "map 字面量缺 }".into() , code: prion_error::Code::E302 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
                 let inner = t[*i + 1..end].to_vec();
                 *i = end + 1;
                 let mut pairs: Vec<(MapKey, Value)> = Vec::new();
@@ -3261,7 +3261,7 @@ impl Builder {
                         _ => {}
                     }
                 }
-                let end = end.ok_or_else(|| BuildError { message: "列表字面量缺 ]".into() , code: argon_error::Code::E302 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
+                let end = end.ok_or_else(|| BuildError { message: "列表字面量缺 ]".into() , code: prion_error::Code::E302 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
                 let inner = t[start + 1..end].to_vec();
                 *i = end + 1;
                 let mut elems = Vec::new();
@@ -3291,7 +3291,7 @@ impl Builder {
                             "「{}」是编译期常量，要用 `call fix \"{}\"` 读，不能用 call val",
                             name, name
                         ),
-                        code: argon_error::Code::E201,
+                        code: prion_error::Code::E201,
                         line: CUR_LINE.with(|c| c.get()),
                         file: String::new(),
                     });
@@ -3348,7 +3348,7 @@ impl Builder {
                             _ => {}
                         }
                     }
-                    let close = close.ok_or_else(|| BuildError { message: "delta 括号没闭合".into() , code: argon_error::Code::E302 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
+                    let close = close.ok_or_else(|| BuildError { message: "delta 括号没闭合".into() , code: prion_error::Code::E302 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
                     let op = match t.get(*i + 1) {
                         Some(Token::Sym("+")) => BinOp::Add,
                         Some(Token::Sym("-")) => BinOp::Sub,
@@ -3379,7 +3379,7 @@ impl Builder {
                     .cloned()
                     .ok_or_else(|| BuildError {
                         message: format!("还没建过 fn「{}」——先用 add fn 建", fname),
-                        code: argon_error::Code::E304,
+                        code: prion_error::Code::E304,
                         line: CUR_LINE.with(|c| c.get()),
                         file: String::new(),
                     })?;
@@ -3406,7 +3406,7 @@ impl Builder {
                     let base = *self
                         .names
                         .get(n.as_ref())
-                        .ok_or_else(|| BuildError { message: format!("还没建过「{}」", n) , code: argon_error::Code::E304 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
+                        .ok_or_else(|| BuildError { message: format!("还没建过「{}」", n) , code: prion_error::Code::E304 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
                     let open = *i + 1;
                     let mut depth = 0i32;
                     let mut close = None;
@@ -3423,7 +3423,7 @@ impl Builder {
                             _ => {}
                         }
                     }
-                    let close = close.ok_or_else(|| BuildError { message: "下标缺 ]".into() , code: argon_error::Code::E302 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
+                    let close = close.ok_or_else(|| BuildError { message: "下标缺 ]".into() , code: prion_error::Code::E302 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
                     let idx_toks = t[open + 1..close].to_vec();
                     *i = close + 1;
                     //nt: map 键读
@@ -3541,7 +3541,7 @@ impl Builder {
                     let cur = *self
                         .names
                         .get(n.as_ref())
-                        .ok_or_else(|| BuildError { message: format!("还没建过「{}」", n) , code: argon_error::Code::E304 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
+                        .ok_or_else(|| BuildError { message: format!("还没建过「{}」", n) , code: prion_error::Code::E304 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
                     let cur_ty = self
                         .f
                         .locals
@@ -3879,7 +3879,7 @@ impl Builder {
         match exprs.first() {
             //nt: delta 不走树
             Some(e) => match &e.kind {
-                argon_parser::expr::ExprKind::Call { verb: argon_parser::expr::Verb::Delta, .. } => {
+                prion_parser::expr::ExprKind::Call { verb: prion_parser::expr::Verb::Delta, .. } => {
                     self.expr(&段[eq + 1..])
                 }
                 _ => self.expr_tree(e),
@@ -3890,7 +3890,7 @@ impl Builder {
 
     //nt: 行实参——树优先
     fn 行实参(&mut self, exprs: &[Expr], inner: &[Token]) -> Result<Vec<Value>, BuildError> {
-        if let Some(argon_parser::expr::ExprKind::Call { args, .. }) = exprs.first().map(|e| &e.kind) {
+        if let Some(prion_parser::expr::ExprKind::Call { args, .. }) = exprs.first().map(|e| &e.kind) {
             let mut vals = Vec::new();
             for a in args {
                 vals.push(self.expr_tree(a)?);
@@ -3904,13 +3904,13 @@ impl Builder {
         Ok(vals)
     }
 
-    fn line(&mut self, kind: &argon_parser::LineKind, 段: &[Token], exprs: &[Expr]) -> Result<(), BuildError> {
+    fn line(&mut self, kind: &prion_parser::LineKind, 段: &[Token], exprs: &[Expr]) -> Result<(), BuildError> {
         if 段.is_empty() {
             return Ok(());
         }
 
         //nt: 中途give返回
-        if self.语句体返回 && matches!(kind, argon_parser::LineKind::Give(_)) {
+        if self.语句体返回 && matches!(kind, prion_parser::LineKind::Give(_)) {
             let v = match exprs.first() {
                 Some(e) => self.expr_tree(e)?,
                 None => self.expr(&段[1..])?,
@@ -3924,7 +3924,7 @@ impl Builder {
 
         //nt: 泛型构造落名
         //nt: 声明类型给出实例 ⇒
-        if matches!(kind, argon_parser::LineKind::AddVal(_))
+        if matches!(kind, prion_parser::LineKind::AddVal(_))
         {
             if let (Some(Token::Ident(名)), Some(eq)) =
                 (段.get(3), 段.iter().position(|t| *t == Token::Sym("=")))
@@ -3959,13 +3959,13 @@ impl Builder {
         }
 
         //nt: add type
-        if matches!(kind, argon_parser::LineKind::AddType(_)) {
+        if matches!(kind, prion_parser::LineKind::AddType(_)) {
             return Ok(());
         }
 
         //nt: add hide t
         //nt: add hide f
-        if matches!(kind, argon_parser::LineKind::AddHide(_))
+        if matches!(kind, prion_parser::LineKind::AddHide(_))
         {
             return Ok(());
         }
@@ -3977,7 +3977,7 @@ impl Builder {
         let is_hide_fn = matches!(段.first(), Some(Token::Kw("add")))
             && matches!(段.get(1), Some(Token::Kw("hide")))
             && matches!(段.get(2), Some(Token::Kw("fn")));
-        if matches!(kind, argon_parser::LineKind::AddFn(_)) {
+        if matches!(kind, prion_parser::LineKind::AddFn(_)) {
             let name_at = if is_rebind {
                 1
             } else if is_hide_fn {
@@ -3995,7 +3995,7 @@ impl Builder {
                     let 类型参数表止 = 括号止(段, name_at + 1)
                         .ok_or_else(|| BuildError {
                             message: "泛型 fn 的类型参数表没闭合".into(),
-                            code: argon_error::Code::E301,
+                            code: prion_error::Code::E301,
                             line: CUR_LINE.with(|c| c.get()),
                             file: String::new(),
                         })?
@@ -4028,7 +4028,7 @@ impl Builder {
             let (ret, _限定, _) = parse_type_ref(段, after)
                 .map_err(|_| BuildError {
                     message: "add fn 缺返回类型（函数边界类型必写）".into(),
-                    code: argon_error::Code::E301,
+                    code: prion_error::Code::E301,
                     line: CUR_LINE.with(|c| c.get()),
                     file: String::new(),
                 })?;
@@ -4092,7 +4092,7 @@ impl Builder {
 
 //nt: 分支甲 add ou
         //nt: 无等号无体
-        if matches!(kind, argon_parser::LineKind::AddOutsFn(_))
+        if matches!(kind, prion_parser::LineKind::AddOutsFn(_))
         {
             let name = match 段.get(3) {
                 Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
@@ -4116,7 +4116,7 @@ impl Builder {
         }
 
         //nt: 分支乙 call f
-        if matches!(kind, argon_parser::LineKind::CallFn(_)) {
+        if matches!(kind, prion_parser::LineKind::CallFn(_)) {
             let name = match 段.get(2) {
                 Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
                 _ => return err(format!("call fn 后应是名字：{:?}", 段)),
@@ -4129,7 +4129,7 @@ impl Builder {
                 .or_else(|| self.global_fns.get(&key).cloned())
                 .ok_or_else(|| BuildError {
                     message: format!("还没建过 fn「{}」——先用 add fn 建", name),
-                    code: argon_error::Code::E304,
+                    code: prion_error::Code::E304,
                     line: CUR_LINE.with(|c| c.get()),
                     file: String::new(),
                 })?;
@@ -4150,7 +4150,7 @@ impl Builder {
         //nt: 分支丙乙 call
         //nt: IR 调用名用**模
         //nt: 限定口径，codeg
-        let (blk, blk_mod) = if matches!(kind, argon_parser::LineKind::CallBlock(_))
+        let (blk, blk_mod) = if matches!(kind, prion_parser::LineKind::CallBlock(_))
             && matches!(段.get(1), Some(Token::HashColon))
             && 段.get(3).is_none()
         {
@@ -4160,7 +4160,7 @@ impl Builder {
                 _ => return err("`call #:` 后应接块名"),
             };
             (blk, self.module.clone())
-        } else if matches!(kind, argon_parser::LineKind::CallBlock(_))
+        } else if matches!(kind, prion_parser::LineKind::CallBlock(_))
             && matches!(段.get(1), Some(Token::HashHashColon))
             && !is_take_form(段) // 取用形态（`val` / `fn`）⇒ 让给 0c2 / 调用分支，不在此跑块
         {
@@ -4237,14 +4237,14 @@ impl Builder {
         }
 
 //nt: callfn语句
-        if matches!(kind, argon_parser::LineKind::CallFn(_))
+        if matches!(kind, prion_parser::LineKind::CallFn(_))
         {
             self.expr(段)?;
             return Ok(());
         }
 
 //nt: 分支丙乙次 cal
-        if matches!(kind, argon_parser::LineKind::CallBlock(_))
+        if matches!(kind, prion_parser::LineKind::CallBlock(_))
         {
             let vname = match 段.get(2) {
                 Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
@@ -4257,7 +4257,7 @@ impl Builder {
             }
             let id = *self.names.get(&vname).ok_or_else(|| BuildError {
                 message: format!("本块没有 val「{}」——同块写 val 写的是本块的", vname),
-                code: argon_error::Code::E304,
+                code: prion_error::Code::E304,
                 line: CUR_LINE.with(|c| c.get()),
                 file: String::new(),
             })?;
@@ -4267,7 +4267,7 @@ impl Builder {
         }
 
         //nt: 分支丙丁 call
-        if matches!(kind, argon_parser::LineKind::CallBlock(_))
+        if matches!(kind, prion_parser::LineKind::CallBlock(_))
             && (matches!(段.get(1), Some(Token::HashColon))
                 || matches!(段.get(1), Some(Token::HashHashColon)))
         {
@@ -4335,7 +4335,7 @@ impl Builder {
                             "块「{}」的 val「{}」不存在——先 add val 建它，sle 块还要先 call #:{}",
                             blk, vname, blk
                         ),
-                        code: argon_error::Code::E309,
+                        code: prion_error::Code::E309,
                         line: CUR_LINE.with(|c| c.get()),
                         file: String::new(),
                     })
@@ -4350,18 +4350,18 @@ impl Builder {
 
         //nt: 分支丁 下标写
         //nt: 写位置要显式
-        if matches!(kind, argon_parser::LineKind::Other(_))
+        if matches!(kind, prion_parser::LineKind::Other(_))
             && matches!(段.first(), Some(Token::Ident(_)))
             && matches!(段.get(1), Some(Token::Sym("[")))
         {
             return Err(BuildError {
                 message: "下标写左边要显式——写 `val \"名\"[下标] = 值`".into(),
-                code: argon_error::Code::E303,
+                code: prion_error::Code::E303,
                 line: CUR_LINE.with(|c| c.get()),
                 file: String::new(),
             });
         }
-        let val_lhs = matches!(kind, argon_parser::LineKind::Assign(_))
+        let val_lhs = matches!(kind, prion_parser::LineKind::Assign(_))
             && matches!(段.get(2), Some(Token::Sym("[")));
         if val_lhs {
             let (base_name, open) = {
@@ -4374,7 +4374,7 @@ impl Builder {
             let base = *self
                 .names
                 .get(&base_name)
-                .ok_or_else(|| BuildError { message: format!("还没建过「{}」", base_name) , code: argon_error::Code::E304 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
+                .ok_or_else(|| BuildError { message: format!("还没建过「{}」", base_name) , code: prion_error::Code::E304 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
             let mut depth = 0i32;
             let mut close = None;
             for (k, tk) in 段.iter().enumerate().skip(open) {
@@ -4390,11 +4390,11 @@ impl Builder {
                     _ => {}
                 }
             }
-            let close = close.ok_or_else(|| BuildError { message: "下标缺 ]".into() , code: argon_error::Code::E302 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
+            let close = close.ok_or_else(|| BuildError { message: "下标缺 ]".into() , code: prion_error::Code::E302 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
             let eq = 段
                 .iter()
                 .position(|t| *t == Token::Sym("="))
-                .ok_or_else(|| BuildError { message: "下标写缺 = 表达式".into() , code: argon_error::Code::E301 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
+                .ok_or_else(|| BuildError { message: "下标写缺 = 表达式".into() , code: prion_error::Code::E301 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
             let idx = self.expr(&段[open + 1..close])?;
             //nt: 穿透写
             if matches!(段.get(close + 1), Some(Token::Sym("."))) {
@@ -4466,13 +4466,13 @@ impl Builder {
 
         //nt: 分支丙回 字段写
         //nt: 写位置要显式
-        if matches!(kind, argon_parser::LineKind::Other(_))
+        if matches!(kind, prion_parser::LineKind::Other(_))
             && matches!(段.first(), Some(Token::Ident(_)))
             && matches!(段.get(1), Some(Token::Sym(".")))
         {
             return Err(BuildError {
                 message: "字段写左边要显式——写 `val \"名\".字段 = 值`".into(),
-                code: argon_error::Code::E303,
+                code: prion_error::Code::E303,
                 line: CUR_LINE.with(|c| c.get()),
                 file: String::new(),
             });
@@ -4489,7 +4489,7 @@ impl Builder {
             let base = *self
                 .names
                 .get(&base_name)
-                .ok_or_else(|| BuildError { message: format!("还没建过「{}」", base_name) , code: argon_error::Code::E304 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
+                .ok_or_else(|| BuildError { message: format!("还没建过「{}」", base_name) , code: prion_error::Code::E304 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
             let field = match 段.get(ni + 2) {
                 Some(Token::Ident(f)) | Some(Token::Str(f)) => f.to_string(),
                 _ => return err("字段访问后应是字段名"),
@@ -4507,7 +4507,7 @@ impl Builder {
                         "{} 没有字段——字段写（.名 = 值）只对 add type 定义的积类型用",
                         w_ty
                     ),
-                    code: argon_error::Code::E303,
+                    code: prion_error::Code::E303,
                     line: CUR_LINE.with(|c| c.get()),
                     file: String::new(),
                 });
@@ -4515,7 +4515,7 @@ impl Builder {
             let eq = 段
                 .iter()
                 .position(|t| *t == Token::Sym("="))
-                .ok_or_else(|| BuildError { message: "字段写缺 = 表达式".into() , code: argon_error::Code::E301 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
+                .ok_or_else(|| BuildError { message: "字段写缺 = 表达式".into() , code: prion_error::Code::E301 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
             let v = self.行右值(exprs, 段, eq)?;
             self.emit(Stmt::Assign {
                 lhs: Place { base, proj: vec![Proj::Field(field.to_string())] },
@@ -4526,7 +4526,7 @@ impl Builder {
 
         //nt: val delta
 //nt: 表达式、写回。无当前
-        if matches!(kind, argon_parser::LineKind::Assign(_))
+        if matches!(kind, prion_parser::LineKind::Assign(_))
             && matches!(段.get(2), Some(Token::Sym("(")))
         {
             let vname = match 段.get(1) {
@@ -4536,7 +4536,7 @@ impl Builder {
             let id = *self.names.get(&vname).ok_or_else(|| {
                 BuildError {
                 message: format!("还没建过 val「{}」——先用 add val 建 (fn={})", vname, self.f.name),
-                code: argon_error::Code::E304,
+                code: prion_error::Code::E304,
                 line: CUR_LINE.with(|c| c.get()),
                 file: String::new(),
             }
@@ -4557,7 +4557,7 @@ impl Builder {
                     _ => {}
                 }
             }
-            let close = close.ok_or_else(|| BuildError { message: "delta 括号没闭合".into() , code: argon_error::Code::E302 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
+            let close = close.ok_or_else(|| BuildError { message: "delta 括号没闭合".into() , code: prion_error::Code::E302 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
             let op = match 段.get(3) {
                 Some(Token::Sym("+")) => BinOp::Add,
                 Some(Token::Sym("-")) => BinOp::Sub,
@@ -4576,7 +4576,7 @@ impl Builder {
         }
 
         //nt: kill 语句
-        if matches!(kind, argon_parser::LineKind::Kill(_)) {
+        if matches!(kind, prion_parser::LineKind::Kill(_)) {
             //nt: 取 kill 目标
             let name = 段
                 .iter()
@@ -4588,7 +4588,7 @@ impl Builder {
                 .next_back()
                 .ok_or_else(|| BuildError {
                     message: "kill 后应写块名（如 kill #:块名）".into(),
-                    code: argon_error::Code::E201,
+                    code: prion_error::Code::E201,
                     line: CUR_LINE.with(|c| c.get()),
                     file: String::new(),
                 })?;
@@ -4598,13 +4598,13 @@ impl Builder {
 
         //nt: 分支戊零 内联汇编
         //nt: 括号内是隔离区，按
-        if 段.first().map(argon_lexer::asm::是asm词).unwrap_or(false)
+        if 段.first().map(prion_lexer::asm::是asm词).unwrap_or(false)
             && matches!(段.get(1), Some(Token::Sym("(")))
         {
-            let 内区 = argon_lexer::asm::括号内(段, 1)
+            let 内区 = prion_lexer::asm::括号内(段, 1)
                 .ok_or_else(|| BuildError {
                     message: "asm 的括号没闭合".into(),
-                    code: argon_error::Code::E301,
+                    code: prion_error::Code::E301,
                     line: CUR_LINE.with(|c| c.get()),
                     file: String::new(),
                 })?
@@ -4615,7 +4615,7 @@ impl Builder {
         }
 
         //nt: 分支戊 调用语句
-        if matches!(kind, argon_parser::LineKind::BareCall(_)) {
+        if matches!(kind, prion_parser::LineKind::BareCall(_)) {
             let name = match 段.first() {
                 Some(Token::Ident(n)) => n.to_string(),
                 _ => unreachable!(),
@@ -4633,7 +4633,7 @@ impl Builder {
         }
 
         //nt: 分支一 print
-        if matches!(kind, argon_parser::LineKind::BareCall(_))
+        if matches!(kind, prion_parser::LineKind::BareCall(_))
             && matches!(段.first(), Some(Token::Ident(n)) if n == "print")
         {
             let inner = between_parens(段)?;
@@ -4643,7 +4643,7 @@ impl Builder {
         }
 
         //nt: 分支二 add val
-        if matches!(kind, argon_parser::LineKind::AddVal(_))
+        if matches!(kind, prion_parser::LineKind::AddVal(_))
         {
             let name = match 段.get(2) {
                 Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
@@ -4728,7 +4728,7 @@ impl Builder {
                             if self.hidden_items.contains(&format!("{}|{}|type|{}", blk_mod, blk, tname)) {
                                 return Err(BuildError {
                                     message: format!("type「{}」在块「{}」（模块 {}）里被 hide 了——它的公开面里没有这项", tname, blk, blk_mod),
-                                    code: argon_error::Code::E201,
+                                    code: prion_error::Code::E201,
                                     line: CUR_LINE.with(|c| c.get()),
                                     file: String::new(),
                                 });
@@ -4865,7 +4865,7 @@ impl Builder {
                                 "编译期求值超过{}配额（上限 {}）——这不是语法错。改法：把 --const-depth / --const-steps 调高，或给 0 不设上限",
                                 项, 限
                             ),
-                            code: argon_error::Code::E205,
+                            code: prion_error::Code::E205,
                             line: CUR_LINE.with(|c| c.get()),
                             file: String::new(),
                         });
@@ -4876,7 +4876,7 @@ impl Builder {
                              或参数全为常量的 fn 调用",
                             常量名显示(段)
                         ),
-                        code: argon_error::Code::E201,
+                        code: prion_error::Code::E201,
                         line: CUR_LINE.with(|c| c.get()),
                         file: String::new(),
                     });
@@ -4912,7 +4912,7 @@ impl Builder {
         }
 
         //nt: 分支三 val 名
-        if matches!(kind, argon_parser::LineKind::Assign(_)) {
+        if matches!(kind, prion_parser::LineKind::Assign(_)) {
             let name = match 段.get(1) {
                 Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
                 _ => return err(format!("val 后应是名字：{:?}", 段)),
@@ -4949,7 +4949,7 @@ impl Builder {
             }
             let id = *self.names.get(&name).ok_or_else(|| BuildError {
                 message: format!("还没建过 val「{}」(fn={})", name, self.f.name),
-                code: argon_error::Code::E304,
+                code: prion_error::Code::E304,
                 line: CUR_LINE.with(|c| c.get()),
                 file: String::new(),
             })?;
@@ -5514,7 +5514,7 @@ impl Builder {
         let (params, after) = parse_params(&h)?;
         let (ret, _限, _) = parse_type_ref(&h, after).map_err(|_| BuildError {
             message: "语句体 fn 缺返回类型（函数边界类型必写）".into(),
-            code: argon_error::Code::E301,
+            code: prion_error::Code::E301,
             line: CUR_LINE.with(|c| c.get()),
             file: String::new(),
         })?;
@@ -5569,7 +5569,7 @@ impl Builder {
         //nt: 末尾必须是 `giv
         let (last, init) = body.split_last().ok_or_else(|| BuildError {
             message: "语句体 fn 是空的——最后要写 `give 表达式`".into(),
-            code: argon_error::Code::E301,
+            code: prion_error::Code::E301,
             line: CUR_LINE.with(|c| c.get()),
             file: String::new(),
         })?;
@@ -5580,7 +5580,7 @@ impl Builder {
             _ => {
                 return Err(BuildError {
                     message: "语句体 fn 的最后一条必须是 `give 表达式`".into(),
-                    code: argon_error::Code::E301,
+                    code: prion_error::Code::E301,
                     line: CUR_LINE.with(|c| c.get()),
                     file: String::new(),
                 })
@@ -5669,12 +5669,12 @@ impl Builder {
                 }
                 AstStmt::Struct { kind: pk, head, body, .. } => {
                     let kind = match pk {
-                        argon_parser::StructKind::If => Kind::If,
-                        argon_parser::StructKind::Else => Kind::Else,
-                        argon_parser::StructKind::While => Kind::While,
-                        argon_parser::StructKind::Match => Kind::Match,
-                        argon_parser::StructKind::For => Kind::For,
-                        argon_parser::StructKind::Case => return err("case 不能单独出现"),
+                        prion_parser::StructKind::If => Kind::If,
+                        prion_parser::StructKind::Else => Kind::Else,
+                        prion_parser::StructKind::While => Kind::While,
+                        prion_parser::StructKind::Match => Kind::Match,
+                        prion_parser::StructKind::For => Kind::For,
+                        prion_parser::StructKind::Case => return err("case 不能单独出现"),
                     };
                     match kind {
                         Kind::For => {
@@ -5692,7 +5692,7 @@ impl Builder {
                         Kind::Else => return err("else 不能单独出现（须紧跟其 if 体的 ; 之后）"),
                         Kind::If => {
                             let eb: Option<Vec<AstStmt>> = match stmts.get(j + 1) {
-                                Some(AstStmt::Struct { kind: argon_parser::StructKind::Else, body: b, .. }) => Some(b.clone()),
+                                Some(AstStmt::Struct { kind: prion_parser::StructKind::Else, body: b, .. }) => Some(b.clone()),
                                 _ => None,
                             };
                             let h = head.clone();
@@ -5776,7 +5776,7 @@ fn parse_type_ref_raw(
                 }
                 let 尽 = 尽.ok_or_else(|| BuildError {
                     message: format!("容器类型「{}」的括号没闭合", 基),
-                    code: argon_error::Code::E201,
+                    code: prion_error::Code::E201,
                     line: CUR_LINE.with(|c| c.get()),
                     file: String::new(),
                 })?;
@@ -5804,7 +5804,7 @@ fn parse_type_ref_raw(
                 }
                 let 尽 = 尽.ok_or_else(|| BuildError {
                     message: "函数类型「fn」的括号没闭合".into(),
-                    code: argon_error::Code::E201,
+                    code: prion_error::Code::E201,
                     line: CUR_LINE.with(|c| c.get()),
                     file: String::new(),
                 })?;
@@ -5826,7 +5826,7 @@ fn parse_type_ref_raw(
                 if !matches!(段.get(at + 1), Some(Token::Sym("("))) {
                     return Err(BuildError {
                         message: format!("泛型类型「{}」要写类型参数（如 `{}(int, str)`）", n, n),
-                        code: argon_error::Code::E201,
+                        code: prion_error::Code::E201,
                         line: CUR_LINE.with(|c| c.get()),
                         file: String::new(),
                     });
@@ -5848,7 +5848,7 @@ fn parse_type_ref_raw(
                 }
                 let 尽 = 尽.ok_or_else(|| BuildError {
                     message: format!("泛型类型「{}」的实参括号没闭合", n),
-                    code: argon_error::Code::E201,
+                    code: prion_error::Code::E201,
                     line: CUR_LINE.with(|c| c.get()),
                     file: String::new(),
                 })?;
@@ -5860,7 +5860,7 @@ fn parse_type_ref_raw(
                     } else {
                         return Err(BuildError {
                             message: format!("泛型实参只能是单层类型（`{}` 太复杂）", t.0),
-                            code: argon_error::Code::E201,
+                            code: prion_error::Code::E201,
                             line: CUR_LINE.with(|c| c.get()),
                             file: String::new(),
                         });
@@ -5874,7 +5874,7 @@ fn parse_type_ref_raw(
                             ps.len(),
                             实参.len()
                         ),
-                        code: argon_error::Code::E201,
+                        code: prion_error::Code::E201,
                         line: CUR_LINE.with(|c| c.get()),
                         file: String::new(),
                     });
@@ -5948,7 +5948,7 @@ fn parse_params(段: &[Token]) -> Result<(Vec<(String, Ty)>, usize), BuildError>
     let open = 段
         .iter()
         .position(|t| *t == Token::Sym("("))
-        .ok_or_else(|| BuildError { message: "add fn 缺参数表".into() , code: argon_error::Code::E301 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
+        .ok_or_else(|| BuildError { message: "add fn 缺参数表".into() , code: prion_error::Code::E301 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
     let mut depth = 0i32;
     let mut end = None;
     for (k, t) in 段.iter().enumerate().skip(open) {
@@ -5964,7 +5964,7 @@ fn parse_params(段: &[Token]) -> Result<(Vec<(String, Ty)>, usize), BuildError>
             _ => {}
         }
     }
-    let end = end.ok_or_else(|| BuildError { message: "add fn 参数表没闭合".into() , code: argon_error::Code::E301 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
+    let end = end.ok_or_else(|| BuildError { message: "add fn 参数表没闭合".into() , code: prion_error::Code::E301 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
     let mut out = Vec::new();
     for a in split_args(&段[open + 1..end]) {
         let name = match a.first() {
@@ -5984,7 +5984,7 @@ fn between_parens(段: &[Token]) -> Result<Vec<Token>, BuildError> {
     let open = 段
         .iter()
         .position(|t| *t == Token::Sym("("))
-        .ok_or_else(|| BuildError { message: "print 后缺 (".into() , code: argon_error::Code::E301 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
+        .ok_or_else(|| BuildError { message: "print 后缺 (".into() , code: prion_error::Code::E301 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
     let mut depth = 0i32;
     let mut out = Vec::new();
     for t in &段[open..] {
@@ -6066,7 +6066,7 @@ fn parse_type_def(段: &[Token]) -> Result<StructType, BuildError> {
         }
         let 尽 = 尽.ok_or_else(|| BuildError {
             message: "泛型参数表括号没闭合".into(),
-            code: argon_error::Code::E201,
+            code: prion_error::Code::E201,
             line: CUR_LINE.with(|c| c.get()),
             file: String::new(),
         })?;
@@ -6076,7 +6076,7 @@ fn parse_type_def(段: &[Token]) -> Result<StructType, BuildError> {
                 _ => {
                     return Err(BuildError {
                         message: "泛型参数表里只能写裸名（`add type \"对子\"(A, B) = …`）".into(),
-                        code: argon_error::Code::E201,
+                        code: prion_error::Code::E201,
                         line: CUR_LINE.with(|c| c.get()),
                         file: String::new(),
                     })
@@ -6086,7 +6086,7 @@ fn parse_type_def(段: &[Token]) -> Result<StructType, BuildError> {
         if params.is_empty() {
             return Err(BuildError {
                 message: "泛型参数表的括号是空的".into(),
-                code: argon_error::Code::E201,
+                code: prion_error::Code::E201,
                 line: CUR_LINE.with(|c| c.get()),
                 file: String::new(),
             });
@@ -6245,7 +6245,7 @@ fn matching_close(段: &[Token]) -> Result<usize, BuildError> {
             _ => {}
         }
     }
-    Err(BuildError { message: "字段表没闭合".into() , code: argon_error::Code::E301 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })
+    Err(BuildError { message: "字段表没闭合".into() , code: prion_error::Code::E301 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })
 }
 
 //nt: 按 `|` 做**顶
@@ -6327,7 +6327,7 @@ fn 预扫常量fn(stmts: &[AstStmt]) {
     for s in stmts {
         match s {
             AstStmt::Line {
-                kind: argon_parser::LineKind::AddFn(段),
+                kind: prion_parser::LineKind::AddFn(段),
                 ..
             } => {
                 if 段.iter().position(|t| *t == Token::Sym("=")).is_none() {
@@ -6359,7 +6359,7 @@ fn 预扫常量(stmts: &[AstStmt], 表: &std::rc::Rc<RefCell<BTreeMap<String, cr
     for s in stmts {
         match s {
             AstStmt::Line {
-                kind: argon_parser::LineKind::AddVal(段),
+                kind: prion_parser::LineKind::AddVal(段),
                 ..
             } => {
                 if !matches!(段.get(1), Some(Token::Kw("fix"))) {
@@ -6646,7 +6646,7 @@ thread_local! {
 pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>) -> Result<Program, BuildError> {
     TYPECK.with(|m| *m.borrow_mut() = typeck.clone());
     //nt: 预扫类型名
-    //nt: Argon 删了 us
+    //nt: Prion 删了 us
     //nt: 必须唯一才能指称
     //nt: 和类型变体名同一规则
     let mut types: Vec<StructType> = Vec::new();
@@ -6665,7 +6665,7 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
                                     "类型「{}」重复定义——第一次在 {} 第 {} 行；类型名全程序唯一（跨模块也一样），请改写名",
                                     n, base_of(f0), l0
                                 ),
-                                code: argon_error::Code::E201,
+                                code: prion_error::Code::E201,
                                 line: line,
                                 file: b.file.clone(),
                             });
@@ -6680,7 +6680,7 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
                                     "变体「{}」重复定义——第一次在 {} 第 {} 行；变体名全程序唯一，请改写名",
                                     v.name, base_of(f0), l0
                                 ),
-                                code: argon_error::Code::E201,
+                                code: prion_error::Code::E201,
                                 line: line,
                                 file: b.file.clone(),
                             });
@@ -7091,7 +7091,7 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
                         message: format!(
                             "hide 只能对 fn / type / fix 写——val 本就在公开面里，不许单独藏"
                         ),
-                        code: argon_error::Code::E203,
+                        code: prion_error::Code::E203,
                         line: line_no,
                         file: b.file.clone(),
                     })
@@ -7102,7 +7102,7 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
                 _ => {
                     return Err(BuildError {
                         message: format!("`add hide {}` 后应接{}名", cat, what),
-                        code: argon_error::Code::E203,
+                        code: prion_error::Code::E203,
                         line: line_no,
                         file: b.file.clone(),
                     })
@@ -7114,7 +7114,7 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
                         "块「{}」不是 pub 块，不许 hide——hide 是给 pub 块「开窗又拉帘」用的",
                         b.name
                     ),
-                    code: argon_error::Code::E203,
+                    code: prion_error::Code::E203,
                     line: line_no,
                     file: b.file.clone(),
                 });
@@ -7359,7 +7359,7 @@ fn 禁裸传校验(functions: &[Function], _types: &[StructType]) -> Result<(), 
                         d.name.clone().unwrap_or_else(|| format!("v{}", did)),
                         l.name.clone().unwrap_or_else(|| format!("v{}", sid))
                     ),
-                    code: argon_error::Code::E201,
+                    code: prion_error::Code::E201,
                     line: 0,
                     file: String::new(),
                 });

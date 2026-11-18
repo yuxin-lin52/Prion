@@ -5,7 +5,7 @@
 //! 与树形 IR 并存：由 from_program 转换，dump 对拍后两个后端改吃本载体。
 
 use crate::{BinOp, Function, LocalId, MapKey, Place, Program, Proj, Rvalue, Stmt, Ty, Value};
-use argon_error::Span;
+use prion_error::Span;
 
 //nt: 指令号
 pub type InstId = u32;

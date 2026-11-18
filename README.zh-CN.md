@@ -1,22 +1,22 @@
-<p align="center"><img src="assets/icon.png" width="112" height="112" alt="Argon"></p>
+<p align="center"><img src="assets/icon.png" width="112" height="112" alt="Prion"></p>
 
-<h1 align="center">Argon</h1>
+<h1 align="center">Prion</h1>
 
-<p align="center"><a href="https://github.com/yuxin-lin52/Argon/actions/workflows/build.yml"><img src="https://github.com/yuxin-lin52/Argon/actions/workflows/build.yml/badge.svg" alt="build"></a></p>
+<p align="center"><a href="https://github.com/yuxin-lin52/Prion/actions/workflows/build.yml"><img src="https://github.com/yuxin-lin52/Prion/actions/workflows/build.yml/badge.svg" alt="build"></a></p>
 
 <p align="center"><a href="README.md">English</a> | 中文</p>
 
-Argon 是一门 AOT 编译语言。内存由编译器管理：回收点从程序的块结构算出，运行时没有垃圾回收器、没有停顿、没有逐对象计数。
+Prion 是一门 AOT 编译语言。内存由编译器管理：回收点从程序的块结构算出，运行时没有垃圾回收器、没有停顿、没有逐对象计数。
 
 ## 设计动机
 
-Argon 建立在一个分工之上：**写得简单，实现得复杂。**
+Prion 建立在一个分工之上：**写得简单，实现得复杂。**
 
 每门语言都要回答一个问题：内存谁负责？手动管理把正确性交给程序员；运行时管理省掉了这项工作，但带来额外负担和运行时卡顿；编译器检查的所有权保证了正确性，代价是程序员必须学会并满足一套规则。
 
-Argon 三种取舍都不取。程序按块结构化，值长在声明它的块里，一切跨块数据流动都走显式通道。在此结构下，编译器算出每个值的寿命与回收点。程序员写块、声明数据流向，其余由编译器完成。
+Prion 三种取舍都不取。程序按块结构化，值长在声明它的块里，一切跨块数据流动都走显式通道。在此结构下，编译器算出每个值的寿命与回收点。程序员写块、声明数据流向，其余由编译器完成。
 
-整个语言都遵循同一个分工。语法小而规整。直接内存访问与显式提前回收（`kill`）只存在于 `unsafe` 块内。Argon 没有手动内存分配。内存的释放点由编译器从块结构算出：每块在自己的区域里工作，块的链跑完时，它的段一步交还给平台分配器。Argon 另提供内联汇编与 C ABI 互操作，供需要自备环境的情形使用。
+整个语言都遵循同一个分工。语法小而规整。直接内存访问与显式提前回收（`kill`）只存在于 `unsafe` 块内。Prion 没有手动内存分配。内存的释放点由编译器从块结构算出：每块在自己的区域里工作，块的链跑完时，它的段一步交还给平台分配器。Prion 另提供内联汇编与 C ABI 互操作，供需要自备环境的情形使用。
 
 ## 语言概览
 
@@ -40,7 +40,7 @@ Argon 三种取舍都不取。程序按块结构化，值长在声明它的块�
 - 没有隐式转换。`int` 与 `float` 不显式转换不混算。
 - 条件必须是真假值——`if 5:` 是编译错误。
 - 下标从 1 起，与含两端的范围符一致（`for i in 1~5` 覆盖 1 到 5）。
-- 控制流体用独占一行的 `;` 收束。缩进纯属装饰、不可能改变语义；`;` 不配对是响亮的解析错误。Argon 的编辑器扩展内置自动格式化，会保持缩进一致。
+- 控制流体用独占一行的 `;` 收束。缩进纯属装饰、不可能改变语义；`;` 不配对是响亮的解析错误。Prion 的编辑器扩展内置自动格式化，会保持缩进一致。
 
 ## 内存模型
 
@@ -53,7 +53,7 @@ Argon 三种取舍都不取。程序按块结构化，值长在声明它的块�
 
 ## 下载
 
-[最新 release](https://github.com/yuxin-lin52/Argon/releases) 附带 Windows x64 的预构建二进制（仅 C 后端）。它仍需要一个 C 工具链：`PATH` 里有 `clang`，或用 `ARGON_CC` 指向一个。预构建二进制不含 LLVM 后端，需要它请从源码构建（见下）。
+[最新 release](https://github.com/yuxin-lin52/Prion/releases) 附带 Windows x64 的预构建二进制（仅 C 后端）。它仍需要一个 C 工具链：`PATH` 里有 `clang`，或用 `PRION_CC` 指向一个。预构建二进制不含 LLVM 后端，需要它请从源码构建（见下）。
 
 ## 构建
 
@@ -61,14 +61,14 @@ Argon 三种取舍都不取。程序按块结构化，值长在声明它的块�
 
 ```
 cd compiler
-cargo build --release -p argonc --no-default-features --features backend   # 仅 C 后端，不需要 LLVM
-cargo build --release -p argonc                                   # 两条后端，需要 LLVM 22.1
+cargo build --release -p prionc --no-default-features --features backend   # 仅 C 后端，不需要 LLVM
+cargo build --release -p prionc                                   # 两条后端，需要 LLVM 22.1
 ```
 
-C 后端把中间表示翻成 C 源码文本，交给 `clang`（路径取 `ARGON_CC`，未设则用 `PATH` 里的 `clang`）。LLVM 后端静态链接 LLVM 22.1：把 `LLVM_SYS_221_PREFIX` 指向 LLVM 22.1 安装目录，再用 `RUSTFLAGS="-L native=<前缀>\deps"` 把该目录下的 `deps` 加进链接搜索路径——zlib、zstd、libxml2 的导入库在那里。本仓库不随附 LLVM，请从上游发布页获取：<https://github.com/llvm/llvm-project/releases>。
+C 后端把中间表示翻成 C 源码文本，交给 `clang`（路径取 `PRION_CC`，未设则用 `PATH` 里的 `clang`）。LLVM 后端静态链接 LLVM 22.1：把 `LLVM_SYS_221_PREFIX` 指向 LLVM 22.1 安装目录，再用 `RUSTFLAGS="-L native=<前缀>\deps"` 把该目录下的 `deps` 加进链接搜索路径——zlib、zstd、libxml2 的导入库在那里。本仓库不随附 LLVM，请从上游发布页获取：<https://github.com/llvm/llvm-project/releases>。
 
 ```
-./target/release/argonc build demos/zh/物理引擎/物理引擎
+./target/release/prionc build demos/zh/物理引擎/物理引擎
 ```
 
 ## 实现状态

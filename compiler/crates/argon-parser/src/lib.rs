@@ -1,4 +1,4 @@
-//! argon-parser —— 语法层：层级语法「分号收束」
+//! prion-parser —— 语法层：层级语法「分号收束」
 //!
 //! - 开体：以 `:` 结尾的结构行开一个体（统一规则，不逐构造特判）
 //! - 收体：独占一行的 `;` 收体，强制配对
@@ -9,8 +9,8 @@
 //!
 //! 产出语句树；`Stmt::Line` 内的表达式树由 `expr` 模块产出（与记号并存）。
 
-use argon_error::{render_parse, ParseCode, DiagParts, Span, Tone};
-use argon_lexer::{Spanned, Token};
+use prion_error::{render_parse, ParseCode, DiagParts, Span, Tone};
+use prion_lexer::{Spanned, Token};
 
 //nt: 表达式树
 pub mod expr;

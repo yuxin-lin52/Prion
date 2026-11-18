@@ -1,9 +1,9 @@
 [package]
-name = "argon-llvm"
+name = "prion-llvm"
 version.workspace = true
 edition.workspace = true
 
 [dependencies]
-argon-ir = { path = "../argon-ir" }
-argon-walk = { path = "../argon-walk" }
+prion-ir = { path = "../prion-ir" }
+prion-walk = { path = "../prion-walk" }
 inkwell = { version = "0.11", default-features = false, features = ["llvm22-1-prefer-static", "target-x86", "target-aarch64"] }

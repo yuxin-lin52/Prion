@@ -1,6 +1,6 @@
-# Contributing to Argon
+# Contributing to Prion
 
-Thanks for your interest. Argon is early: the syntax is not frozen and the language design is still being settled, which shapes what kinds of contributions are useful right now.
+Thanks for your interest. Prion is early: the syntax is not frozen and the language design is still being settled, which shapes what kinds of contributions are useful right now.
 
 中文讨论同样欢迎 — feel free to write in Chinese.
 
@@ -49,7 +49,7 @@ cargo build --release --no-default-features --features backend
 Run the demo before and after a change:
 
 ```
-./target/release/argonc build demos/en/physics-engine/physics-engine
+./target/release/prionc build demos/en/physics-engine/physics-engine
 ```
 
 ## Commit sign-off

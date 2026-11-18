@@ -1,9 +1,9 @@
 [package]
-name = "argon-codegen"
+name = "prion-codegen"
 version.workspace = true
 edition.workspace = true
 
 [dependencies]
-argon-error = { path = "../argon-error" }
-argon-ir = { path = "../argon-ir" }
-argon-walk = { path = "../argon-walk" }
+prion-error = { path = "../prion-error" }
+prion-ir = { path = "../prion-ir" }
+prion-walk = { path = "../prion-walk" }

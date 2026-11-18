@@ -5,8 +5,8 @@
 //!
 //! 节点按引用形态组织：动词 + 前缀 + 类别 + 名，收成一个 `Call`。
 
-use argon_error::Span;
-use argon_lexer::Token;
+use prion_error::Span;
+use prion_lexer::Token;
 
 //nt: 动词位
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -728,7 +728,7 @@ impl<'a> Parser<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use argon_lexer::lex;
+    use prion_lexer::lex;
 
     fn 解析(src: &str) -> String {
         let all = lex(src).unwrap();
@@ -770,7 +770,7 @@ mod tests {
 #[cfg(test)]
 mod 覆盖 {
     use crate::{parse_all, Stmt};
-    use argon_lexer::lex;
+    use prion_lexer::lex;
 
     fn 统计(stmts: &[Stmt], 总: &mut usize, 有: &mut usize) {
         for s in stmts {

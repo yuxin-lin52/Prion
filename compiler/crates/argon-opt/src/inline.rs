@@ -4,7 +4,7 @@
 //! 体只含 Assign/Call 的函数。调用点就地展开：全部局部重编新号，形参先以实参赋值，
 //! 出口值替换原调用结果。单遍不级联——克隆体内的新调用不再展开。
 
-use argon_ir::{Exit, Function, Local, Place, Program, Rvalue, Stmt, Value};
+use prion_ir::{Exit, Function, Local, Place, Program, Rvalue, Stmt, Value};
 
 //nt: 标量形参可内联
 fn 标量(t: &str) -> bool {

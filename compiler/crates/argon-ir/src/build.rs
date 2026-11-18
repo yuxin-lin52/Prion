@@ -9,9 +9,9 @@
 //!
 //! 容器字面量与 `pop` / `sort` 遇到即报错。
 
-use argon_error::Span;
-use argon_lexer::Token;
-use argon_parser::{Block as AstBlock, Program as AstProgram, Stmt as AstStmt, TokStream};
+use prion_error::Span;
+use prion_lexer::Token;
+use prion_parser::{Block as AstBlock, Program as AstProgram, Stmt as AstStmt, TokStream};
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
@@ -1497,7 +1497,7 @@ impl Builder {
 
     //nt: 内联 asm
     fn 建asm(&mut self, 内区: &[Token]) -> Result<AsmForm, BuildError> {
-        let 段 = argon_lexer::asm::解析隔离区(内区).map_err(|e| BuildError {
+        let 段 = prion_lexer::asm::解析隔离区(内区).map_err(|e| BuildError {
             message: e,
             code: "E201".into(),
             line: CUR_LINE.with(|c| c.get()),
@@ -1538,10 +1538,10 @@ impl Builder {
             return self.expr(&toks[1..]);
         }
         //nt: 内联汇编
-        if toks.first().map(argon_lexer::asm::是asm词).unwrap_or(false)
+        if toks.first().map(prion_lexer::asm::是asm词).unwrap_or(false)
             && matches!(toks.get(1), Some(Token::Sym("(")))
         {
-            let 内区 = argon_lexer::asm::括号内(toks, 1)
+            let 内区 = prion_lexer::asm::括号内(toks, 1)
                 .ok_or_else(|| BuildError {
                     message: "asm 的括号没闭合".into(),
                     code: "E301".into(),
@@ -3925,10 +3925,10 @@ impl Builder {
 
         //nt: 分支戊零 内联汇编
         //nt: 括号内是隔离区，按
-        if toks.first().map(argon_lexer::asm::是asm词).unwrap_or(false)
+        if toks.first().map(prion_lexer::asm::是asm词).unwrap_or(false)
             && matches!(toks.get(1), Some(Token::Sym("(")))
         {
-            let 内区 = argon_lexer::asm::括号内(toks, 1)
+            let 内区 = prion_lexer::asm::括号内(toks, 1)
                 .ok_or_else(|| BuildError {
                     message: "asm 的括号没闭合".into(),
                     code: "E301".into(),
@@ -5859,7 +5859,7 @@ fn 收局部名(stmts: &[AstStmt], out: &mut BTreeSet<String>) {
 //nt: 语法层语句树 → 中
 pub fn build(ast: &AstProgram) -> Result<Program, BuildError> {
     //nt: 预扫类型名
-    //nt: Argon 删了 us
+    //nt: Prion 删了 us
     //nt: 必须唯一才能指称
     //nt: 和类型变体名同一规则
     let mut types: Vec<StructType> = Vec::new();

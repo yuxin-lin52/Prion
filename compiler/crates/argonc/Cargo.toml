@@ -1,5 +1,5 @@
 [package]
-name = "argonc"
+name = "prionc"
 version.workspace = true
 edition.workspace = true
 
@@ -7,19 +7,19 @@ edition.workspace = true
 # 缺省 = 完整编译器（前端 + 两个后端）
 default = ["backend", "llvm"]
 # 代码生成（C 后端）；关掉则只到检查层
-backend = ["dep:argon-ir", "dep:argon-lower", "dep:argon-walk", "dep:argon-opt", "dep:argon-codegen"]
+backend = ["dep:prion-ir", "dep:prion-lower", "dep:prion-walk", "dep:prion-opt", "dep:prion-codegen"]
 # LLVM 后端；关掉则不需要 LLVM 22.1 SDK
-llvm = ["dep:argon-llvm", "backend"]
+llvm = ["dep:prion-llvm", "backend"]
 
 [dependencies]
-argon-error = { path = "../argon-error" }
-argon-lexer = { path = "../argon-lexer" }
-argon-parser = { path = "../argon-parser" }
-argon-check = { path = "../argon-check" }
-argon-ir = { path = "../argon-ir", optional = true }
-argon-lower = { path = "../argon-lower", optional = true }
-argon-walk = { path = "../argon-walk", optional = true }
-argon-opt = { path = "../argon-opt", optional = true }
-argon-codegen = { path = "../argon-codegen", optional = true }
-argon-llvm = { path = "../argon-llvm", optional = true }
+prion-error = { path = "../prion-error" }
+prion-lexer = { path = "../prion-lexer" }
+prion-parser = { path = "../prion-parser" }
+prion-check = { path = "../prion-check" }
+prion-ir = { path = "../prion-ir", optional = true }
+prion-lower = { path = "../prion-lower", optional = true }
+prion-walk = { path = "../prion-walk", optional = true }
+prion-opt = { path = "../prion-opt", optional = true }
+prion-codegen = { path = "../prion-codegen", optional = true }
+prion-llvm = { path = "../prion-llvm", optional = true }
 serde_json = "1"

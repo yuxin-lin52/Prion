@@ -4,13 +4,13 @@
 
 Please do not open a public issue. Use GitHub's private vulnerability reporting:
 
-<https://github.com/yuxin-lin52/Argon/security/advisories/new>
+<https://github.com/yuxin-lin52/Prion/security/advisories/new>
 
-Include the version (`argonc --version`), the smallest program that triggers the problem, and what you expected instead.
+Include the version (`prionc --version`), the smallest program that triggers the problem, and what you expected instead.
 
 ## In scope
 
-Argon compiles source to native code, so the compiler and its generated runtime are the surface of interest:
+Prion compiles source to native code, so the compiler and its generated runtime are the surface of interest:
 
 - a program that compiles but behaves differently from its source;
 - malformed input that makes the compiler emit invalid code or crash;

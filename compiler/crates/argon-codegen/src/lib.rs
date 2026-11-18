@@ -1,11 +1,11 @@
-//! argon-codegen —— 后端之一：中间表示 → C 源码
+//! prion-codegen —— 后端之一：中间表示 → C 源码
 //!
-//! 另一条 lower 在 `argon-llvm`。
+//! 另一条 lower 在 `prion-llvm`。
 //!
 //! 覆盖：算术、控制流、容器、字符串、结构体、链式执行、运行子程序。
 //! 编码约定：`print` 走 libc 的 `printf`；局部变量映射为 `v<序号>`。
 
-use argon_ir::{
+use prion_ir::{
     BinOp, Block, Exit, Function, Local, LocalId, Place, Proj, Program, Rvalue, Stmt, Ty, Value,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -72,267 +72,267 @@ fn c_ty_in(t: &Ty, types: &TypeMap) -> String {
         }
         // nt: 容器
         n if n.starts_with("list") || n.starts_with("que") || n.starts_with("stack") => {
-            "ArgonList*".to_string()
+            "PrionList*".to_string()
         }
-        n if n.starts_with("map") => "ArgonMap*".to_string(),
+        n if n.starts_with("map") => "PrionMap*".to_string(),
         _ => "long long".to_string(),
     }
 }
 
 // nt: list 的最小 C
-const ARGON_LIST_RT: &str = r#"const char* argon_str_copy(const char* s);
+const PRION_LIST_RT: &str = r#"const char* prion_str_copy(const char* s);
 \
 \
 
 \
 
-     typedef struct { long long len; long long cap; long long esz; long long sgn; char* d; } ArgonList;
+     typedef struct { long long len; long long cap; long long esz; long long sgn; char* d; } PrionList;
 \
-     static long long argon_f2s(double d) { long long v; memcpy(&v, &d, 8); return v; }
-     static double argon_s2f(long long v) { double d; memcpy(&d, &v, 8); return d; }
+     static long long prion_f2s(double d) { long long v; memcpy(&v, &d, 8); return v; }
+     static double prion_s2f(long long v) { double d; memcpy(&d, &v, 8); return d; }
 \
-     long long argon_slot_get(const char* p, long long esz, long long sgn) {
+     long long prion_slot_get(const char* p, long long esz, long long sgn) {
   long long v = 0;
   memcpy(&v, p, (size_t)esz);
   if (sgn && esz < 8) { long long sh = 64 - esz * 8; v = (long long)(((unsigned long long)v) << sh) >> sh; }
   return v;
 }
 \
-     void argon_slot_put(char* p, long long esz, long long v) { memcpy(p, &v, (size_t)esz); }
+     void prion_slot_put(char* p, long long esz, long long v) { memcpy(p, &v, (size_t)esz); }
 \
-     ArgonList* argon_list_new(long long esz, long long sgn) {
-  ArgonList* l = (ArgonList*)malloc((size_t)(sizeof(ArgonList))); l->len = 0; l->cap = 4; l->esz = esz; l->sgn = sgn;
+     PrionList* prion_list_new(long long esz, long long sgn) {
+  PrionList* l = (PrionList*)malloc((size_t)(sizeof(PrionList))); l->len = 0; l->cap = 4; l->esz = esz; l->sgn = sgn;
   l->d = (char*)malloc((size_t)((esz * 4)));
-  if (!l || !l->d) { argon_die_nc(6, "内存不够——程序申请的空间超出可用内存", "缩小数据量，或换更省内存的写法"); }
+  if (!l || !l->d) { prion_die_nc(6, "内存不够——程序申请的空间超出可用内存", "缩小数据量，或换更省内存的写法"); }
   return l;
 }
 \
-     char* argon_list_slot(ArgonList* l, long long i) { return l->d + i * l->esz; }
+     char* prion_list_slot(PrionList* l, long long i) { return l->d + i * l->esz; }
 \
-     ArgonList* argon_list_dc_parent(ArgonList* h) {
+     PrionList* prion_list_dc_parent(PrionList* h) {
   if (!h) return 0;
-  ArgonList* n = (ArgonList*)malloc((size_t)(sizeof(ArgonList)));
+  PrionList* n = (PrionList*)malloc((size_t)(sizeof(PrionList)));
   n->len = h->len; n->cap = h->cap; n->esz = h->esz; n->sgn = h->sgn; n->d = (char*)malloc((size_t)((h->esz * (h->cap > 0 ? h->cap : 1))));
   if (h->len > 0) memcpy(n->d, h->d, (size_t)(h->esz * h->len));
   return n;
 }
 \
-     void argon_list_die(long long i, long long n) {
+     void prion_list_die(long long i, long long n) {
   char b[192];
   snprintf(b, sizeof b, "位置 %lld 越界——这个容器只有 %lld 个位置", i, n);
-  argon_die_nc(4, b, "取之前先用 len(容器) 查一下个数");
+  prion_die_nc(4, b, "取之前先用 len(容器) 查一下个数");
 }
 \
-     long long argon_list_len(ArgonList* l) { return l ? l->len : 0; }
+     long long prion_list_len(PrionList* l) { return l ? l->len : 0; }
 \
      /* 聚合元素：整块字节拷 */
-     void argon_list_copy_at(ArgonList* l, long long i, char* dst) {
-  ARGON_GUARD(if (!l || i < 1 || i > l->len) argon_list_die(i, l ? l->len : 0);)
-  memcpy(dst, argon_list_slot(l, i - 1), (size_t)l->esz);
+     void prion_list_copy_at(PrionList* l, long long i, char* dst) {
+  PRION_GUARD(if (!l || i < 1 || i > l->len) prion_list_die(i, l ? l->len : 0);)
+  memcpy(dst, prion_list_slot(l, i - 1), (size_t)l->esz);
 }
 
-     void argon_list_push_from(ArgonList* l, const char* src) {
+     void prion_list_push_from(PrionList* l, const char* src) {
   if (l->len >= l->cap) { long long ncap = l->cap * 2; char* nd = (char*)malloc((size_t)((l->esz * ncap))); if (l->d && l->len > 0) memcpy(nd, l->d, (size_t)(l->esz * l->len)); l->cap = ncap; l->d = nd; }
-  memcpy(argon_list_slot(l, l->len), src, (size_t)l->esz);
+  memcpy(prion_list_slot(l, l->len), src, (size_t)l->esz);
   l->len = l->len + 1;
 }
 
-     void argon_list_setat_from(ArgonList* l, long long i, const char* src) {
-  ARGON_GUARD(if (!l || i < 1 || i > l->len) argon_list_die(i, l ? l->len : 0);)
-  memcpy(argon_list_slot(l, i - 1), src, (size_t)l->esz);
+     void prion_list_setat_from(PrionList* l, long long i, const char* src) {
+  PRION_GUARD(if (!l || i < 1 || i > l->len) prion_list_die(i, l ? l->len : 0);)
+  memcpy(prion_list_slot(l, i - 1), src, (size_t)l->esz);
 }
 
 
-     ArgonList* argon_list_lit_from(long long n, const char* v, long long esz) {
-  ArgonList* l = argon_list_new(esz, 0);
+     PrionList* prion_list_lit_from(long long n, const char* v, long long esz) {
+  PrionList* l = prion_list_new(esz, 0);
   long long i = 0;
-  while (i < n) { memcpy(argon_list_slot(l, i), v + i * esz, (size_t)esz); i = i + 1; }
+  while (i < n) { memcpy(prion_list_slot(l, i), v + i * esz, (size_t)esz); i = i + 1; }
   l->len = n;
   return l;
 }
 \
-     long long argon_list_at(ArgonList* l, long long i) {
-  ARGON_GUARD(if (!l || i < 1 || i > l->len) argon_list_die(i, l ? l->len : 0);)
-  return argon_slot_get(argon_list_slot(l, i - 1), l->esz, l->sgn);
+     long long prion_list_at(PrionList* l, long long i) {
+  PRION_GUARD(if (!l || i < 1 || i > l->len) prion_list_die(i, l ? l->len : 0);)
+  return prion_slot_get(prion_list_slot(l, i - 1), l->esz, l->sgn);
 }
 \
-     void argon_list_setat(ArgonList* l, long long i, long long v) {
-  ARGON_GUARD(if (!l || i < 1 || i > l->len) argon_list_die(i, l ? l->len : 0);)
-  argon_slot_put(argon_list_slot(l, i - 1), l->esz, v);
+     void prion_list_setat(PrionList* l, long long i, long long v) {
+  PRION_GUARD(if (!l || i < 1 || i > l->len) prion_list_die(i, l ? l->len : 0);)
+  prion_slot_put(prion_list_slot(l, i - 1), l->esz, v);
 }
 \
-     long long argon_list_push(ArgonList* l, long long v) {
+     long long prion_list_push(PrionList* l, long long v) {
   if (l->len >= l->cap) { long long ncap = l->cap * 2; char* nd = (char*)malloc((size_t)((l->esz * ncap))); if (l->d && l->len > 0) memcpy(nd, l->d, (size_t)(l->esz * l->len)); l->cap = ncap; l->d = nd; }
-  argon_slot_put(argon_list_slot(l, l->len), l->esz, v);
+  prion_slot_put(prion_list_slot(l, l->len), l->esz, v);
   l->len = l->len + 1;
   return l->len;
 }
 \
-     long long argon_list_insert_from(ArgonList* l, long long pos, const char* src) {
-  ARGON_GUARD(if (!l || pos < 1 || pos > l->len + 1) argon_list_die(pos, l ? l->len + 1 : 0);)
-  argon_list_push(l, 0);
+     long long prion_list_insert_from(PrionList* l, long long pos, const char* src) {
+  PRION_GUARD(if (!l || pos < 1 || pos > l->len + 1) prion_list_die(pos, l ? l->len + 1 : 0);)
+  prion_list_push(l, 0);
   long long i = l->len - 1;
-  while (i >= pos) { memmove(argon_list_slot(l, i), argon_list_slot(l, i - 1), (size_t)l->esz); i = i - 1; }
-  memcpy(argon_list_slot(l, pos - 1), src, (size_t)l->esz);
+  while (i >= pos) { memmove(prion_list_slot(l, i), prion_list_slot(l, i - 1), (size_t)l->esz); i = i - 1; }
+  memcpy(prion_list_slot(l, pos - 1), src, (size_t)l->esz);
   return l->len;
 }
-     ArgonList* argon_list_lit(long long n, const long long* v, long long esz, long long sgn) {
-  ArgonList* l = argon_list_new(esz, sgn);
+     PrionList* prion_list_lit(long long n, const long long* v, long long esz, long long sgn) {
+  PrionList* l = prion_list_new(esz, sgn);
   long long i = 0;
-  while (i < n) { argon_list_push(l, v[i]); i = i + 1; }
+  while (i < n) { prion_list_push(l, v[i]); i = i + 1; }
   return l;
 }
 \
-     void argon_list_print(ArgonList* l) {
+     void prion_list_print(PrionList* l) {
   printf("[");
   long long i = 0;
-  while (i < argon_list_len(l)) { if (i > 0) printf(", "); printf("%lld", argon_list_at(l, i + 1)); i = i + 1; }
+  while (i < prion_list_len(l)) { if (i > 0) printf(", "); printf("%lld", prion_list_at(l, i + 1)); i = i + 1; }
   printf("]");
 }
 \
-     void argon_list_print_tag(ArgonList* l, const char* tag) {
+     void prion_list_print_tag(PrionList* l, const char* tag) {
   printf("%s[", tag);
   long long i = 0;
-  while (i < argon_list_len(l)) { if (i > 0) printf(", "); printf("%lld", argon_list_at(l, i + 1)); i = i + 1; }
+  while (i < prion_list_len(l)) { if (i > 0) printf(", "); printf("%lld", prion_list_at(l, i + 1)); i = i + 1; }
   printf("]");
 }
 \
-     void argon_list_print_f(ArgonList* l) {
+     void prion_list_print_f(PrionList* l) {
   printf("[");
   long long i = 0;
-  while (i < argon_list_len(l)) { if (i > 0) printf(", "); printf("%g", argon_s2f(argon_list_at(l, i + 1))); i = i + 1; }
+  while (i < prion_list_len(l)) { if (i > 0) printf(", "); printf("%g", prion_s2f(prion_list_at(l, i + 1))); i = i + 1; }
   printf("]");
 }
 \
-     void argon_list_print_tag_f(ArgonList* l, const char* tag) {
+     void prion_list_print_tag_f(PrionList* l, const char* tag) {
   printf("%s[", tag);
   long long i = 0;
-  while (i < argon_list_len(l)) { if (i > 0) printf(", "); printf("%g", argon_s2f(argon_list_at(l, i + 1))); i = i + 1; }
+  while (i < prion_list_len(l)) { if (i > 0) printf(", "); printf("%g", prion_s2f(prion_list_at(l, i + 1))); i = i + 1; }
   printf("]");
 }
 \
-     void argon_list_print_tag_s(ArgonList* l, const char* tag) {
+     void prion_list_print_tag_s(PrionList* l, const char* tag) {
   printf("%s[", tag);
   long long i = 0;
-  while (i < argon_list_len(l)) { if (i > 0) printf(", "); printf("\"%s\"", (const char*)(size_t)argon_list_at(l, i + 1)); i = i + 1; }
+  while (i < prion_list_len(l)) { if (i > 0) printf(", "); printf("\"%s\"", (const char*)(size_t)prion_list_at(l, i + 1)); i = i + 1; }
   printf("]");
 }
 \
-     long long argon_list_insert(ArgonList* l, long long pos, long long v) {
-  ARGON_GUARD(if (!l || pos < 1 || pos > l->len + 1) argon_list_die(pos, l ? l->len + 1 : 0);)
-  argon_list_push(l, 0);
+     long long prion_list_insert(PrionList* l, long long pos, long long v) {
+  PRION_GUARD(if (!l || pos < 1 || pos > l->len + 1) prion_list_die(pos, l ? l->len + 1 : 0);)
+  prion_list_push(l, 0);
   long long i = l->len - 1;
-  while (i >= pos) { memmove(argon_list_slot(l, i), argon_list_slot(l, i - 1), (size_t)l->esz); i = i - 1; }
-  argon_slot_put(argon_list_slot(l, pos - 1), l->esz, v);
+  while (i >= pos) { memmove(prion_list_slot(l, i), prion_list_slot(l, i - 1), (size_t)l->esz); i = i - 1; }
+  prion_slot_put(prion_list_slot(l, pos - 1), l->esz, v);
   return l->len;
 }
 \
-     long long argon_list_remove(ArgonList* l, long long pos) {
-  ARGON_GUARD(if (!l || pos < 1 || pos > l->len) argon_list_die(pos, l ? l->len : 0);)
-  long long v = argon_slot_get(argon_list_slot(l, pos - 1), l->esz, l->sgn);
-  memmove(argon_list_slot(l, pos - 1), argon_list_slot(l, pos), (size_t)(l->esz * (l->len - pos)));
+     long long prion_list_remove(PrionList* l, long long pos) {
+  PRION_GUARD(if (!l || pos < 1 || pos > l->len) prion_list_die(pos, l ? l->len : 0);)
+  long long v = prion_slot_get(prion_list_slot(l, pos - 1), l->esz, l->sgn);
+  memmove(prion_list_slot(l, pos - 1), prion_list_slot(l, pos), (size_t)(l->esz * (l->len - pos)));
   l->len = l->len - 1;
   return v;
 }
 \
-     long long argon_list_pop(ArgonList* l) {
-  ARGON_GUARD(if (!l || l->len <= 0) argon_list_die(0, l ? l->len : 0);)
+     long long prion_list_pop(PrionList* l) {
+  PRION_GUARD(if (!l || l->len <= 0) prion_list_die(0, l ? l->len : 0);)
   l->len = l->len - 1;
-  return argon_slot_get(argon_list_slot(l, l->len), l->esz, l->sgn);
+  return prion_slot_get(prion_list_slot(l, l->len), l->esz, l->sgn);
 }
 \
-     void argon_list_clear(ArgonList* l) { if (l) l->len = 0; }
+     void prion_list_clear(PrionList* l) { if (l) l->len = 0; }
 \
-     long long argon_list_contains(ArgonList* l, long long v) {
+     long long prion_list_contains(PrionList* l, long long v) {
   long long i = 0;
-  while (i < (l ? l->len : 0)) { if (argon_slot_get(argon_list_slot(l, i), l->esz, l->sgn) == v) return 1; i = i + 1; }
+  while (i < (l ? l->len : 0)) { if (prion_slot_get(prion_list_slot(l, i), l->esz, l->sgn) == v) return 1; i = i + 1; }
   return 0;
 }
 \
-     long long argon_list_index(ArgonList* l, long long v) {
+     long long prion_list_index(PrionList* l, long long v) {
   long long i = 0;
-  while (i < (l ? l->len : 0)) { if (argon_slot_get(argon_list_slot(l, i), l->esz, l->sgn) == v) return i + 1; i = i + 1; }
+  while (i < (l ? l->len : 0)) { if (prion_slot_get(prion_list_slot(l, i), l->esz, l->sgn) == v) return i + 1; i = i + 1; }
   return 0;
 }
 \
-     long long argon_sort_esz = 8;
+     long long prion_sort_esz = 8;
 \
-     long long argon_sort_sgn = 1;
+     long long prion_sort_sgn = 1;
 \
-     static int argon_cmp_slot(const void* a, const void* b) {
-  long long x = argon_slot_get((const char*)a, argon_sort_esz, argon_sort_sgn);
-  long long y = argon_slot_get((const char*)b, argon_sort_esz, argon_sort_sgn);
-  if (argon_sort_sgn) return (x > y) ? 1 : ((x < y) ? -1 : 0);
+     static int prion_cmp_slot(const void* a, const void* b) {
+  long long x = prion_slot_get((const char*)a, prion_sort_esz, prion_sort_sgn);
+  long long y = prion_slot_get((const char*)b, prion_sort_esz, prion_sort_sgn);
+  if (prion_sort_sgn) return (x > y) ? 1 : ((x < y) ? -1 : 0);
   { unsigned long long ux = (unsigned long long)x, uy = (unsigned long long)y;
     return (ux > uy) ? 1 : ((ux < uy) ? -1 : 0); }
 }
 \
-     void argon_list_sort(ArgonList* l) { argon_sort_esz = l->esz; argon_sort_sgn = l->sgn; qsort(l->d, (size_t)l->len, (size_t)l->esz, argon_cmp_slot); }
-     static int argon_cmp_slot_s(const void* a, const void* b) {
-  const char* x = (const char*)(size_t)argon_slot_get((const char*)a, argon_sort_esz, argon_sort_sgn);
-  const char* y = (const char*)(size_t)argon_slot_get((const char*)b, argon_sort_esz, argon_sort_sgn);
+     void prion_list_sort(PrionList* l) { prion_sort_esz = l->esz; prion_sort_sgn = l->sgn; qsort(l->d, (size_t)l->len, (size_t)l->esz, prion_cmp_slot); }
+     static int prion_cmp_slot_s(const void* a, const void* b) {
+  const char* x = (const char*)(size_t)prion_slot_get((const char*)a, prion_sort_esz, prion_sort_sgn);
+  const char* y = (const char*)(size_t)prion_slot_get((const char*)b, prion_sort_esz, prion_sort_sgn);
   return strcmp(x ? x : "", y ? y : "");
 }
-     void argon_list_sort_s(ArgonList* l) { argon_sort_esz = l->esz; argon_sort_sgn = l->sgn; qsort(l->d, (size_t)l->len, (size_t)l->esz, argon_cmp_slot_s); }
+     void prion_list_sort_s(PrionList* l) { prion_sort_esz = l->esz; prion_sort_sgn = l->sgn; qsort(l->d, (size_t)l->len, (size_t)l->esz, prion_cmp_slot_s); }
 \
-     ArgonList* argon_list_lit_s(long long n, const char* const* v) {
-  ArgonList* l = argon_list_new(8, 0);
+     PrionList* prion_list_lit_s(long long n, const char* const* v) {
+  PrionList* l = prion_list_new(8, 0);
   long long i = 0;
-  while (i < n) { argon_list_push(l, (long long)(size_t)argon_str_copy(v[i])); i = i + 1; }
+  while (i < n) { prion_list_push(l, (long long)(size_t)prion_str_copy(v[i])); i = i + 1; }
   return l;
 }
 \
-     void argon_list_print_s(ArgonList* l) {
+     void prion_list_print_s(PrionList* l) {
   printf("[");
   long long i = 0;
-  while (i < argon_list_len(l)) { if (i > 0) printf(", "); printf("\"%s\"", (const char*)(size_t)argon_list_at(l, i + 1)); i = i + 1; }
+  while (i < prion_list_len(l)) { if (i > 0) printf(", "); printf("\"%s\"", (const char*)(size_t)prion_list_at(l, i + 1)); i = i + 1; }
   printf("]");
 }
 \
-     long long argon_list_contains_s(ArgonList* l, const char* v) {
+     long long prion_list_contains_s(PrionList* l, const char* v) {
   long long i = 0;
-  while (i < (l ? l->len : 0)) { const char* e = (const char*)(size_t)argon_list_at(l, i + 1); if (e && v && strcmp(e, v) == 0) return 1; i = i + 1; }
+  while (i < (l ? l->len : 0)) { const char* e = (const char*)(size_t)prion_list_at(l, i + 1); if (e && v && strcmp(e, v) == 0) return 1; i = i + 1; }
   return 0;
 }
 \
-     long long argon_list_index_s(ArgonList* l, const char* v) {
+     long long prion_list_index_s(PrionList* l, const char* v) {
   long long i = 0;
-  while (i < (l ? l->len : 0)) { const char* e = (const char*)(size_t)argon_list_at(l, i + 1); if (e && v && strcmp(e, v) == 0) return i + 1; i = i + 1; }
+  while (i < (l ? l->len : 0)) { const char* e = (const char*)(size_t)prion_list_at(l, i + 1); if (e && v && strcmp(e, v) == 0) return i + 1; i = i + 1; }
   return 0;
 }
 \
-     ArgonList* argon_dc_list(ArgonList* h, long long str_elem) {
+     PrionList* prion_dc_list(PrionList* h, long long str_elem) {
   if (!h) return 0;
-  ArgonList* n = (ArgonList*)malloc((size_t)(sizeof(ArgonList)));
+  PrionList* n = (PrionList*)malloc((size_t)(sizeof(PrionList)));
   n->len = h->len; n->cap = h->cap; n->esz = h->esz; n->sgn = h->sgn;
   n->d = (char*)malloc((size_t)((h->esz * h->cap)));
-  if (!n || !n->d) { argon_die_nc(6, "内存不够——程序申请的空间超出可用内存", "缩小数据量，或换更省内存的写法"); }
+  if (!n || !n->d) { prion_die_nc(6, "内存不够——程序申请的空间超出可用内存", "缩小数据量，或换更省内存的写法"); }
   long long i = 0;
-  while (i < h->len) { if (str_elem) argon_slot_put(argon_list_slot(n, i), 8, (long long)(size_t)argon_str_copy((const char*)(size_t)argon_slot_get(argon_list_slot(h, i), 8, 0))); else memcpy(argon_list_slot(n, i), argon_list_slot(h, i), (size_t)h->esz); i = i + 1; }
+  while (i < h->len) { if (str_elem) prion_slot_put(prion_list_slot(n, i), 8, (long long)(size_t)prion_str_copy((const char*)(size_t)prion_slot_get(prion_list_slot(h, i), 8, 0))); else memcpy(prion_list_slot(n, i), prion_list_slot(h, i), (size_t)h->esz); i = i + 1; }
   return n;
 }
 \
-     ArgonList* argon_list_slice(ArgonList* l, long long a, long long b) {
-  ARGON_GUARD(if (!l || a < 1 || b < a || b > l->len) argon_list_die(b, l ? l->len : 0);)
-  ArgonList* r = argon_list_new(l->esz, l->sgn);
+     PrionList* prion_list_slice(PrionList* l, long long a, long long b) {
+  PRION_GUARD(if (!l || a < 1 || b < a || b > l->len) prion_list_die(b, l ? l->len : 0);)
+  PrionList* r = prion_list_new(l->esz, l->sgn);
   long long i = a;
-  while (i <= b) { argon_list_push_from(r, argon_list_slot(l, i - 1)); i = i + 1; }
+  while (i <= b) { prion_list_push_from(r, prion_list_slot(l, i - 1)); i = i + 1; }
   return r;
 }
 
 "#;
 
 // nt: 字符串的最小 C 运
-const ARGON_STR_RT: &str = r#"long long argon_str_char_len(const char* s) {
+const PRION_STR_RT: &str = r#"long long prion_str_char_len(const char* s) {
   long long n = 0;
   const unsigned char* p = (const unsigned char*)(s ? s : "");
   while (*p) { if ((*p & 0xC0) != 0x80) { n = n + 1; } p = p + 1; }
   return n;
 }
 \
-     long long argon_str_byte_len(const char* s) { return (long long)strlen(s ? s : ""); }
+     long long prion_str_byte_len(const char* s) { return (long long)strlen(s ? s : ""); }
 \
-     long long argon_utf8_len(unsigned char c) {
+     long long prion_utf8_len(unsigned char c) {
   if (c < 0x80) return 1;
   if ((c >> 5) == 0x6) return 2;
   if ((c >> 4) == 0xE) return 3;
@@ -340,31 +340,31 @@ const ARGON_STR_RT: &str = r#"long long argon_str_char_len(const char* s) {
   return 1;
 }
 \
-     void argon_str_die(const char* what, long long v, long long n) {
+     void prion_str_die(const char* what, long long v, long long n) {
   fprintf(stderr, "运行错误：%s位置 %lld 越界——这个容器只有 %lld 个位置；取之前先用 len(容器) 查一下个数\
 ", what, v, n);
-  argon_at(); exit(1);
+  prion_at(); exit(1);
 }
 \
-     const char* argon_concat(const char* a, const char* b) {
+     const char* prion_concat(const char* a, const char* b) {
   a = a ? a : ""; b = b ? b : "";
   size_t n = strlen(a) + strlen(b) + 1;
   char* p = (char*)malloc((size_t)(n));
-  if (!p) { argon_die_nc(6, "内存不够——程序申请的空间超出可用内存", "缩小数据量，或换更省内存的写法"); }
+  if (!p) { prion_die_nc(6, "内存不够——程序申请的空间超出可用内存", "缩小数据量，或换更省内存的写法"); }
   strcpy(p, a); strcat(p, b);
   return p;
 }
 \
-     const char* argon_sub_str(const char* s, long long a, long long b) {
+     const char* prion_sub_str(const char* s, long long a, long long b) {
   s = s ? s : "";
-  long long n = argon_str_char_len(s);
+  long long n = prion_str_char_len(s);
   if (a < 1) a = 1;
   if (b > n) b = n;
   if (b < a) return "";
   long long i = 0, cnt = 0, st = 0, sp = 0, k = 0;
   const unsigned char* p = (const unsigned char*)s;
   while (p[k]) {
-    long long w = argon_utf8_len(p[k]);
+    long long w = prion_utf8_len(p[k]);
     cnt = cnt + 1;
     if (cnt == a) st = k;
     if (cnt == b) { sp = k + w; break; }
@@ -372,24 +372,24 @@ const ARGON_STR_RT: &str = r#"long long argon_str_char_len(const char* s) {
   }
   long long len = sp - st;
   char* r = (char*)malloc((size_t)((len + 1)));
-  if (!r) { argon_die_nc(6, "内存不够——程序申请的空间超出可用内存", "缩小数据量，或换更省内存的写法"); }
+  if (!r) { prion_die_nc(6, "内存不够——程序申请的空间超出可用内存", "缩小数据量，或换更省内存的写法"); }
   long long j = 0; while (j < len) { r[j] = s[st + j]; j = j + 1; }
   r[len] = 0;
   return r;
 }
 \
-     const char* argon_nth_char(const char* s, long long n) {
+     const char* prion_nth_char(const char* s, long long n) {
   s = s ? s : "";
-  long long total = argon_str_char_len(s);
+  long long total = prion_str_char_len(s);
   if (n < 1 || n > total) return "";
   const unsigned char* p = (const unsigned char*)s;
   long long k = 0, c = 0;
   while (p[k]) {
-    long long w = argon_utf8_len(p[k]);
+    long long w = prion_utf8_len(p[k]);
     c = c + 1;
     if (c == n) {
       char* b = (char*)malloc((size_t)((w + 1)));
-      if (!b) { argon_die_nc(6, "内存不够——程序申请的空间超出可用内存", "缩小数据量，或换更省内存的写法"); }
+      if (!b) { prion_die_nc(6, "内存不够——程序申请的空间超出可用内存", "缩小数据量，或换更省内存的写法"); }
       long long j = 0; while (j < w) { b[j] = (char)p[k + j]; j = j + 1; }
       b[w] = 0;
       return b;
@@ -400,41 +400,41 @@ const ARGON_STR_RT: &str = r#"long long argon_str_char_len(const char* s) {
 }
 \
      /* 串遍历游标：顺序取 O(1)/字符，由 IR 的 #str_iter_* 专用 */
-static const char* argon_it_s = 0;
-static long long argon_it_i = 0;
-static long long argon_it_off = 0;
+static const char* prion_it_s = 0;
+static long long prion_it_i = 0;
+static long long prion_it_off = 0;
 
-static void argon_str_iter_start(const char* s) {
-  argon_it_s = s; argon_it_i = 0; argon_it_off = 0;
+static void prion_str_iter_start(const char* s) {
+  prion_it_s = s; prion_it_i = 0; prion_it_off = 0;
 }
 
-static const char* argon_str_iter_next(const char* s, long long n) {
+static const char* prion_str_iter_next(const char* s, long long n) {
   s = s ? s : "";
   long long k;
-  if (s == argon_it_s && argon_it_i > 0 && n == argon_it_i + 1) {
-    k = argon_it_off + argon_utf8_len((unsigned char)s[argon_it_off]);
-  } else if (s == argon_it_s && n == argon_it_i) {
-    k = argon_it_off;
+  if (s == prion_it_s && prion_it_i > 0 && n == prion_it_i + 1) {
+    k = prion_it_off + prion_utf8_len((unsigned char)s[prion_it_off]);
+  } else if (s == prion_it_s && n == prion_it_i) {
+    k = prion_it_off;
   } else {
     k = 0; long long c = 0;
     while (s[k]) {
       c = c + 1;
       if (c == n) break;
-      k = k + argon_utf8_len((unsigned char)s[k]);
+      k = k + prion_utf8_len((unsigned char)s[k]);
     }
     if (c < n) return "";
   }
   if (!s[k]) return "";
-  long long w = argon_utf8_len((unsigned char)s[k]);
+  long long w = prion_utf8_len((unsigned char)s[k]);
   char* b = (char*)malloc((size_t)((w + 1)));
-  if (!b) { argon_die_nc(6, "内存不够——程序申请的空间超出可用内存", "缩小数据量，或换更省内存的写法"); }
+  if (!b) { prion_die_nc(6, "内存不够——程序申请的空间超出可用内存", "缩小数据量，或换更省内存的写法"); }
   long long j = 0; while (j < w) { b[j] = (char)s[k + j]; j = j + 1; }
   b[w] = 0;
-  argon_it_s = s; argon_it_i = n; argon_it_off = k;
+  prion_it_s = s; prion_it_i = n; prion_it_off = k;
   return b;
 }
 
-     long long argon_char_code(const char* s) {
+     long long prion_char_code(const char* s) {
   const unsigned char* p = (const unsigned char*)(s ? s : "");
   if (!*p) return -1;
   if (*p < 0x80) return (long long)(*p);
@@ -444,10 +444,10 @@ static const char* argon_str_iter_next(const char* s, long long n) {
   return (long long)(*p);
 }
 \
-     const char* argon_code_char(long long cp) {
+     const char* prion_code_char(long long cp) {
   char* r = (char*)malloc((size_t)(5));
   long long n = 0;
-  if (!r) { argon_die_nc(6, "内存不够——程序申请的空间超出可用内存", "缩小数据量，或换更省内存的写法"); }
+  if (!r) { prion_die_nc(6, "内存不够——程序申请的空间超出可用内存", "缩小数据量，或换更省内存的写法"); }
   if (cp < 0 || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) { r[0] = 0; return r; }
   if (cp < 0x80) { r[0] = (char)cp; n = 1; }
   else if (cp < 0x800) { r[0] = (char)(0xC0 | (cp >> 6)); r[1] = (char)(0x80 | (cp & 0x3F)); n = 2; }
@@ -457,30 +457,30 @@ static const char* argon_str_iter_next(const char* s, long long n) {
   return r;
 }
 \
-     long long argon_str_eq(const char* a, const char* b) { if (!a || !b) return (a == b) ? 1 : 0; return (strcmp(a, b) == 0) ? 1 : 0; }
-     long long argon_str_index(const char* s, const char* sub) {
+     long long prion_str_eq(const char* a, const char* b) { if (!a || !b) return (a == b) ? 1 : 0; return (strcmp(a, b) == 0) ? 1 : 0; }
+     long long prion_str_index(const char* s, const char* sub) {
   if (!s || !sub) return 0;
   const char* p = strstr(s, sub);
   if (!p) return 0;
   return (long long)(p - s) + 1;
 }
 \
-     long long argon_int_of_str(const char* s) { return s ? atoll(s) : 0; }
+     long long prion_int_of_str(const char* s) { return s ? atoll(s) : 0; }
 \
-     const char* argon_str_of_float(double d) {
+     const char* prion_str_of_float(double d) {
   char* b = (char*)malloc((size_t)(40));
-  if (!b) { argon_die_nc(6, "内存不够——程序申请的空间超出可用内存", "缩小数据量，或换更省内存的写法"); }
+  if (!b) { prion_die_nc(6, "内存不够——程序申请的空间超出可用内存", "缩小数据量，或换更省内存的写法"); }
   snprintf(b, 40, "%g", d);
   return b;
 }
 \
-     double argon_float_of_str(const char* s) {
+     double prion_float_of_str(const char* s) {
   if (!s || !*s) return 0;
   return strtod(s, 0);
 }
-     const char* argon_str_of_int(long long v) {
+     const char* prion_str_of_int(long long v) {
   char* b = (char*)malloc((size_t)(32));
-  if (!b) { argon_die_nc(6, "内存不够——程序申请的空间超出可用内存", "缩小数据量，或换更省内存的写法"); }
+  if (!b) { prion_die_nc(6, "内存不够——程序申请的空间超出可用内存", "缩小数据量，或换更省内存的写法"); }
   snprintf(b, 32, "%lld", v);
   return b;
 }
@@ -489,32 +489,32 @@ static const char* argon_str_iter_next(const char* s, long long n) {
 
 // nt: map 最小 C 模
 // nt: 键槽longlong
-const ARGON_MAP_RT: &str = r#"const char* argon_str_copy(const char* s);
+const PRION_MAP_RT: &str = r#"const char* prion_str_copy(const char* s);
 \
-     typedef struct { long long len; long long cap; long long esz; long long sgn; long long kty; long long* k; char* v; } ArgonMap;
+     typedef struct { long long len; long long cap; long long esz; long long sgn; long long kty; long long* k; char* v; } PrionMap;
 \
-     ArgonMap* argon_map_new(long long esz, long long sgn, long long kty) {
-  ArgonMap* m = (ArgonMap*)malloc((size_t)(sizeof(ArgonMap))); m->len = 0; m->cap = 4; m->esz = esz; m->sgn = sgn; m->kty = kty;
+     PrionMap* prion_map_new(long long esz, long long sgn, long long kty) {
+  PrionMap* m = (PrionMap*)malloc((size_t)(sizeof(PrionMap))); m->len = 0; m->cap = 4; m->esz = esz; m->sgn = sgn; m->kty = kty;
   m->k = (long long*)malloc((size_t)((sizeof(long long) * 4)));
   m->v = (char*)malloc((size_t)((esz * 4)));
-  if (!m || !m->k || !m->v) { argon_die_nc(6, "内存不够——程序申请的空间超出可用内存", "缩小数据量，或换更省内存的写法"); }
+  if (!m || !m->k || !m->v) { prion_die_nc(6, "内存不够——程序申请的空间超出可用内存", "缩小数据量，或换更省内存的写法"); }
   return m;
 }
 \
-     long long argon_map_len(ArgonMap* m) { return m ? m->len : 0; }
+     long long prion_map_len(PrionMap* m) { return m ? m->len : 0; }
 \
-     void argon_map_free(ArgonMap* m, long long vstr) {
+     void prion_map_free(PrionMap* m, long long vstr) {
   if (!m) return;
   long long i = 0;
   while (i < m->len) {
     if (m->kty == 0) free((void*)(size_t)m->k[i]);
-    if (vstr) { long long p = argon_slot_get(m->v + i * m->esz, m->esz, m->sgn); free((void*)(size_t)p); }
+    if (vstr) { long long p = prion_slot_get(m->v + i * m->esz, m->esz, m->sgn); free((void*)(size_t)p); }
     i = i + 1;
   }
   free(m->k); free(m->v); free(m);
 }
 \
-     long long argon_map_find(ArgonMap* m, long long k) {
+     long long prion_map_find(PrionMap* m, long long k) {
   long long i = 0;
   while (i < (m ? m->len : 0)) {
     if (m->kty == 0) { if (m->k[i] && k && strcmp((const char*)(size_t)m->k[i], (const char*)(size_t)k) == 0) return i; }
@@ -524,110 +524,110 @@ const ARGON_MAP_RT: &str = r#"const char* argon_str_copy(const char* s);
   return -1;
 }
 \
-     void argon_map_die_key(ArgonMap* m, long long k) {
+     void prion_map_die_key(PrionMap* m, long long k) {
   char b[192];
   if (m && m->kty == 0) snprintf(b, sizeof b, "键\"%s\"不存在", k ? (const char*)(size_t)k : "");
   else snprintf(b, sizeof b, "键%lld 不存在", k);
-  argon_die_nc(5, b, "先用 has 问一声，要新增请用 put");
+  prion_die_nc(5, b, "先用 has 问一声，要新增请用 put");
 }
 \
-     long long argon_map_contains(ArgonMap* m, long long k) { return argon_map_find(m, k) >= 0; }
+     long long prion_map_contains(PrionMap* m, long long k) { return prion_map_find(m, k) >= 0; }
 \
-     long long argon_map_at(ArgonMap* m, long long k) {
-  long long i = argon_map_find(m, k);
-  ARGON_GUARD(if (i < 0) argon_map_die_key(m, k);)
-  return argon_slot_get(m->v + i * m->esz, m->esz, m->sgn);
+     long long prion_map_at(PrionMap* m, long long k) {
+  long long i = prion_map_find(m, k);
+  PRION_GUARD(if (i < 0) prion_map_die_key(m, k);)
+  return prion_slot_get(m->v + i * m->esz, m->esz, m->sgn);
 }
 \
-     void argon_map_set(ArgonMap* m, long long k, long long v) {
-  long long i = argon_map_find(m, k);
-  ARGON_GUARD(if (i < 0) argon_map_die_key(m, k);)
-  argon_slot_put(m->v + i * m->esz, m->esz, v);
+     void prion_map_set(PrionMap* m, long long k, long long v) {
+  long long i = prion_map_find(m, k);
+  PRION_GUARD(if (i < 0) prion_map_die_key(m, k);)
+  prion_slot_put(m->v + i * m->esz, m->esz, v);
 }
 \
-     void argon_map_put(ArgonMap* m, long long k, long long v) {
-  long long i = argon_map_find(m, k);
-  if (i >= 0) { argon_slot_put(m->v + i * m->esz, m->esz, v); return; }
+     void prion_map_put(PrionMap* m, long long k, long long v) {
+  long long i = prion_map_find(m, k);
+  if (i >= 0) { prion_slot_put(m->v + i * m->esz, m->esz, v); return; }
   if (m->len >= m->cap) { long long ncap = m->cap * 2; long long* nk = (long long*)malloc((size_t)((sizeof(long long) * ncap))); char* nv = (char*)malloc((size_t)((m->esz * ncap))); if (m->k && m->len > 0) { memcpy(nk, m->k, sizeof(long long) * (size_t)m->len); memcpy(nv, m->v, (size_t)(m->esz * m->len)); } m->cap = ncap; m->k = nk; m->v = nv; }
-  m->k[m->len] = (m->kty == 0) ? (long long)(size_t)argon_str_copy((const char*)(size_t)k) : k;
-  argon_slot_put(m->v + m->len * m->esz, m->esz, v);
+  m->k[m->len] = (m->kty == 0) ? (long long)(size_t)prion_str_copy((const char*)(size_t)k) : k;
+  prion_slot_put(m->v + m->len * m->esz, m->esz, v);
   m->len = m->len + 1;
 }
 \
-     long long argon_map_remove(ArgonMap* m, long long k) {
-  long long i = argon_map_find(m, k);
-  ARGON_GUARD(if (i < 0) argon_map_die_key(m, k);)
-  long long v = argon_slot_get(m->v + i * m->esz, m->esz, m->sgn);
+     long long prion_map_remove(PrionMap* m, long long k) {
+  long long i = prion_map_find(m, k);
+  PRION_GUARD(if (i < 0) prion_map_die_key(m, k);)
+  long long v = prion_slot_get(m->v + i * m->esz, m->esz, m->sgn);
   while (i < m->len - 1) { m->k[i] = m->k[i + 1]; memcpy(m->v + i * m->esz, m->v + (i + 1) * m->esz, (size_t)m->esz); i = i + 1; }
   m->len = m->len - 1;
   return v;
 }
 \
-     void argon_map_clear(ArgonMap* m) { if (m) m->len = 0; }
+     void prion_map_clear(PrionMap* m) { if (m) m->len = 0; }
 \
-     ArgonMap* argon_map_lit(long long n, const long long* k, const long long* v, long long esz, long long sgn, long long kty) {
-  ArgonMap* m = argon_map_new(esz, sgn, kty);
+     PrionMap* prion_map_lit(long long n, const long long* k, const long long* v, long long esz, long long sgn, long long kty) {
+  PrionMap* m = prion_map_new(esz, sgn, kty);
   long long i = 0;
-  while (i < n) { argon_map_put(m, k[i], v[i]); i = i + 1; }
+  while (i < n) { prion_map_put(m, k[i], v[i]); i = i + 1; }
   return m;
 }
 \
-     ArgonList* argon_map_keys(ArgonMap* m) {
-  ArgonList* r = argon_list_new(8, m ? m->kty : 1);
+     PrionList* prion_map_keys(PrionMap* m) {
+  PrionList* r = prion_list_new(8, m ? m->kty : 1);
   long long i = 0;
-  while (i < (m ? m->len : 0)) { argon_list_push(r, (m->kty == 0) ? (long long)(size_t)argon_str_copy((const char*)(size_t)m->k[i]) : m->k[i]); i = i + 1; }
+  while (i < (m ? m->len : 0)) { prion_list_push(r, (m->kty == 0) ? (long long)(size_t)prion_str_copy((const char*)(size_t)m->k[i]) : m->k[i]); i = i + 1; }
   return r;
 }
 \
-     ArgonList* argon_map_values(ArgonMap* m) {
-  ArgonList* r = argon_list_new(m ? m->esz : 8, m ? m->sgn : 1);
+     PrionList* prion_map_values(PrionMap* m) {
+  PrionList* r = prion_list_new(m ? m->esz : 8, m ? m->sgn : 1);
   long long i = 0;
-  while (i < (m ? m->len : 0)) { argon_list_push(r, argon_slot_get(m->v + i * m->esz, m->esz, m->sgn)); i = i + 1; }
+  while (i < (m ? m->len : 0)) { prion_list_push(r, prion_slot_get(m->v + i * m->esz, m->esz, m->sgn)); i = i + 1; }
   return r;
 }
 \
-     ArgonMap* argon_dc_map(ArgonMap* m, long long str_val) {
+     PrionMap* prion_dc_map(PrionMap* m, long long str_val) {
   if (!m) return 0;
-  ArgonMap* n = argon_map_new(m->esz, m->sgn, m->kty);
+  PrionMap* n = prion_map_new(m->esz, m->sgn, m->kty);
   long long i = 0;
-  while (i < m->len) { long long v = argon_slot_get(m->v + i * m->esz, m->esz, m->sgn); if (str_val) v = (long long)(size_t)argon_str_copy((const char*)(size_t)v); argon_map_put(n, m->k[i], v); i = i + 1; }
+  while (i < m->len) { long long v = prion_slot_get(m->v + i * m->esz, m->esz, m->sgn); if (str_val) v = (long long)(size_t)prion_str_copy((const char*)(size_t)v); prion_map_put(n, m->k[i], v); i = i + 1; }
   return n;
 }
 \
-     void argon_map_print_key(long long k, long long kty) {
+     void prion_map_print_key(long long k, long long kty) {
   if (kty == 0) printf("\"%s\"", (const char*)(size_t)k); else printf("%lld", k);
 }
 \
-     void argon_map_print(ArgonMap* m) {
+     void prion_map_print(PrionMap* m) {
   printf("{");
   long long i = 0;
-  while (i < argon_map_len(m)) { if (i > 0) printf(", "); argon_map_print_key(m->k[i], m->kty); printf(": %lld", argon_slot_get(m->v + i * m->esz, m->esz, m->sgn)); i = i + 1; }
+  while (i < prion_map_len(m)) { if (i > 0) printf(", "); prion_map_print_key(m->k[i], m->kty); printf(": %lld", prion_slot_get(m->v + i * m->esz, m->esz, m->sgn)); i = i + 1; }
   printf("}");
 }
 \
-     void argon_map_print_f(ArgonMap* m) {
+     void prion_map_print_f(PrionMap* m) {
   printf("{");
   long long i = 0;
-  while (i < argon_map_len(m)) { if (i > 0) printf(", "); argon_map_print_key(m->k[i], m->kty); printf(": %g", argon_s2f(argon_slot_get(m->v + i * m->esz, m->esz, m->sgn))); i = i + 1; }
+  while (i < prion_map_len(m)) { if (i > 0) printf(", "); prion_map_print_key(m->k[i], m->kty); printf(": %g", prion_s2f(prion_slot_get(m->v + i * m->esz, m->esz, m->sgn))); i = i + 1; }
   printf("}");
 }
 \
-     void argon_map_print_s(ArgonMap* m) {
+     void prion_map_print_s(PrionMap* m) {
   printf("{");
   long long i = 0;
-  while (i < argon_map_len(m)) { if (i > 0) printf(", "); argon_map_print_key(m->k[i], m->kty); printf(": \"%s\"", (const char*)(size_t)argon_slot_get(m->v + i * m->esz, m->esz, m->sgn)); i = i + 1; }
+  while (i < prion_map_len(m)) { if (i > 0) printf(", "); prion_map_print_key(m->k[i], m->kty); printf(": \"%s\"", (const char*)(size_t)prion_slot_get(m->v + i * m->esz, m->esz, m->sgn)); i = i + 1; }
   printf("}");
 }
 
 "#;
 
 // nt: 文件 IO 最小模板
-const ARGON_FILE_RT: &str = r#"#ifdef _WIN32
+const PRION_FILE_RT: &str = r#"#ifdef _WIN32
 __declspec(dllimport) int __stdcall MultiByteToWideChar(unsigned int, unsigned long, const char*, int, wchar_t*, int);
 __declspec(dllimport) int __stdcall WideCharToMultiByte(unsigned int, unsigned long, const wchar_t*, int, char*, int, const char*, int*);
 #endif
 /* 路径是 UTF-8 字节；Windows 的 fopen 按本地 ANSI 代码页解 ⇒ 先转 UTF-16 再转 CP_ACP（中文系统即 GBK） */
-static char* argon_path_local(const char* p) {
+static char* prion_path_local(const char* p) {
 #ifdef _WIN32
   if (!p || !*p) return (char*)"";
   int n = MultiByteToWideChar(65001, 0, p, -1, 0, 0);
@@ -646,25 +646,25 @@ static char* argon_path_local(const char* p) {
   return (char*)p;
 #endif
 }
-static FILE* argon_fopen_rb(const char* p) {
-  char* lp = argon_path_local(p ? p : "");
+static FILE* prion_fopen_rb(const char* p) {
+  char* lp = prion_path_local(p ? p : "");
   FILE* f = fopen(lp, "rb");
 #ifdef _WIN32
   if (lp != p) free(lp);
 #endif
   return f;
 }
-static FILE* argon_fopen_wb(const char* p) {
-  char* lp = argon_path_local(p ? p : "");
+static FILE* prion_fopen_wb(const char* p) {
+  char* lp = prion_path_local(p ? p : "");
   FILE* f = fopen(lp, "wb");
 #ifdef _WIN32
   if (lp != p) free(lp);
 #endif
   return f;
 }
-const char* argon_read_file(const char* path) {
+const char* prion_read_file(const char* path) {
 \
-     FILE* fp = argon_fopen_rb(path ? path : "");
+     FILE* fp = prion_fopen_rb(path ? path : "");
 \
      if (!fp) { fprintf(stderr, "运行错误：读不到文件「%s」——文件不存在，或没有读权限\n", path ? path : ""); putc(10, stderr); exit(1); }
 \
@@ -674,7 +674,7 @@ const char* argon_read_file(const char* path) {
 \
      char* b = (char*)malloc((size_t)(((size_t)n + 1)));
 \
-     if (!b) { argon_die_nc(6, "内存不够——程序申请的空间超出可用内存", "缩小数据量，或换更省内存的写法"); }
+     if (!b) { prion_die_nc(6, "内存不够——程序申请的空间超出可用内存", "缩小数据量，或换更省内存的写法"); }
 \
      size_t got = fread(b, 1, (size_t)n, fp);
 \
@@ -686,9 +686,9 @@ const char* argon_read_file(const char* path) {
 \
 }
 \
-     long long argon_save_file(const char* path, const char* text) {
+     long long prion_save_file(const char* path, const char* text) {
 \
-     FILE* fp = argon_fopen_wb(path ? path : "");
+     FILE* fp = prion_fopen_wb(path ? path : "");
 \
      if (!fp) { fprintf(stderr, "运行错误：写不进文件「%s」——目录不存在，或没有写权限\n", path ? path : ""); putc(10, stderr); exit(1); }
 \
@@ -703,23 +703,23 @@ const char* argon_read_file(const char* path) {
 "#;
 
 // nt: 命令行参数的最小 C
-const ARGON_ARGS_RT: &str = r#"static int g_argc = 0;
+const PRION_ARGS_RT: &str = r#"static int g_argc = 0;
 \
      static char** g_argv = 0;
 \
-     ArgonList* argon_args(void) {
+     PrionList* prion_args(void) {
 \
-     ArgonList* r = argon_list_new(8, 0);
+     PrionList* r = prion_list_new(8, 0);
 \
      long long i = 0;
 \
-     while (i < g_argc) { argon_list_push(r, (long long)(size_t)argon_str_copy(g_argv[i])); i = i + 1; }
+     while (i < g_argc) { prion_list_push(r, (long long)(size_t)prion_str_copy(g_argv[i])); i = i + 1; }
 \
      return r;
 \
 }
 \
-     void argon_args_set(int argc, char** argv) { g_argc = argc; g_argv = argv; }
+     void prion_args_set(int argc, char** argv) { g_argc = argc; g_argv = argv; }
 \
 
 "#;
@@ -888,7 +888,7 @@ fn place_c(f: &Function, types: &TypeMap, p: &Place) -> String {
 
 // nt: 边实参落到目标块参数
 // nt: 顺序=目标块参数
-fn 边实参代码(f: &Function, s: &argon_ir::Succ) -> String {
+fn 边实参代码(f: &Function, s: &prion_ir::Succ) -> String {
     if s.args.is_empty() {
         return String::new();
     }
@@ -1021,11 +1021,11 @@ fn guarded(op: BinOp) -> Option<&'static str> {
         return None;
     }
     match op {
-        BinOp::Add => Some("argon_sadd"),
-        BinOp::Sub => Some("argon_ssub"),
-        BinOp::Mul => Some("argon_smul"),
-        BinOp::Div => Some("argon_div"),
-        BinOp::Mod => Some("argon_mod"),
+        BinOp::Add => Some("prion_sadd"),
+        BinOp::Sub => Some("prion_ssub"),
+        BinOp::Mul => Some("prion_smul"),
+        BinOp::Div => Some("prion_div"),
+        BinOp::Mod => Some("prion_mod"),
         _ => None,
     }
 }
@@ -1086,7 +1086,7 @@ fn print_one_c(f: &Function, a: &Value) -> (String, String) {
         _ => false,
     };
     if is_bool {
-        return ("%s".into(), format!("argon_bool_str({})", value_c(a)));
+        return ("%s".into(), format!("prion_bool_str({})", value_c(a)));
     }
     match a {
         Value::Str(_) => ("%s".into(), value_c(a)),
@@ -1259,7 +1259,7 @@ fn 容器元素助手(f: &Function, v: &Value, types: &TypeMap) -> String {
             .locals
             .get(*id)
             .and_then(|l| container_elem_ty(&l.ty.0))
-            .and_then(|e| types.get(&e).map(|(c, _)| c.replace("argon_st_", "argon_at_st_")))
+            .and_then(|e| types.get(&e).map(|(c, _)| c.replace("prion_st_", "prion_at_st_")))
             .unwrap_or_default(),
         _ => String::new(),
     }
@@ -1295,13 +1295,13 @@ fn binop_c(
 ) -> String {
     // nt: 字符串的 == /
     if matches!(op, BinOp::Eq | BinOp::Ne) && is_str_val(f, lhs) && is_str_val(f, rhs) {
-        used.insert("argon_str_eq");
-        let c = format!("argon_str_eq({}, {})", value_c(lhs), value_c(rhs));
+        used.insert("prion_str_eq");
+        let c = format!("prion_str_eq({}, {})", value_c(lhs), value_c(rhs));
         return if matches!(op, BinOp::Ne) { format!("(!{})", c) } else { c };
     }
 // nt: 字符串拼接
     if matches!(op, BinOp::Add) && (is_str_val(f, lhs) || is_str_val(f, rhs)) {
-        return format!("argon_concat({}, {})", value_c(lhs), value_c(rhs));
+        return format!("prion_concat({}, {})", value_c(lhs), value_c(rhs));
     }
     let a = value_c(lhs);
     let b = value_c(rhs);
@@ -1438,7 +1438,7 @@ fn stmt_c(
             for lid in lids {
                 let Some(l) = f.locals.get(lid) else { continue };
                 let ct = c_ty_in(&l.ty, types);
-                if ct.starts_with("ArgonMap") || ct.starts_with("ArgonList") {
+                if ct.starts_with("PrionMap") || ct.starts_with("PrionList") {
                     //nt: 聚合元素槽存指针
                     let 聚合元 = container_elem_ty(&l.ty.0)
                         .map(|e| types.contains_key(e.trim_end_matches('*')))
@@ -1460,7 +1460,7 @@ fn stmt_c(
             let Some(l) = f.locals.get(*lid) else { return Ok(()) };
             let ct = c_ty_in(&l.ty, types);
             let vn = vname(*lid);
-            if ct.starts_with("ArgonMap") || ct.starts_with("ArgonList") {
+            if ct.starts_with("PrionMap") || ct.starts_with("PrionList") {
                 let o = l.obj.unwrap_or(u32::MAX);
                 let owned = OWNED.with(|s| s.borrow().contains(&o));
                 let 值入 = 值入列.with(|s| s.borrow().contains(&o));
@@ -1518,7 +1518,7 @@ fn stmt_c(
             //nt: 串遍历游标置起点
             if name == "#str_iter_start" {
                 if let Some(a) = args.first() {
-                    out.push_str(&format!("  argon_str_iter_start({});\n", value_c(a)));
+                    out.push_str(&format!("  prion_str_iter_start({});\n", value_c(a)));
                 }
                 return Ok(());
             }
@@ -1527,7 +1527,7 @@ fn stmt_c(
                 if let (Some(Value::Local(id)), None) = (args.first(), args.get(1)) {
                     let ty = f.locals.get(*id).map(|l| l.ty.0.clone()).unwrap_or_default();
                     if ty.starts_with("list(str") {
-                        out.push_str(&format!("  argon_list_print_s({});\n  printf(\"\\n\");\n", value_c(&args[0])));
+                        out.push_str(&format!("  prion_list_print_s({});\n  printf(\"\\n\");\n", value_c(&args[0])));
                         return Ok(());
                     }
                     // nt: 定长族
@@ -1539,19 +1539,19 @@ fn stmt_c(
                         return Ok(());
                     }
                     if ty.starts_with("list(float") {
-                        out.push_str(&format!("  argon_list_print_f({});\n  printf(\"\\n\");\n", value_c(&args[0])));
+                        out.push_str(&format!("  prion_list_print_f({});\n  printf(\"\\n\");\n", value_c(&args[0])));
                         return Ok(());
                     }
                     if ty == "list" || ty.starts_with("list(") {
-                        out.push_str(&format!("  argon_list_print({});\n  printf(\"\\n\");\n", value_c(&args[0])));
+                        out.push_str(&format!("  prion_list_print({});\n  printf(\"\\n\");\n", value_c(&args[0])));
                         return Ok(());
                     }
                     // nt: 队列/栈 print
                     if ty.starts_with("que") {
                         let fname = match container_elem_ty(&ty).as_deref() {
-                            Some("str") => "argon_list_print_tag_s",
-                            Some("float") => "argon_list_print_tag_f",
-                            _ => "argon_list_print_tag",
+                            Some("str") => "prion_list_print_tag_s",
+                            Some("float") => "prion_list_print_tag_f",
+                            _ => "prion_list_print_tag",
                         };
                         out.push_str(&format!(
                             "  {}({}, \"que\");\n  printf(\"\\n\");\n",
@@ -1562,9 +1562,9 @@ fn stmt_c(
                     }
                     if ty.starts_with("stack") {
                         let fname = match container_elem_ty(&ty).as_deref() {
-                            Some("str") => "argon_list_print_tag_s",
-                            Some("float") => "argon_list_print_tag_f",
-                            _ => "argon_list_print_tag",
+                            Some("str") => "prion_list_print_tag_s",
+                            Some("float") => "prion_list_print_tag_f",
+                            _ => "prion_list_print_tag",
                         };
                         out.push_str(&format!(
                             "  {}({}, \"stack\");\n  printf(\"\\n\");\n",
@@ -1575,9 +1575,9 @@ fn stmt_c(
                     }
                     if ty == "map" || ty.starts_with("map(") {
                         let fname = match container_elem_ty(&ty).as_deref() {
-                            Some("str") => "argon_map_print_s",
-                            Some("float") => "argon_map_print_f",
-                            _ => "argon_map_print",
+                            Some("str") => "prion_map_print_s",
+                            Some("float") => "prion_map_print_f",
+                            _ => "prion_map_print",
                         };
                         out.push_str(&format!("  {}({});\n  printf(\"\\n\");\n", fname, value_c(&args[0])));
                         return Ok(());
@@ -1592,46 +1592,46 @@ fn stmt_c(
                         }
                         match container_val_kind(f, a) {
                             Some("list(str)") => {
-                                out.push_str(&format!("  argon_list_print_s({});\n", value_c(a)))
+                                out.push_str(&format!("  prion_list_print_s({});\n", value_c(a)))
                             }
                             Some("list(float)") => {
-                                out.push_str(&format!("  argon_list_print_f({});\n", value_c(a)))
+                                out.push_str(&format!("  prion_list_print_f({});\n", value_c(a)))
                             }
                             Some("list") => {
-                                out.push_str(&format!("  argon_list_print({});\n", value_c(a)))
+                                out.push_str(&format!("  prion_list_print({});\n", value_c(a)))
                             }
                             Some("que(str)") => out.push_str(&format!(
-                                "  argon_list_print_tag_s({}, \"que\");\n",
+                                "  prion_list_print_tag_s({}, \"que\");\n",
                                 value_c(a)
                             )),
                             Some("que(float)") => out.push_str(&format!(
-                                "  argon_list_print_tag_f({}, \"que\");\n",
+                                "  prion_list_print_tag_f({}, \"que\");\n",
                                 value_c(a)
                             )),
                             Some("que") => out.push_str(&format!(
-                                "  argon_list_print_tag({}, \"que\");\n",
+                                "  prion_list_print_tag({}, \"que\");\n",
                                 value_c(a)
                             )),
                             Some("stack(str)") => out.push_str(&format!(
-                                "  argon_list_print_tag_s({}, \"stack\");\n",
+                                "  prion_list_print_tag_s({}, \"stack\");\n",
                                 value_c(a)
                             )),
                             Some("stack(float)") => out.push_str(&format!(
-                                "  argon_list_print_tag_f({}, \"stack\");\n",
+                                "  prion_list_print_tag_f({}, \"stack\");\n",
                                 value_c(a)
                             )),
                             Some("stack") => out.push_str(&format!(
-                                "  argon_list_print_tag({}, \"stack\");\n",
+                                "  prion_list_print_tag({}, \"stack\");\n",
                                 value_c(a)
                             )),
                             Some("map(str)") => {
-                                out.push_str(&format!("  argon_map_print_s({});\n", value_c(a)))
+                                out.push_str(&format!("  prion_map_print_s({});\n", value_c(a)))
                             }
                             Some("map(float)") => {
-                                out.push_str(&format!("  argon_map_print_f({});\n", value_c(a)))
+                                out.push_str(&format!("  prion_map_print_f({});\n", value_c(a)))
                             }
                             Some("map") => {
-                                out.push_str(&format!("  argon_map_print({});\n", value_c(a)))
+                                out.push_str(&format!("  prion_map_print({});\n", value_c(a)))
                             }
                             _ => {
                                 let (fmt, expr) = print_one_c(f, a);
@@ -1670,7 +1670,7 @@ fn stmt_c(
                     };
                     if is_bool {
                         fmts.push("%s".into());
-                        as_.push(format!("argon_bool_str({})", value_c(a)));
+                        as_.push(format!("prion_bool_str({})", value_c(a)));
                         continue;
                     }
                     match a {
@@ -1725,13 +1725,13 @@ fn stmt_c(
                 }
                 if is_str_val(f, &args[1]) {
                     out.push_str(&format!(
-                        "  argon_list_push({}, (long long)(size_t)argon_str_copy({}));\n",
+                        "  prion_list_push({}, (long long)(size_t)prion_str_copy({}));\n",
                         value_c(&args[0]),
                         value_c(&args[1])
                     ));
                 } else if is_float_val(f, &args[1]) {
                     out.push_str(&format!(
-                        "  argon_list_push({}, argon_f2s({}));\n",
+                        "  prion_list_push({}, prion_f2s({}));\n",
                         value_c(&args[0]),
                         value_c(&args[1])
                     ));
@@ -1749,7 +1749,7 @@ fn stmt_c(
                         let 已逃 = ESCAPED.with(|s| s.borrow().contains(lid));
                         if !已逃 {
                             out.push_str(&format!(
-                                "  {vn} = ({ct}*)argon_copy_to_parent({vn}, (long long)sizeof({ct}));\n",
+                                "  {vn} = ({ct}*)prion_copy_to_parent({vn}, (long long)sizeof({ct}));\n",
                                 vn = vn,
                                 ct = ct
                             ));
@@ -1757,20 +1757,20 @@ fn stmt_c(
                         }
                     }
                     out.push_str(&format!(
-                        "  argon_list_push({}, (long long)(size_t){});\n",
+                        "  prion_list_push({}, (long long)(size_t){});\n",
                         value_c(&args[0]),
                         value_c(&args[1])
                     ));
                 } else if is_agg_val(f, types, &args[1]) {
                     //nt: 聚合按地址
                     out.push_str(&format!(
-                        "  argon_list_push_from({}, (const char*)&{});\n",
+                        "  prion_list_push_from({}, (const char*)&{});\n",
                         value_c(&args[0]),
                         value_c(&args[1])
                     ));
                 } else {
                     out.push_str(&format!(
-                        "  argon_list_push({}, {});\n",
+                        "  prion_list_push({}, {});\n",
                         value_c(&args[0]),
                         value_c(&args[1])
                     ));
@@ -1787,7 +1787,7 @@ fn stmt_c(
                     return Err(CodegenError { message: "save_file 要 2 个参数（路径, 内容）".into() , code: "E401".into() , line: 0 });
                 }
                 let as_: Vec<String> = args.iter().map(value_c).collect();
-                out.push_str(&format!("  argon_save_file({}, {});\n", as_[0], as_[1]));
+                out.push_str(&format!("  prion_save_file({}, {});\n", as_[0], as_[1]));
             } else if name == "put" {
                 // nt: put
                 if args.len() != 3 {
@@ -1820,21 +1820,21 @@ fn stmt_c(
                     };
                     if is_str_val(f, v) {
                         // nt: 复印 str
-                        as_[2] = format!("(long long)(size_t)argon_str_copy({})", value_c(v));
+                        as_[2] = format!("(long long)(size_t)prion_str_copy({})", value_c(v));
                     } else if is_float_val(f, v) {
-                        as_[2] = format!("argon_f2s({})", value_c(v));
+                        as_[2] = format!("prion_f2s({})", value_c(v));
                     } else if need_box {
                         as_[2] = format!("(long long)(size_t)({})", value_c(v));
                     }
                 }
-                out.push_str(&format!("  argon_map_put({}, {}, {});\n", as_[0], as_[1], as_[2]));
+                out.push_str(&format!("  prion_map_put({}, {}, {});\n", as_[0], as_[1], as_[2]));
             } else if name == "remove" && matches!(args.first(), Some(Value::Local(id)) if f.locals.get(*id).map(|l| l.ty.0 == "map" || l.ty.0.starts_with("map(")).unwrap_or(false)) {
                 // nt: remove
                 if args.len() != 2 {
                     return Err(CodegenError { message: "remove 要 2 个参数（map, 键）".into() , code: "E401".into() , line: 0 });
                 }
                 out.push_str(&format!(
-                    "  argon_map_remove({}, {});\n",
+                    "  prion_map_remove({}, {});\n",
                     value_c(&args[0]),
                     key_c(f, &args[1])
                 ));
@@ -1842,7 +1842,7 @@ fn stmt_c(
                 && matches!(args.first(), Some(Value::Local(id))
                     if f.locals.get(*id).map(|l| l.ty.0 == "map" || l.ty.0.starts_with("map(")).unwrap_or(false))
             {
-                out.push_str(&format!("  argon_map_clear({});\n", value_c(&args[0])));
+                out.push_str(&format!("  prion_map_clear({});\n", value_c(&args[0])));
             } else if name == "pop" {
                 // nt: pop 共用
                 let first_ty = match args.first() {
@@ -1853,11 +1853,11 @@ fn stmt_c(
                 };
                 if first_ty.starts_with("que") {
                     out.push_str(&format!(
-                        "  argon_list_remove({}, 1);\n",
+                        "  prion_list_remove({}, 1);\n",
                         value_c(&args[0])
                     ));
                 } else {
-                    out.push_str(&format!("  argon_list_pop({});\n", value_c(&args[0])));
+                    out.push_str(&format!("  prion_list_pop({});\n", value_c(&args[0])));
                 }
             } else if name == "insert" || name == "remove" || name == "clear" || name == "sort" {
                 // nt: 列表增删改排
@@ -1877,32 +1877,32 @@ fn stmt_c(
                 }
                 let c = match name.as_str() {
                     "run" => {
-                        used.insert("argon_run");
-                        "argon_run"
+                        used.insert("prion_run");
+                        "prion_run"
                     }
-                    "insert" => "argon_list_insert",
-                    "remove" => "argon_list_remove",
-                    "clear" => "argon_list_clear",
+                    "insert" => "prion_list_insert",
+                    "remove" => "prion_list_remove",
+                    "clear" => "prion_list_clear",
                     _ => {
                         // nt: sort
                         let is_str_elem = matches!(args.first(), Some(Value::Local(id))
                             if f.locals.get(*id).map(|l| l.ty.0.starts_with("list(str")).unwrap_or(false));
                         if is_str_elem {
-                            used.insert("argon_list_sort_s");
-                            "argon_list_sort_s"
+                            used.insert("prion_list_sort_s");
+                            "prion_list_sort_s"
                         } else {
-                            "argon_list_sort"
+                            "prion_list_sort"
                         }
                     }
                 };
                 let mut as_: Vec<String> = args.iter().map(value_c).collect();
                 if name == "insert" && args.len() == 3 && is_float_val(f, &args[2]) {
-                    as_[2] = format!("argon_f2s({})", as_[2]);
+                    as_[2] = format!("prion_f2s({})", as_[2]);
                 }
                 if name == "insert" && args.len() == 3 && is_agg_val(f, types, &args[2]) {
                     //nt: 聚合按地址
                     as_[2] = format!("(const char*)&{}", as_[2]);
-                    out.push_str(&format!("  argon_list_insert_from({});\n", as_.join(", ")));
+                    out.push_str(&format!("  prion_list_insert_from({});\n", as_.join(", ")));
                     return Ok(());
                 }
                 out.push_str(&format!("  {}({});\n", c, as_.join(", ")));
@@ -1911,8 +1911,8 @@ fn stmt_c(
                 if args.len() != 1 {
                     return Err(CodegenError { message: "sleep 要 1 个参数（毫秒）".into() , code: "E401".into() , line: 0 });
                 }
-                used.insert("argon_sleep");
-                out.push_str(&format!("  argon_sleep({});\n", value_c(&args[0])));
+                used.insert("prion_sleep");
+                out.push_str(&format!("  prion_sleep({});\n", value_c(&args[0])));
             } else if let Some(callee) = names.get(name) {
                 // nt: 调用方 fn 的调用
                 let as_: Vec<String> = args.iter().map(value_c).collect();
@@ -2033,23 +2033,23 @@ fn stmt_c(
                             let is_map = matches!(args.first(), Some(Value::Local(id))
                                 if f.locals.get(*id).map(|l| l.ty.0 == "map" || l.ty.0.starts_with("map(")).unwrap_or(false));
                             if is_list {
-                                format!("argon_list_len({})", arg(0))
+                                format!("prion_list_len({})", arg(0))
                             } else if is_map {
-                                format!("argon_map_len({})", arg(0))
+                                format!("prion_map_len({})", arg(0))
                             } else {
-                                format!("argon_str_char_len({})", arg(0))
+                                format!("prion_str_char_len({})", arg(0))
                             }
                         }
                         "empty" => {
                             let is_map = matches!(args.first(), Some(Value::Local(id))
                                 if f.locals.get(*id).map(|l| l.ty.0 == "map" || l.ty.0.starts_with("map(")).unwrap_or(false));
                             if is_map {
-                                format!("(argon_map_len({}) == 0)", arg(0))
+                                format!("(prion_map_len({}) == 0)", arg(0))
                             } else {
-                                format!("(argon_list_len({}) == 0)", arg(0))
+                                format!("(prion_list_len({}) == 0)", arg(0))
                             }
                         }
-                        "len_utf8" => format!("argon_str_byte_len({})", arg(0)),
+                        "len_utf8" => format!("prion_str_byte_len({})", arg(0)),
                         "str_index" => {
                             //nt: 串内找子串
                             format!(
@@ -2067,23 +2067,23 @@ fn stmt_c(
                             if list_ty == "map" || list_ty.starts_with("map(") {
                                 if name == "has" {
                                     format!(
-                                        "argon_map_contains({}, {})",
+                                        "prion_map_contains({}, {})",
                                         arg(0),
                                         key_c(f, &args[1])
                                     )
                                 } else {
                                     // nt: map 的 inde
                                     format!(
-                                        "argon_map_at({}, {})",
+                                        "prion_map_at({}, {})",
                                         arg(0),
                                         key_c(f, &args[1])
                                     )
                                 }
                             } else if list_ty.starts_with("list(str") {
                                 if name == "has" {
-                                    format!("argon_list_contains_s({}, {})", arg(0), arg(1))
+                                    format!("prion_list_contains_s({}, {})", arg(0), arg(1))
                                 } else {
-                                    format!("argon_list_index_s({}, {})", arg(0), arg(1))
+                                    format!("prion_list_index_s({}, {})", arg(0), arg(1))
                                 }
                             } else if name == "has" {
                                 let b = if is_ptr_val(f, &args[1]) {
@@ -2091,14 +2091,14 @@ fn stmt_c(
                                 } else {
                                     arg(1)
                                 };
-                                format!("argon_list_contains({}, {})", arg(0), b)
+                                format!("prion_list_contains({}, {})", arg(0), b)
                             } else {
                                 let b = if is_ptr_val(f, &args[1]) {
                                     format!("(long long)(size_t){}", arg(1))
                                 } else {
                                     arg(1)
                                 };
-                                format!("argon_list_index({}, {})", arg(0), b)
+                                format!("prion_list_index({}, {})", arg(0), b)
                             }
                         }
                         // nt: 切片
@@ -2108,40 +2108,40 @@ fn stmt_c(
                             let is_str = matches!(args.first(), Some(Value::Local(id))
                                 if f.locals.get(*id).map(|l| l.ty.0 == "str").unwrap_or(false));
                             if is_str {
-                                format!("argon_sub_str({}, {}, {})", arg(0), arg(1), arg(2))
+                                format!("prion_sub_str({}, {}, {})", arg(0), arg(1), arg(2))
                             } else {
-                                format!("argon_list_slice({}, {}, {})", arg(0), arg(1), arg(2))
+                                format!("prion_list_slice({}, {}, {})", arg(0), arg(1), arg(2))
                             }
                         }
                         // nt: take 的复印
-                        "#str_copy" => format!("argon_str_copy({})", arg(0)),
-                        "#dc_list" => format!("argon_dc_list({}, {})", arg(0), arg(1)),
-                        "#dc_map" => format!("argon_dc_map({}, {})", arg(0), arg(1)),
+                        "#str_copy" => format!("prion_str_copy({})", arg(0)),
+                        "#dc_list" => format!("prion_dc_list({}, {})", arg(0), arg(1)),
+                        "#dc_map" => format!("prion_dc_map({}, {})", arg(0), arg(1)),
                         //nt: 结构体深拷
                         n if n.starts_with("#dcdeep_") => {
                             let 型 = n.trim_start_matches("#dcdeep_");
                             let c = types.get(型).map(|t| t.0.clone()).unwrap_or_default();
-                            let 助手 = c.replace("argon_st_", "argon_dcdeep_st_");
+                            let 助手 = c.replace("prion_st_", "prion_dcdeep_st_");
                             format!("{}(&{})", 助手, arg(0))
                         }
-                        "concat" => format!("argon_concat({}, {})", arg(0), arg(1)),
-                        "sub_str" => format!("argon_sub_str({}, {}, {})", arg(0), arg(1), arg(2)),
-                        "nth_char" => format!("argon_nth_char({}, {})", arg(0), arg(1)),
+                        "concat" => format!("prion_concat({}, {})", arg(0), arg(1)),
+                        "sub_str" => format!("prion_sub_str({}, {}, {})", arg(0), arg(1), arg(2)),
+                        "nth_char" => format!("prion_nth_char({}, {})", arg(0), arg(1)),
                         //nt: 串顺序取字符
-                        "#str_iter_next" => format!("argon_str_iter_next({}, {})", arg(0), arg(1)),
-                        "code" => format!("argon_char_code({})", arg(0)),
-                        "char" => format!("argon_code_char({})", arg(0)),
+                        "#str_iter_next" => format!("prion_str_iter_next({}, {})", arg(0), arg(1)),
+                        "code" => format!("prion_char_code({})", arg(0)),
+                        "char" => format!("prion_code_char({})", arg(0)),
 // nt: 类型名当函数
                         // nt: queue/stac
                         "que" | "stack" => {
                             if args.is_empty() {
-                                format!("argon_list_new({}, {})", elem_esz, elem_sgn)
+                                format!("prion_list_new({}, {})", elem_esz, elem_sgn)
                             } else {
                                 arg(0)
                             }
                         }
-                        "args" => "argon_args()".to_string(),
-                        "read_file" => format!("argon_read_file({})", arg(0)),
+                        "args" => "prion_args()".to_string(),
+                        "read_file" => format!("prion_read_file({})", arg(0)),
                         // nt: pop
                         "pop" => {
                             let first_ty = match args.first() {
@@ -2151,22 +2151,22 @@ fn stmt_c(
                                 _ => String::new(),
                             };
                             let raw = if first_ty.starts_with("que") {
-                                format!("argon_list_remove({}, 1)", arg(0))
+                                format!("prion_list_remove({}, 1)", arg(0))
                             } else {
-                                format!("argon_list_pop({})", arg(0))
+                                format!("prion_list_pop({})", arg(0))
                             };
                             // nt: str 元素 ⇒ 把
                             // nt: 注意用 contai
                             if matches!(container_elem_ty(&first_ty).unwrap_or_default().as_str(), "str") {
                                 format!("((const char*)(size_t){})", raw)
                             } else if matches!(container_elem_ty(&first_ty).unwrap_or_default().as_str(), "float") {
-                                format!("argon_s2f({})", raw)
+                                format!("prion_s2f({})", raw)
                             } else {
                                 raw
                             }
                         }
-                        "keys" => format!("argon_map_keys({})", arg(0)),
-                        "vals" => format!("argon_map_values({})", arg(0)),
+                        "keys" => format!("prion_map_keys({})", arg(0)),
+                        "vals" => format!("prion_map_values({})", arg(0)),
                         "int" => {
                             //nt: float截断
                             let is_f = matches!(args.first(), Some(Value::Float(_)))
@@ -2176,7 +2176,7 @@ fn stmt_c(
                             if is_f {
                                 format!("((long long)({}))", arg(0))
                             } else {
-                                format!("argon_int_of_str({})", arg(0))
+                                format!("prion_int_of_str({})", arg(0))
                             }
                         }
                         "str" => {
@@ -2185,9 +2185,9 @@ fn stmt_c(
                                 || matches!(args.first(), Some(Value::Local(id))
                                     if f.locals.get(*id).map(|l| l.ty.0 == "float").unwrap_or(false));
                             if is_float {
-                                format!("argon_str_of_float({})", arg(0))
+                                format!("prion_str_of_float({})", arg(0))
                             } else {
-                                format!("argon_str_of_int({})", arg(0))
+                                format!("prion_str_of_int({})", arg(0))
                             }
                         }
                         "float" => {
@@ -2196,7 +2196,7 @@ fn stmt_c(
                                 || matches!(args.first(), Some(Value::Local(id))
                                     if f.locals.get(*id).map(|l| l.ty.0 == "str").unwrap_or(false));
                             if is_s {
-                                format!("argon_float_of_str({})", arg(0))
+                                format!("prion_float_of_str({})", arg(0))
                             } else {
                                 format!("((double)({}))", arg(0))
                             }
@@ -2209,8 +2209,8 @@ fn stmt_c(
                         }
                         // nt: 时间与随机 / FF
                         "rnd" => {
-                            used.insert("argon_random");
-                            format!("argon_random({})", arg(0))
+                            used.insert("prion_random");
+                            format!("prion_random({})", arg(0))
                         }
                         // nt: remove
                         "remove" => {
@@ -2220,16 +2220,16 @@ fn stmt_c(
                             };
                             //nt: map按键删除
                             if first_ty == "map" || first_ty.starts_with("map(") {
-                                used.insert("argon_map_remove");
-                                format!("argon_map_remove({}, {})", arg(0), key_c(f, &args.get(1).unwrap_or(&Value::Int(0))))
+                                used.insert("prion_map_remove");
+                                format!("prion_map_remove({}, {})", arg(0), key_c(f, &args.get(1).unwrap_or(&Value::Int(0))))
                             } else {
-                            used.insert("argon_list_remove");
+                            used.insert("prion_list_remove");
                             let a1 = args.get(1).map(value_c).unwrap_or_else(|| "1".into());
-                            let raw = format!("argon_list_remove({}, {})", arg(0), a1);
+                            let raw = format!("prion_list_remove({}, {})", arg(0), a1);
                             if matches!(container_elem_ty(&first_ty).unwrap_or_default().as_str(), "str") {
                                 format!("((const char*)(size_t){})", raw)
                             } else if matches!(container_elem_ty(&first_ty).unwrap_or_default().as_str(), "float") {
-                                format!("argon_s2f({})", raw)
+                                format!("prion_s2f({})", raw)
                             } else {
                                 raw
                             }
@@ -2237,24 +2237,24 @@ fn stmt_c(
                         }
 // nt: 运行子程序
                         "run" => {
-                            used.insert("argon_run");
+                            used.insert("prion_run");
                             let a1 = args.get(1).map(value_c).unwrap_or_else(|| "0".into());
                             let a2 = args.get(2).map(value_c).unwrap_or_else(|| "\"\"".into());
                             let a3 = args.get(3).map(value_c).unwrap_or_else(|| "\"\"".into());
-                            format!("argon_run({}, {}, {}, {})", arg(0), a1, a2, a3)
+                            format!("prion_run({}, {}, {}, {})", arg(0), a1, a2, a3)
                         }
                         "str_to_c" => {
-                            used.insert("argon_to_c_str");
-                            format!("((long long)(size_t)argon_to_c_str({}))", arg(0))
+                            used.insert("prion_to_c_str");
+                            format!("((long long)(size_t)prion_to_c_str({}))", arg(0))
                         }
                         "str_from_c" => {
-                            used.insert("argon_from_c_str");
-                            format!("argon_from_c_str({})", arg(0))
+                            used.insert("prion_from_c_str");
+                            format!("prion_from_c_str({})", arg(0))
                         }
                         // nt: 文件写
                         "save_file" => {
-                            used.insert("argon_save_file");
-                            format!("argon_save_file({}, {})", arg(0), arg(1))
+                            used.insert("prion_save_file");
+                            format!("prion_save_file({}, {})", arg(0), arg(1))
                         }
                         _ => {
                             let callee = names.get(name).cloned().unwrap_or_else(|| name.clone());
@@ -2265,11 +2265,11 @@ fn stmt_c(
                 Rvalue::ListLit { elems } => {
                     let es: Vec<String> = elems.iter().map(value_c).collect();
                     if es.is_empty() {
-                        format!("argon_list_new({}, {})", elem_esz, elem_sgn)
+                        format!("prion_list_new({}, {})", elem_esz, elem_sgn)
                     } else if elems.iter().any(|e| is_str_val(f, e)) {
                         // nt: str 元素 ⇒ 逐
                         format!(
-                            "argon_list_lit_s({}, (const char* const[]){{{}}})",
+                            "prion_list_lit_s({}, (const char* const[]){{{}}})",
                             es.len(),
                             es.join(", ")
                         )
@@ -2279,14 +2279,14 @@ fn stmt_c(
                             .iter()
                             .map(|e| {
                                 if is_float_val(f, e) {
-                                    format!("argon_f2s({})", value_c(e))
+                                    format!("prion_f2s({})", value_c(e))
                                 } else {
                                     value_c(e)
                                 }
                             })
                             .collect();
                         format!(
-                            "argon_list_lit({}, (long long[]){{{}}}, {}, {})",
+                            "prion_list_lit({}, (long long[]){{{}}}, {}, {})",
                             es.len(),
                             es2.join(", "),
                             elem_esz,
@@ -2299,7 +2299,7 @@ fn stmt_c(
                             .map(|e| format!("(long long)(size_t){}", value_c(e)))
                             .collect();
                         format!(
-                            "argon_list_lit({}, (long long[]){{{}}}, {}, {})",
+                            "prion_list_lit({}, (long long[]){{{}}}, {}, {})",
                             es.len(),
                             es2.join(", "),
                             elem_esz,
@@ -2311,7 +2311,7 @@ fn stmt_c(
                             .and_then(|e| types.get(&e).map(|t| (t.0.clone(), ())))
                             .unwrap_or((String::new(), ()));
                         format!(
-                            "argon_list_lit_from({}, (const char*)({}[]){{{}}}, sizeof({}))",
+                            "prion_list_lit_from({}, (const char*)({}[]){{{}}}, sizeof({}))",
                             es.len(),
                             c,
                             es.join(", "),
@@ -2319,7 +2319,7 @@ fn stmt_c(
                         )
                     } else {
                         format!(
-                            "argon_list_lit({}, (long long[]){{{}}}, {}, {})",
+                            "prion_list_lit({}, (long long[]){{{}}}, {}, {})",
                             es.len(),
                             es.join(", "),
                             elem_esz,
@@ -2333,24 +2333,24 @@ fn stmt_c(
                     let ks: Vec<String> = pairs
                         .iter()
                         .map(|(k, _)| match k {
-                            argon_ir::MapKey::Int(n) => format!("{}LL", n),
-                            argon_ir::MapKey::Str(s) => format!("(long long)(size_t)\"{}\"", s),
+                            prion_ir::MapKey::Int(n) => format!("{}LL", n),
+                            prion_ir::MapKey::Str(s) => format!("(long long)(size_t)\"{}\"", s),
                         })
                         .collect();
                     let vs: Vec<String> = pairs
                         .iter()
                         .map(|(_, v)| {
                             if is_float_val(f, v) {
-                                format!("argon_f2s({})", value_c(v))
+                                format!("prion_f2s({})", value_c(v))
                             } else if is_str_val(f, v) {
-                                format!("(long long)(size_t)argon_str_copy({})", value_c(v))
+                                format!("(long long)(size_t)prion_str_copy({})", value_c(v))
                             } else {
                                 value_c(v)
                             }
                         })
                         .collect();
                     format!(
-                        "argon_map_lit({}, (const long long[]){{{}}}, (long long[]){{{}}}, {}, {}, {})",
+                        "prion_map_lit({}, (const long long[]){{{}}}, (long long[]){{{}}}, {}, {}, {})",
                         pairs.len(),
                         ks.join(", "),
                         vs.join(", "),
@@ -2385,16 +2385,16 @@ fn stmt_c(
                             .unwrap_or_default(),
                         _ => String::new(),
                     };
-                    let raw = format!("argon_map_at({}, {})", value_c(map), key_c(f, key));
+                    let raw = format!("prion_map_at({}, {})", value_c(map), key_c(f, key));
                     // nt: IR 侧已把结果类型
                     if vt == "str" {
                         format!("((const char*)(size_t){})", raw)
                     } else if vt.ends_with('*') {
                         format!("((void*)(size_t){})", raw)
                     } else if matches!(vt.split('(').next().unwrap_or("").trim(), "list" | "que" | "stack" | "map") {
-                        format!("((ArgonList*)(size_t){})", raw)
+                        format!("((PrionList*)(size_t){})", raw)
                     } else if vt == "float" {
-                        format!("argon_s2f({})", raw)
+                        format!("prion_s2f({})", raw)
                     } else {
                         raw
                     }
@@ -2419,15 +2419,15 @@ fn stmt_c(
                     } else if elem_handle {
                         format!("((void*)(size_t){})", 直读)
                     } else if container_elem_is_float(f, list) {
-                        format!("argon_s2f({})", 直读)
+                        format!("prion_s2f({})", 直读)
                     } else if container_elem_is_agg(f, list, types) {
                         //nt: 聚合走助手
                         let 助手 = 容器元素助手(f, list, types);
                         format!("{}({}, {})", 助手, value_c(list), value_c(index))
                     } else if !RELEASE.with(|c| c.get()) {
                         //nt: 调试态走检查函数
-                        used.insert("argon_list_at");
-                        format!("argon_list_at({}, {})", value_c(list), value_c(index))
+                        used.insert("prion_list_at");
+                        format!("prion_list_at({}, {})", value_c(list), value_c(index))
                     } else {
                         直读
                     }
@@ -2453,10 +2453,10 @@ fn stmt_c(
             }
             if types.contains_key(&base_ty) && is_struct_val {
                 let (ct, _) = types.get(&base_ty).unwrap();
-                let dc = ct.replace("argon_st_", "argon_dc_");
+                let dc = ct.replace("prion_st_", "prion_dc_");
                 let lhs_c = place_c(f, types, lhs);
                 if is_handle {
-                    let ptr_ct = c_ty_in(&Ty(dest_ty.clone()), types); // argon_st_0*
+                    let ptr_ct = c_ty_in(&Ty(dest_ty.clone()), types); // prion_st_0*
                     out.push_str(&format!(
                         "  {lhs} = ({ptr})malloc((size_t)(sizeof({ct})));\n  *{lhs} = {dc}(&{r});\n",
                         lhs = lhs_c,
@@ -2476,7 +2476,7 @@ fn stmt_c(
                 && matches!(lhs, Place { base, proj } if proj.is_empty()
                     && f.locals.get(*base).map(|l| l.is_param && l.ty.0.ends_with('*')).unwrap_or(false));
             let r = if 槽赋容器 {
-                format!("argon_list_dc_parent({})", r)
+                format!("prion_list_dc_parent({})", r)
             } else {
                 r
             };
@@ -2485,7 +2485,7 @@ fn stmt_c(
             let r = if dest_ty == "str"
                 && !matches!(rhs, Rvalue::BinOp { .. })
             {
-                format!("argon_str_copy({})", r)
+                format!("prion_str_copy({})", r)
             } else {
                 r
             };
@@ -2518,14 +2518,14 @@ fn stmt_c(
         // nt: map 键写
         Stmt::MapSet { map, key, value } => {
             let slot = if is_str_val(f, value) {
-                format!("(long long)(size_t)argon_str_copy({})", value_c(value))
+                format!("(long long)(size_t)prion_str_copy({})", value_c(value))
             } else if is_float_val(f, value) {
-                format!("argon_f2s({})", value_c(value))
+                format!("prion_f2s({})", value_c(value))
             } else {
                 value_c(value)
             };
             out.push_str(&format!(
-                "  argon_map_set({}, {}, {});\n",
+                "  prion_map_set({}, {}, {});\n",
                 value_c(map),
                 key_c(f, key),
                 slot
@@ -2535,14 +2535,14 @@ fn stmt_c(
         Stmt::ListSet { list, index, value } => {
             if is_str_val(f, value) {
                 out.push_str(&format!(
-                    "  argon_list_setat({}, {}, (long long)(size_t)argon_str_copy({}));\n",
+                    "  prion_list_setat({}, {}, (long long)(size_t)prion_str_copy({}));\n",
                     value_c(list),
                     value_c(index),
                     value_c(value)
                 ));
             } else if is_float_val(f, value) {
                 out.push_str(&format!(
-                    "  argon_list_setat({}, {}, argon_f2s({}));\n",
+                    "  prion_list_setat({}, {}, prion_f2s({}));\n",
                     value_c(list),
                     value_c(index),
                     value_c(value)
@@ -2550,14 +2550,14 @@ fn stmt_c(
             } else if is_agg_val(f, types, value) {
                 //nt: 聚合按地址
                 out.push_str(&format!(
-                    "  argon_list_setat_from({}, {}, (const char*)&{});\n",
+                    "  prion_list_setat_from({}, {}, (const char*)&{});\n",
                     value_c(list),
                     value_c(index),
                     value_c(value)
                 ));
             } else {
                 out.push_str(&format!(
-                    "  argon_list_setat({}, {}, {});\n",
+                    "  prion_list_setat({}, {}, {});\n",
                     value_c(list),
                     value_c(index),
                     value_c(value)
@@ -2567,7 +2567,7 @@ fn stmt_c(
         //nt: 发布态不发断言
         Stmt::Assert { .. } if RELEASE.with(|c| c.get()) => {}
         Stmt::Assert { cond, msg, fix } => out.push_str(&format!(
-            "  if (!({})) {{ argon_die({}, argon_line, \"{}\", \"{}\"); }}\n",
+            "  if (!({})) {{ prion_die({}, prion_line, \"{}\", \"{}\"); }}\n",
             value_c(cond),
             if msg.contains("空引用") { "1" } else { "7" },
             c_escape(msg),
@@ -2590,7 +2590,7 @@ thread_local! {
 //nt: 槽名修饰
 fn slot_global_name(key: &str, idx: usize) -> String {
     let _ = key;
-    format!("argon_slot_{}", idx)
+    format!("prion_slot_{}", idx)
 }
 
 //nt: 槽局部判定
@@ -2604,7 +2604,7 @@ fn drop_container_code(vn: &str, ty: &str, owned: bool, 聚合元: bool) -> Stri
     if ty.starts_with("map(") {
         // nt: 值为串才逐个放
         let vstr = if container_elem_ty(ty).as_deref() == Some("str") { 1 } else { 0 };
-        return format!("  if ({vn}) {{ argon_map_free({vn}, {vstr}); {vn} = 0; }}\n");
+        return format!("  if ({vn}) {{ prion_map_free({vn}, {vstr}); {vn} = 0; }}\n");
     }
     let ety = container_elem_ty(ty).unwrap_or_default();
     if ety == "str" || ((ety.ends_with('*') || 聚合元) && owned) {
@@ -2643,12 +2643,12 @@ fn block_c(
                         .with(|m| m.borrow().get(&key).and_then(|ls| ls.get(sp.line - 1).cloned()))
                         .unwrap_or_default();
                     if 行文本.is_empty() {
-                        out.push_str("  argon_src = 0;\n");
+                        out.push_str("  prion_src = 0;\n");
                     } else {
-                        out.push_str(&format!("  argon_src = \"{}\";\n", c_escape(&行文本)));
+                        out.push_str(&format!("  prion_src = \"{}\";\n", c_escape(&行文本)));
                     }
                     out.push_str(&format!(
-                        "  argon_line = {}; argon_col = {}; argon_len = {};\n",
+                        "  prion_line = {}; prion_col = {}; prion_len = {};\n",
                         sp.line, sp.col, sp.len
                     ));
                 }
@@ -2671,7 +2671,7 @@ fn block_c(
                 let 已逃 = ESCAPED.with(|s| s.borrow().contains(lid));
                 if !已逃 {
                     out.push_str(&format!(
-                        "  {vn} = ({ct}*)argon_copy_to_parent({vn}, (long long)sizeof({ct}));\n",
+                        "  {vn} = ({ct}*)prion_copy_to_parent({vn}, (long long)sizeof({ct}));\n",
                         vn = vn,
                         ct = ct
                     ));
@@ -2719,39 +2719,39 @@ fn support_section(used: &BTreeSet<&'static str>) -> String {
     let mut s = String::new();
     let emit_overflow = |name: &str, builtin: &str| {
         format!(
-            "static long long {}(long long a, long long b) {{\n  long long r;\n  ARGON_GUARD(if ({}(a, b, &r)) {{ argon_die_nc(3, \"整数运算溢出——加减乘结果超出了 int 的范围\", \"改用 float，或把计算拆小步\"); }})\n  return r;\n}}\n",
+            "static long long {}(long long a, long long b) {{\n  long long r;\n  PRION_GUARD(if ({}(a, b, &r)) {{ prion_die_nc(3, \"整数运算溢出——加减乘结果超出了 int 的范围\", \"改用 float，或把计算拆小步\"); }})\n  return r;\n}}\n",
             name, builtin
         )
     };
-    if used.contains("argon_sadd") {
-        s.push_str(&emit_overflow("argon_sadd", "__builtin_add_overflow"));
+    if used.contains("prion_sadd") {
+        s.push_str(&emit_overflow("prion_sadd", "__builtin_add_overflow"));
         s.push('\n');
     }
-    if used.contains("argon_ssub") {
-        s.push_str(&emit_overflow("argon_ssub", "__builtin_sub_overflow"));
+    if used.contains("prion_ssub") {
+        s.push_str(&emit_overflow("prion_ssub", "__builtin_sub_overflow"));
         s.push('\n');
     }
-    if used.contains("argon_smul") {
-        s.push_str(&emit_overflow("argon_smul", "__builtin_mul_overflow"));
+    if used.contains("prion_smul") {
+        s.push_str(&emit_overflow("prion_smul", "__builtin_mul_overflow"));
         s.push('\n');
     }
-    if used.contains("argon_div") || used.contains("argon_mod") {
+    if used.contains("prion_div") || used.contains("prion_mod") {
         s.push_str(
-            "long long argon_div(long long a, long long b) {\n  ARGON_GUARD(if (b == 0) { argon_die_nc(2, \"除以零——除数不能是 0\", \"先用 if 判一下（if 除数 != 0:）再除\"); })\n  return a / b;\n}\n",
+            "long long prion_div(long long a, long long b) {\n  PRION_GUARD(if (b == 0) { prion_die_nc(2, \"除以零——除数不能是 0\", \"先用 if 判一下（if 除数 != 0:）再除\"); })\n  return a / b;\n}\n",
         );
         s.push('\n');
     }
-    if used.contains("argon_mod") {
+    if used.contains("prion_mod") {
         s.push_str(
-            "long long argon_mod(long long a, long long b) {\n  ARGON_GUARD(if (b == 0) { argon_die_nc(2, \"除以零——除数不能是 0\", \"先用 if 判一下（if 除数 != 0:）再除\"); })\n  return a % b;\n}\n\n",
+            "long long prion_mod(long long a, long long b) {\n  PRION_GUARD(if (b == 0) { prion_die_nc(2, \"除以零——除数不能是 0\", \"先用 if 判一下（if 除数 != 0:）再除\"); })\n  return a % b;\n}\n\n",
         );
     }
     // nt: 时间与随机
-    if used.contains("argon_sleep") {
-        s.push_str("\n#ifdef _WIN32\n#include <windows.h>\n#else\n#include <unistd.h>\n#endif\nvoid argon_sleep(long long ms) {\n#ifdef _WIN32\n  Sleep((unsigned long)ms);\n#else\n  usleep((unsigned int)(ms * 1000));\n#endif\n}\n");
+    if used.contains("prion_sleep") {
+        s.push_str("\n#ifdef _WIN32\n#include <windows.h>\n#else\n#include <unistd.h>\n#endif\nvoid prion_sleep(long long ms) {\n#ifdef _WIN32\n  Sleep((unsigned long)ms);\n#else\n  usleep((unsigned int)(ms * 1000));\n#endif\n}\n");
     }
-    if used.contains("argon_random") {
-        s.push_str("\n#include <time.h>\nlong long argon_random(long long n) {\n  static int seeded = 0;\n  if (!seeded) { srand((unsigned)time(0)); seeded = 1; }\n  if (n <= 0) n = 1;\n  return (long long)(((unsigned long long)rand()) % (unsigned long long)n);\n}\n");
+    if used.contains("prion_random") {
+        s.push_str("\n#include <time.h>\nlong long prion_random(long long n) {\n  static int seeded = 0;\n  if (!seeded) { srand((unsigned)time(0)); seeded = 1; }\n  if (n <= 0) n = 1;\n  return (long long)(((unsigned long long)rand()) % (unsigned long long)n);\n}\n");
     }
 // nt: 运行子程序
     // nt: stdout / s
@@ -2761,17 +2761,17 @@ fn support_section(used: &BTreeSet<&'static str>) -> String {
 
 //nt: FFI 串转换
 fn ffi_str_section(used: &BTreeSet<&'static str>) -> String {
-    if !(used.contains("argon_to_c_str") || used.contains("argon_from_c_str")) {
+    if !(used.contains("prion_to_c_str") || used.contains("prion_from_c_str")) {
         return String::new();
     }
-    "const char* argon_to_c_str(const char* s) {\n  size_t n = strlen(s) + 1;\n  char* p = (char*)malloc((size_t)(n));\n  memcpy(p, s, n);\n  return p;\n}\nconst char* argon_from_c_str(long long addr) {\n  const char* s = (const char*)(size_t)addr;\n  size_t n = strlen(s) + 1;\n  char* p = (char*)malloc((size_t)(n));\n  memcpy(p, s, n);\n  return p;\n}\n".to_string()
+    "const char* prion_to_c_str(const char* s) {\n  size_t n = strlen(s) + 1;\n  char* p = (char*)malloc((size_t)(n));\n  memcpy(p, s, n);\n  return p;\n}\nconst char* prion_from_c_str(long long addr) {\n  const char* s = (const char*)(size_t)addr;\n  size_t n = strlen(s) + 1;\n  char* p = (char*)malloc((size_t)(n));\n  memcpy(p, s, n);\n  return p;\n}\n".to_string()
 }
 
 // nt: 运行子程序运行时
-const ARGON_RUN_RT: &str = r#"
+const PRION_RUN_RT: &str = r#"
 #ifdef _WIN32
 #include <windows.h>
-long long argon_run(const char* prog, ArgonList* args, const char* out_file, const char* err_file) {
+long long prion_run(const char* prog, PrionList* args, const char* out_file, const char* err_file) {
   if (!prog || !prog[0]) return -404;
   wchar_t wcmd[16384]; wchar_t wtmp[4096];
   // nt: 命令行形式
@@ -2779,7 +2779,7 @@ long long argon_run(const char* prog, ArgonList* args, const char* out_file, con
   _snwprintf(wcmd, 16384, L"\"%s\"", wtmp);
   long long i = 0;
   while (args && i < args->len) {
-    const char* a = (const char*)(size_t)argon_slot_get(argon_list_slot(args, i), args->esz, args->sgn);
+    const char* a = (const char*)(size_t)prion_slot_get(prion_list_slot(args, i), args->esz, args->sgn);
     if (a && a[0] && MultiByteToWideChar(CP_UTF8, 0, a, -1, wtmp, 4096) > 0) {
       wcscat_s(wcmd, 16384, L" "); if (strchr(a, 32)) wcscat_s(wcmd, 16384, (const wchar_t[]){0x22, 0});
       wcscat_s(wcmd, 16384, wtmp); if (strchr(a, 32)) wcscat_s(wcmd, 16384, (const wchar_t[]){0x22, 0});
@@ -2827,7 +2827,7 @@ long long argon_run(const char* prog, ArgonList* args, const char* out_file, con
 #include <sys/wait.h>
 #include <fcntl.h>
 #include <errno.h>
-long long argon_run(const char* prog, ArgonList* args, const char* out_file, const char* err_file) {
+long long prion_run(const char* prog, PrionList* args, const char* out_file, const char* err_file) {
   if (!prog || !prog[0]) return -404;
   long long n = args ? args->len : 0;
   char** av = (char**)malloc(sizeof(char*) * (size_t)(n + 2));
@@ -2835,7 +2835,7 @@ long long argon_run(const char* prog, ArgonList* args, const char* out_file, con
   av[0] = (char*)prog;
   long long i = 0;
   while (i < n) {
-    const char* a = (const char*)(size_t)argon_slot_get(argon_list_slot(args, i), args->esz, args->sgn);
+    const char* a = (const char*)(size_t)prion_slot_get(prion_list_slot(args, i), args->esz, args->sgn);
     av[i + 1] = (char*)(a ? a : "");
     i = i + 1;
   }
@@ -2883,20 +2883,20 @@ long long argon_run(const char* prog, ArgonList* args, const char* out_file, con
 fn mark_runtime(name: &str, used: &mut BTreeSet<&'static str>) {
     match name {
         "rnd" => {
-            used.insert("argon_random");
+            used.insert("prion_random");
         }
 // nt: 运行子程序
         "run" => {
-            used.insert("argon_run");
+            used.insert("prion_run");
         }
         "sle_ms" => {
-            used.insert("argon_sleep");
+            used.insert("prion_sleep");
         }
         "str_to_c" => {
-            used.insert("argon_to_c_str");
+            used.insert("prion_to_c_str");
         }
         "str_from_c" => {
-            used.insert("argon_from_c_str");
+            used.insert("prion_from_c_str");
         }
         _ => {}
     }
@@ -2905,8 +2905,8 @@ fn mark_runtime(name: &str, used: &mut BTreeSet<&'static str>) {
 // nt: lower
 
 // nt: 逃逸复印运行时
-const ARGON_COPY_RT: &str = r#"/* 逃逸复印：整值拷出一份系统堆块 */
-static void* argon_copy_to_parent(const void* src, long long n) {
+const PRION_COPY_RT: &str = r#"/* 逃逸复印：整值拷出一份系统堆块 */
+static void* prion_copy_to_parent(const void* src, long long n) {
   void* d = malloc((size_t)(n));
   if (src && d) memcpy(d, src, (size_t)n);
   return d;
@@ -2915,20 +2915,20 @@ static void* argon_copy_to_parent(const void* src, long long n) {
 "#;
 
 
-const ARGON_DIE_RT: &str = r#"void argon_die(int code, long long line, const char* msg, const char* fix) {
-  const char* srcf = argon_cur_file ? argon_cur_file : ARGON_FILE;
+const PRION_DIE_RT: &str = r#"void prion_die(int code, long long line, const char* msg, const char* fix) {
+  const char* srcf = prion_cur_file ? prion_cur_file : PRION_FILE;
   fprintf(stderr, "[R%02d] 位于 %s", code, srcf);
   if (line > 0) {
-    long long n = (long long)(sizeof(ARGON_SRC) / sizeof(ARGON_SRC[0])) - 1;
-    if (argon_col > 0) {
-      fprintf(stderr, " 第 %lld 行第 %lld 列发生错误", line, argon_col);
+    long long n = (long long)(sizeof(PRION_SRC) / sizeof(PRION_SRC[0])) - 1;
+    if (prion_col > 0) {
+      fprintf(stderr, " 第 %lld 行第 %lld 列发生错误", line, prion_col);
     } else {
       fprintf(stderr, " 第 %lld 行发生错误", line);
     }
-    if (argon_src) {
-      fprintf(stderr, "，源码为：%s", argon_src);
-    } else if (argon_cur_file == 0 && line >= 1 && line <= n) {
-      fprintf(stderr, "，源码为：%s", ARGON_SRC[line - 1]);
+    if (prion_src) {
+      fprintf(stderr, "，源码为：%s", prion_src);
+    } else if (prion_cur_file == 0 && line >= 1 && line <= n) {
+      fprintf(stderr, "，源码为：%s", PRION_SRC[line - 1]);
     }
   } else {
     fprintf(stderr, "发生错误");
@@ -2936,7 +2936,7 @@ const ARGON_DIE_RT: &str = r#"void argon_die(int code, long long line, const cha
   fprintf(stderr, "，错误为：%s。改法：%s。\n", msg, fix);
   exit(1);
 }
-void argon_die_nc(int code, const char* msg, const char* fix) { argon_die(code, argon_line, msg, fix); }
+void prion_die_nc(int code, const char* msg, const char* fix) { prion_die(code, prion_line, msg, fix); }
 "#;
 
 // nt: 顶层块种类
@@ -3230,23 +3230,23 @@ pub fn runtime_c() -> String {
 pub fn runtime_c_for(file: &str, src_text: &str) -> String {
     let mut used: BTreeSet<&'static str> = BTreeSet::new();
     for n in [
-        "argon_sadd", "argon_ssub", "argon_smul", "argon_div", "argon_mod", "argon_run",
-        "argon_list_at", "argon_list_push", "argon_map_at", "argon_str_eq", "argon_concat",
-        "argon_str_index",
-        "argon_read_file", "argon_save_file", "argon_args", "argon_sleep", "argon_random",
-        "argon_to_c_str", "argon_from_c_str",
+        "prion_sadd", "prion_ssub", "prion_smul", "prion_div", "prion_mod", "prion_run",
+        "prion_list_at", "prion_list_push", "prion_map_at", "prion_str_eq", "prion_concat",
+        "prion_str_index",
+        "prion_read_file", "prion_save_file", "prion_args", "prion_sleep", "prion_random",
+        "prion_to_c_str", "prion_from_c_str",
     ] {
         used.insert(n);
     }
     let mut s = String::new();
     s.push_str("#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\n");
     //nt: 护栏开关宏
-    s.push_str("#ifdef ARGON_NOGUARD\n#define ARGON_GUARD(x)\n#else\n#define ARGON_GUARD(x) x\n#endif\n\n");
-    s.push_str("long long argon_line = 0; long long argon_col = 0; long long argon_len = 0; const char* argon_cur_file = 0; const char* argon_src = 0;\nvoid argon_at(void) { fprintf(stderr, \"  （第 %lld 行）\\n\", argon_line); }\nconst char* argon_bool_str(long long b) { return b ? \"re\" : \"fa\"; }\n\n");
+    s.push_str("#ifdef PRION_NOGUARD\n#define PRION_GUARD(x)\n#else\n#define PRION_GUARD(x) x\n#endif\n\n");
+    s.push_str("long long prion_line = 0; long long prion_col = 0; long long prion_len = 0; const char* prion_cur_file = 0; const char* prion_src = 0;\nvoid prion_at(void) { fprintf(stderr, \"  （第 %lld 行）\\n\", prion_line); }\nconst char* prion_bool_str(long long b) { return b ? \"re\" : \"fa\"; }\n\n");
     {
         let esc = |x: &str| x.replace('\\', "\\\\").replace('"', "\\\"");
-        s.push_str(&format!("static const char* ARGON_FILE = \"{}\";\n", esc(file)));
-        s.push_str("static const char* ARGON_SRC[] = {\n");
+        s.push_str(&format!("static const char* PRION_FILE = \"{}\";\n", esc(file)));
+        s.push_str("static const char* PRION_SRC[] = {\n");
         //nt: 源码表随调试开关
         if DEBUG_LINES.with(|c| c.get()) {
             for ln in src_text.lines() {
@@ -3255,23 +3255,23 @@ pub fn runtime_c_for(file: &str, src_text: &str) -> String {
         }
         s.push_str("  0\n};\n");
     }
-    s.push_str(ARGON_DIE_RT);
+    s.push_str(PRION_DIE_RT);
     s.push_str(&support_section(&used));
-    s.push_str(ARGON_COPY_RT);
+    s.push_str(PRION_COPY_RT);
     s.push_str(&ffi_str_section(&used));
-    s.push_str(ARGON_LIST_RT);
-    s.push_str(ARGON_RUN_RT);
-    s.push_str(ARGON_STR_RT);
-    s.push_str(ARGON_MAP_RT);
-    s.push_str(ARGON_FILE_RT);
-    s.push_str(ARGON_ARGS_RT);
-    s.push_str("const char* argon_str_copy(const char* s) {\n  if (!s) return 0;\n  size_t n = strlen(s) + 1;\n  char* p = (char*)malloc((size_t)(n));\n  if (!p) { argon_die_nc(6, \"内存不够\", \"缩小数据量\"); }\n  memcpy(p, s, n);\n  return p;\n}\n\n");
-    s.replace("static long long argon_sadd(", "long long argon_sadd(")
-        .replace("static long long argon_ssub(", "long long argon_ssub(")
-        .replace("static long long argon_smul(", "long long argon_smul(")
-        .replace("static void* argon_copy_to_parent(", "void* argon_copy_to_parent(")
-        .replace("static void argon_str_iter_start(", "void argon_str_iter_start(")
-        .replace("static const char* argon_str_iter_next(", "const char* argon_str_iter_next(")
+    s.push_str(PRION_LIST_RT);
+    s.push_str(PRION_RUN_RT);
+    s.push_str(PRION_STR_RT);
+    s.push_str(PRION_MAP_RT);
+    s.push_str(PRION_FILE_RT);
+    s.push_str(PRION_ARGS_RT);
+    s.push_str("const char* prion_str_copy(const char* s) {\n  if (!s) return 0;\n  size_t n = strlen(s) + 1;\n  char* p = (char*)malloc((size_t)(n));\n  if (!p) { prion_die_nc(6, \"内存不够\", \"缩小数据量\"); }\n  memcpy(p, s, n);\n  return p;\n}\n\n");
+    s.replace("static long long prion_sadd(", "long long prion_sadd(")
+        .replace("static long long prion_ssub(", "long long prion_ssub(")
+        .replace("static long long prion_smul(", "long long prion_smul(")
+        .replace("static void* prion_copy_to_parent(", "void* prion_copy_to_parent(")
+        .replace("static void prion_str_iter_start(", "void prion_str_iter_start(")
+        .replace("static const char* prion_str_iter_next(", "const char* prion_str_iter_next(")
 }
 
 pub fn lower_to_c(
@@ -3322,20 +3322,20 @@ pub fn lower_to_c(
     // nt: 积类型表
     let mut types: TypeMap = BTreeMap::new();
     for (i, st) in p.types.iter().enumerate() {
-        types.insert(st.name.clone(), (format!("argon_st_{}", i), st.fields.clone()));
+        types.insert(st.name.clone(), (format!("prion_st_{}", i), st.fields.clone()));
     }
 
     let mut out = String::new();
     out.push_str("#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\n");
     //nt: 护栏开关宏
-    out.push_str("#ifdef ARGON_NOGUARD\n#define ARGON_GUARD(x)\n#else\n#define ARGON_GUARD(x) x\n#endif\n\n");
+    out.push_str("#ifdef PRION_NOGUARD\n#define PRION_GUARD(x)\n#else\n#define PRION_GUARD(x) x\n#endif\n\n");
     // nt: 真假值按源码字面量的
-    out.push_str("long long argon_line = 0; long long argon_col = 0; long long argon_len = 0; const char* argon_cur_file = 0; const char* argon_src = 0;\nvoid argon_at(void) { fprintf(stderr, \"  （第 %lld 行）\\n\", argon_line); }\nconst char* argon_bool_str(long long b) { return b ? \"re\" : \"fa\"; }\n\n");
+    out.push_str("long long prion_line = 0; long long prion_col = 0; long long prion_len = 0; const char* prion_cur_file = 0; const char* prion_src = 0;\nvoid prion_at(void) { fprintf(stderr, \"  （第 %lld 行）\\n\", prion_line); }\nconst char* prion_bool_str(long long b) { return b ? \"re\" : \"fa\"; }\n\n");
     // nt: 源码位置
     {
         let esc = |x: &str| x.replace('\\', "\\\\").replace('"', "\\\"");
-        out.push_str(&format!("static const char* ARGON_FILE = \"{}\";\n", esc(file)));
-        out.push_str("static const char* ARGON_SRC[] = {\n");
+        out.push_str(&format!("static const char* PRION_FILE = \"{}\";\n", esc(file)));
+        out.push_str("static const char* PRION_SRC[] = {\n");
         //nt: 源码表随调试开关
         if DEBUG_LINES.with(|c| c.get()) {
             for ln in src_text.lines() {
@@ -3343,40 +3343,40 @@ pub fn lower_to_c(
             }
         }
         out.push_str("  0\n};\n");
-        out.push_str(ARGON_DIE_RT);
+        out.push_str(PRION_DIE_RT);
     }
     out.push_str(&support_section(&used));
     // nt: 内存管理基础设施
-    out.push_str(ARGON_COPY_RT);
+    out.push_str(PRION_COPY_RT);
     out.push_str(&ffi_str_section(&used));
 
     // nt: list 运行时
     if uses_list(p) || uses_map(p) {
-        out.push_str(ARGON_LIST_RT);
+        out.push_str(PRION_LIST_RT);
     }
     // nt: 运行子程序
-    if used.contains("argon_run") {
-        out.push_str(ARGON_RUN_RT);
+    if used.contains("prion_run") {
+        out.push_str(PRION_RUN_RT);
     }
     // nt: str 运行时
     if uses_str(p) {
-        out.push_str(ARGON_STR_RT);
+        out.push_str(PRION_STR_RT);
     }
     // nt: map 运行时
     if uses_map(p) {
-        out.push_str(ARGON_MAP_RT);
+        out.push_str(PRION_MAP_RT);
     }
     // nt: 文件 IO 运行时
     if uses_file(p) {
-        out.push_str(ARGON_FILE_RT);
+        out.push_str(PRION_FILE_RT);
     }
     // nt: 命令行参数
     if uses_args(p) {
-        out.push_str(ARGON_ARGS_RT);
+        out.push_str(PRION_ARGS_RT);
     }
 
     // nt: str 的「一层复印
-    out.push_str("const char* argon_str_copy(const char* s) {\n  if (!s) return 0;\n  size_t n = strlen(s) + 1;\n  char* p = (char*)malloc((size_t)(n));\n  if (!p) { argon_die_nc(6, \"内存不够——程序申请的空间超出可用内存\", \"缩小数据量，或换更省内存的写法\"); }\n  memcpy(p, s, n);\n  return p;\n}\n\n");
+    out.push_str("const char* prion_str_copy(const char* s) {\n  if (!s) return 0;\n  size_t n = strlen(s) + 1;\n  char* p = (char*)malloc((size_t)(n));\n  if (!p) { prion_die_nc(6, \"内存不够——程序申请的空间超出可用内存\", \"缩小数据量，或换更省内存的写法\"); }\n  memcpy(p, s, n);\n  return p;\n}\n\n");
 
     // nt: 积类型 ⇒ C ty
     for st in &p.types {
@@ -3414,7 +3414,7 @@ pub fn lower_to_c(
             body.push_str("  r = *s;\n");
             body.push_str("  return r;\n");
             out.push_str(&format!(
-                "static {} argon_dc_{}(const {}* s) {{\n{}}}\n\n",
+                "static {} prion_dc_{}(const {}* s) {{\n{}}}\n\n",
                 c, i, c, body
             ));
             continue;
@@ -3423,19 +3423,19 @@ pub fn lower_to_c(
             let fty = t.0.as_str();
             let base = fty.trim_end_matches('*');
             if base == "str" {
-                body.push_str(&format!("  r.f{} = s->f{} ? argon_str_copy(s->f{}) : 0;\n", k, k, k));
+                body.push_str(&format!("  r.f{} = s->f{} ? prion_str_copy(s->f{}) : 0;\n", k, k, k));
             } else if fty.ends_with('*') {
                 body.push_str(&format!("  r.f{} = s->f{};\n", k, k)); // 把手：只抄指针（共享）
             } else if let Some((cc, _)) = types.get(base) {
-                let idx = cc.trim_start_matches("argon_st_");
-                body.push_str(&format!("  r.f{} = argon_dc_{}(&s->f{});\n", k, idx, k));
+                let idx = cc.trim_start_matches("prion_st_");
+                body.push_str(&format!("  r.f{} = prion_dc_{}(&s->f{});\n", k, idx, k));
             } else {
                 body.push_str(&format!("  r.f{} = s->f{};\n", k, k));
             }
         }
         body.push_str("  return r;\n");
         out.push_str(&format!(
-            "static {} argon_dc_{}(const {}* s) {{\n{}}}\n\n",
+            "static {} prion_dc_{}(const {}* s) {{\n{}}}\n\n",
             c, i, c, body
         ));
     }
@@ -3445,7 +3445,7 @@ pub fn lower_to_c(
         for (i, st) in p.types.iter().enumerate() {
         let (c, _) = &types[&st.name];
         out.push_str(&format!(
-            "static {c} argon_at_st_{i}(ArgonList* l, long long i) {{\n  {c} r;\n  argon_list_copy_at(l, i, (char*)&r);\n  return r;\n}}\n\n",
+            "static {c} prion_at_st_{i}(PrionList* l, long long i) {{\n  {c} r;\n  prion_list_copy_at(l, i, (char*)&r);\n  return r;\n}}\n\n",
             c = c,
             i = i
         ));
@@ -3463,12 +3463,12 @@ pub fn lower_to_c(
         for (fi, (_, ty)) in 字段表.iter().enumerate() {
             let t = ty.0.trim().to_string();
             let 行 = if t == "str" {
-                format!("  d.f{} = argon_str_copy(s->f{});\n", fi, fi)
+                format!("  d.f{} = prion_str_copy(s->f{});\n", fi, fi)
             } else if let Some(e) = ["list(", "que(", "stack("].iter().find_map(|q| {
                 t.strip_prefix(q).and_then(|x| x.strip_suffix(')')).map(|x| x.trim().to_string())
             }) {
                 let 旗 = if e == "str" { 1 } else { 0 };
-                format!("  d.f{} = argon_dc_list(s->f{}, {});\n", fi, fi, 旗)
+                format!("  d.f{} = prion_dc_list(s->f{}, {});\n", fi, fi, 旗)
             } else if t.starts_with("map(") {
                 let v = t
                     .trim_start_matches("map(")
@@ -3479,9 +3479,9 @@ pub fn lower_to_c(
                     .trim()
                     .to_string();
                 let 旗 = if v == "str" { 1 } else { 0 };
-                format!("  d.f{} = argon_dc_map(s->f{}, {});\n", fi, fi, 旗)
+                format!("  d.f{} = prion_dc_map(s->f{}, {});\n", fi, fi, 旗)
             } else if let Some((c2, _)) = types.get(&t) {
-                let 助 = c2.replace("argon_st_", "argon_dcdeep_st_");
+                let 助 = c2.replace("prion_st_", "prion_dcdeep_st_");
                 format!("  d.f{} = {}(&s->f{});\n", fi, 助, fi)
             } else {
                 format!("  d.f{} = s->f{};\n", fi, fi)
@@ -3492,19 +3492,19 @@ pub fn lower_to_c(
     }
     if !深拷表.is_empty() {
         for (i, c, _) in 深拷表.iter() {
-            out.push_str(&format!("static {c} argon_dcdeep_st_{i}(const {c}* s);\n"));
+            out.push_str(&format!("static {c} prion_dcdeep_st_{i}(const {c}* s);\n"));
         }
         out.push('\n');
         for (i, c, 体) in 深拷表.iter() {
             out.push_str(&format!(
-                "static {c} argon_dcdeep_st_{i}(const {c}* s) {{\n  {c} d;\n{体}  return d;\n}}\n\n"
+                "static {c} prion_dcdeep_st_{i}(const {c}* s) {{\n  {c} d;\n{体}  return d;\n}}\n\n"
             ));
         }
     }
 
     // nt: 前向声明
     // nt: 无别名标注
-    let 观感 = argon_ir::形参观感(p);
+    let 观感 = prion_ir::形参观感(p);
     let release = RELEASE.with(|c| c.get());
     for (fi, f) in p.functions.iter().enumerate() {
         if f.name == "main" {
@@ -3518,7 +3518,7 @@ pub fn lower_to_c(
             .enumerate()
             .map(|(k, (i, l))| {
                 let 只读 = 观感.get(&(f.name.clone(), k)).copied() == Some(false);
-                let 堆 = argon_ir::is_container_ty(&l.ty.0) || l.ty.0 == "str" || l.ty.0.ends_with('*');
+                let 堆 = prion_ir::is_container_ty(&l.ty.0) || l.ty.0 == "str" || l.ty.0.ends_with('*');
                 if release && 只读 && 堆 {
                     format!("{} __restrict {}", c_ty_in(&l.ty, &types), vname(i))
                 } else {
@@ -3672,7 +3672,7 @@ pub fn lower_to_c(
             .enumerate()
             .map(|(k, (i, l))| {
                 let 只读 = 观感.get(&(f.name.clone(), k)).copied() == Some(false);
-                let 堆 = argon_ir::is_container_ty(&l.ty.0) || l.ty.0 == "str" || l.ty.0.ends_with('*');
+                let 堆 = prion_ir::is_container_ty(&l.ty.0) || l.ty.0 == "str" || l.ty.0.ends_with('*');
                 if release && 只读 && 堆 {
                     format!("{} __restrict {}", c_ty_in(&l.ty, &types), vname(i))
                 } else {
@@ -3693,15 +3693,15 @@ pub fn lower_to_c(
         //nt: 当前源文件
         let 文件名 = f.file.rsplit(['/', '\\']).next().unwrap_or("");
         if 文件名.is_empty() {
-            out.push_str("  argon_cur_file = 0;\n");
+            out.push_str("  prion_cur_file = 0;\n");
         } else {
-            out.push_str(&format!("  argon_cur_file = \"{}\";\n", c_escape(文件名)));
+            out.push_str(&format!("  prion_cur_file = \"{}\";\n", c_escape(文件名)));
         }
         // nt: 局部声明
         for (i, l) in f.locals.iter().enumerate() {
             if !l.is_param && !is_slot_local(l) {
                 let ct2 = c_ty_in(&l.ty, &types);
-                if ct2.starts_with("ArgonList") || ct2.starts_with("ArgonMap") || ct2.ends_with('*') {
+                if ct2.starts_with("PrionList") || ct2.starts_with("PrionMap") || ct2.ends_with('*') {
                     out.push_str(&format!("  {} {} = 0;\n", ct2, vname(i)));
                 } else {
                     out.push_str(&format!("  {} {};\n", ct2, vname(i)));

@@ -1,5 +1,5 @@
 [package]
-name = "argon-error"
+name = "prion-error"
 version.workspace = true
 edition.workspace = true
 

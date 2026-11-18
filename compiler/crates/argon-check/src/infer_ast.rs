@@ -1,10 +1,10 @@
 //! 表达式类型推断（语法树版）
 //!
 //! 与 token 扫描推断对比：两条路各算一遍，不一致的会打出来。
-//! 默认关，设 `ARGON_INFER_DIFF` 开启，用于核对边界。
+//! 默认关，设 `PRION_INFER_DIFF` 开启，用于核对边界。
 
 use crate::{字段型, Ctx};
-use argon_parser::expr::{BinOp as EBinOp, Expr, ExprKind, Target, UnOp, Verb};
+use prion_parser::expr::{BinOp as EBinOp, Expr, ExprKind, Target, UnOp, Verb};
 
 //nt: 推断结果侧表
 thread_local! {
@@ -190,9 +190,9 @@ fn 元素型(t: &str) -> Option<String> {
 }
 
 //nt: 两路对比
-pub fn 对比(ast: &argon_parser::Program, cx: &Ctx) {
+pub fn 对比(ast: &prion_parser::Program, cx: &Ctx) {
     //nt: 默认关
-    if std::env::var("ARGON_INFER_DIFF").is_err() {
+    if std::env::var("PRION_INFER_DIFF").is_err() {
         return;
     }
     for b in &ast.blocks {
@@ -201,24 +201,24 @@ pub fn 对比(ast: &argon_parser::Program, cx: &Ctx) {
 }
 
 //nt: 递归对比
-fn 走(stmts: &[argon_parser::Stmt], cx: &Ctx, block: &str) {
-    use argon_parser::Stmt as S;
+fn 走(stmts: &[prion_parser::Stmt], cx: &Ctx, block: &str) {
+    use prion_parser::Stmt as S;
     for s in stmts {
         match s {
             S::Line { line, exprs, kind, .. } => {
                 let Some(e) = exprs.first() else { continue };
                 let 新 = 推断(e, cx, block);
                 //nt: 旧路径也只看右值
-                let t: &[argon_lexer::Token] = kind.tokens();
+                let t: &[prion_lexer::Token] = kind.tokens();
                 let mut 深 = 0i32;
                 let mut eq = None;
                 for (k, tk) in t.iter().enumerate() {
                     match tk {
-                        argon_lexer::Token::Sym("(") | argon_lexer::Token::Sym("[")
-                        | argon_lexer::Token::Sym("{") => 深 += 1,
-                        argon_lexer::Token::Sym(")") | argon_lexer::Token::Sym("]")
-                        | argon_lexer::Token::Sym("}") => 深 -= 1,
-                        argon_lexer::Token::Sym("=") if 深 == 0 => {
+                        prion_lexer::Token::Sym("(") | prion_lexer::Token::Sym("[")
+                        | prion_lexer::Token::Sym("{") => 深 += 1,
+                        prion_lexer::Token::Sym(")") | prion_lexer::Token::Sym("]")
+                        | prion_lexer::Token::Sym("}") => 深 -= 1,
+                        prion_lexer::Token::Sym("=") if 深 == 0 => {
                             eq = Some(k);
                             break;
                         }
@@ -242,7 +242,7 @@ fn 走(stmts: &[argon_parser::Stmt], cx: &Ctx, block: &str) {
                     .iter()
                     .skip(1)
                     .find_map(|t| match t {
-                        argon_lexer::Token::Str(n) | argon_lexer::Token::Ident(n) => Some(n.clone()),
+                        prion_lexer::Token::Str(n) | prion_lexer::Token::Ident(n) => Some(n.clone()),
                         _ => None,
                     })
                     .unwrap_or_default();

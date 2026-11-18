@@ -2,22 +2,22 @@
 //!
 //! 找到深拷临时与消费它的调用语句；被调形参不被写时，把实参改回源值、删除深拷语句。
 
-use argon_ir::{Exit, Place, Program, Rvalue, Stmt, Value};
+use prion_ir::{Exit, Place, Program, Rvalue, Stmt, Value};
 use std::collections::BTreeSet;
 
 //nt: 值里含该局部
-fn 值含(v: &Value, lid: argon_ir::LocalId) -> bool {
+fn 值含(v: &Value, lid: prion_ir::LocalId) -> bool {
     matches!(v, Value::Local(x) if *x == lid)
 }
 
 //nt: 位置指向该局部
-fn 位指(p: &Place, lid: argon_ir::LocalId) -> bool {
+fn 位指(p: &Place, lid: prion_ir::LocalId) -> bool {
     p.base == lid
 }
 
 
 //nt: 语句是否引用该局部
-fn 语句含局部(s: &Stmt, t: argon_ir::LocalId) -> bool {
+fn 语句含局部(s: &Stmt, t: prion_ir::LocalId) -> bool {
     match s {
         Stmt::Assign { lhs, rhs } => 位指(lhs, t) || 右值含局部(rhs, t),
         Stmt::Call { args, .. } => args.iter().any(|a| 值含(a, t)),
@@ -30,7 +30,7 @@ fn 语句含局部(s: &Stmt, t: argon_ir::LocalId) -> bool {
 }
 
 //nt: 右值是否引用该局部
-fn 右值含局部(r: &Rvalue, t: argon_ir::LocalId) -> bool {
+fn 右值含局部(r: &Rvalue, t: prion_ir::LocalId) -> bool {
     match r {
         Rvalue::Use(p) | Rvalue::Ref(p) => 位指(p, t),
         Rvalue::Const(v) => 值含(v, t),
@@ -48,7 +48,7 @@ fn 右值含局部(r: &Rvalue, t: argon_ir::LocalId) -> bool {
 }
 
 //nt: 出口是否携该局部
-fn 出口含局部(e: &Exit, t: argon_ir::LocalId) -> bool {
+fn 出口含局部(e: &Exit, t: prion_ir::LocalId) -> bool {
     match e {
         Exit::Return(Some(v)) => 值含(v, t),
         Exit::Branch { targets, .. } => targets.iter().any(|x| x.args.iter().any(|a| 值含(a, t))),
@@ -57,7 +57,7 @@ fn 出口含局部(e: &Exit, t: argon_ir::LocalId) -> bool {
 }
 
 //nt: 临时另有使用
-fn 另有使用(f: &argon_ir::Function, t: argon_ir::LocalId, 跳块: usize, 跳句: usize) -> bool {
+fn 另有使用(f: &prion_ir::Function, t: prion_ir::LocalId, 跳块: usize, 跳句: usize) -> bool {
     for (bi, b) in f.blocks.iter().enumerate() {
         for (i, s) in b.stmts.iter().enumerate() {
             if bi == 跳块 && i == 跳句 {
@@ -76,7 +76,7 @@ fn 另有使用(f: &argon_ir::Function, t: argon_ir::LocalId, 跳块: usize, 跳
 
 //nt: 条件 dc 消除
 pub fn run(p: &mut Program) {
-    let 观感 = argon_ir::形参观感(p);
+    let 观感 = prion_ir::形参观感(p);
     if 观感.is_empty() {
         return;
     }
