@@ -1,14 +1,14 @@
-//! 编译期求值（常量折叠）
-//!
-//! 只折字面量与运算符：整数 / 浮点 / 字符串 / 真假值，
-//! 算术 `+ - * / %`、比较、`and` / `or` / `not`、括号。
-//! 含名字、调用、下标的表达式返回 None，交调用方按普通表达式处理。
+
+
+
+
+
 
 use prion_lexer::Token;
 
 use crate::Value;
 
-//nt: 折叠结果
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Const {
     Int(i64),
@@ -18,7 +18,7 @@ pub enum Const {
 }
 
 impl Const {
-    //nt: 转 IR 值
+    
     pub fn 转值(&self) -> Value {
         match self {
             Const::Int(n) => Value::Int(*n),
@@ -44,7 +44,7 @@ impl Const {
     }
 }
 
-//nt: 折整个记号段
+
 pub fn 折叠(toks: &[Token]) -> Option<Const> {
     let mut p = 解 { t: toks, i: 0 };
     let v = p.或()?;
@@ -54,7 +54,7 @@ pub fn 折叠(toks: &[Token]) -> Option<Const> {
     Some(v)
 }
 
-//nt: 折条件真假
+
 pub fn 折叠条件(toks: &[Token]) -> Option<bool> {
     match 折叠(toks)? {
         Const::Bool(b) => Some(b),
@@ -180,7 +180,7 @@ fn 作真(c: &Const) -> bool {
 }
 
 fn 比较(l: &Const, r: &Const, op: &str) -> Option<bool> {
-    //nt: 数值比较
+    
     let 数值 = |c: &Const| match c {
         Const::Int(n) => Some(*n as f64),
         Const::Float(x) => Some(*x),
@@ -272,8 +272,8 @@ fn 作浮(c: &Const) -> Option<f64> {
     }
 }
 
-//nt: 带环境折叠
-//nt: 查变量与调函数
+
+
 pub fn 折叠带环境(
     toks: &[Token],
     取变量: &mut dyn FnMut(&str) -> Option<Const>,
@@ -380,7 +380,7 @@ impl<'a> 解带环境<'a> {
                 self.i += 1;
                 Some(Const::Bool(!作真(&self.元()?)))
             }
-            //nt: 读环境
+            
             Token::Kw("val") => {
                 let n = match self.t.get(self.i + 1) {
                     Some(Token::Str(s)) | Some(Token::Ident(s)) => s.clone(),
@@ -389,7 +389,7 @@ impl<'a> 解带环境<'a> {
                 self.i += 2;
                 (self.取变量)(&n)
             }
-            //nt: 折实参再调用
+            
             Token::Kw("call") => {
                 if !matches!(self.t.get(self.i + 1), Some(Token::Kw("fn"))) {
                     return None;

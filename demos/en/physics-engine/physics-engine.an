@@ -3,20 +3,20 @@ add type "Particle" = (x float, y float, vx float, vy float)
 add val "list" list("Particle"*) = []
 add val "hits" int = 0
 
-//nt: field half-width
+
 add val "bound" float = 50.0
-//nt: particle radius
+
 add val "radius" float = 0.5
 
-//nt: spawn and append
+
 add fn "spawn"(x float, y float, vx float, vy float) "Particle"*:
     add val "gp" "Particle"* = "Particle"(call val "x", call val "y", call val "vx", call val "vy")
     push(call val "list", call val "gp")
     give call val "gp"
 ;
 
-//nt: integrate one step
-//nt: bounce reverses velocity at walls
+
+
 add fn "step"(dt float) int:
     add val "spp" "Particle"* = "Particle"(0.0, 0.0, 0.0, 0.0)
     add val "spi" int = 1
@@ -45,8 +45,8 @@ add fn "step"(dt float) int:
     give 0
 ;
 
-//nt: all-pairs AABB check
-//nt: swap only when approaching (equal-mass elastic)
+
+
 add fn "collide"() int:
     add val "ci" int = 1
     add val "cj" int = 1
@@ -93,7 +93,7 @@ add fn "collide"() int:
     give 0
 ;
 
-//nt: total vx momentum
+
 add fn "totalvx"() float:
     add val "vh" float = 0.0
     add val "vi" int = 1
@@ -106,8 +106,8 @@ add fn "totalvx"() float:
     give call val "vh"
 ;
 
-//nt: containment check
-//nt: returns false on any out-of-bounds
+
+
 add fn "inbounds"() bool:
     add val "wi" int = 1
     add val "wp" "Particle"* = "Particle"(0.0, 0.0, 0.0, 0.0)
@@ -130,8 +130,8 @@ add fn "inbounds"() bool:
     give re
 ;
 
-//nt: criterion 1 — exchange
-//nt: equal-mass elastic swaps velocities
+
+
 add fn "testexchange"() bool:
     val "list" = []
     add val "dp1" "Particle"* = call fn "spawn"(10.0, 0.0, 1.0, 0.0)
@@ -150,7 +150,7 @@ add fn "testexchange"() bool:
     give fa
 ;
 
-//nt: criterion 2 — momentum conservation
+
 add fn "testmomentum"() float:
     val "list" = []
     add val "mk" int = 0
@@ -173,7 +173,7 @@ add fn "testmomentum"() float:
     give call val "mh" - call val "mq"
 ;
 
-//nt: criterion 3 — wall bounce
+
 add fn "testwall"() bool:
     val "list" = []
     add val "kp" "Particle"* = call fn "spawn"(0.0, 0.0, 50.0, 0.0)
@@ -188,7 +188,7 @@ add fn "testwall"() bool:
     give fa
 ;
 
-//nt: benchmark 400 particles x 400 steps
+
 add fn "benchmark"() int:
     val "list" = []
     val "hits" = 0
@@ -215,7 +215,7 @@ add fn "benchmark"() int:
     give 0
 ;
 
-//nt: main flow
+
 add val "t1" bool = call fn "testexchange"()
 add val "t2" float = call fn "testmomentum"()
 add val "t3" bool = call fn "testwall"()

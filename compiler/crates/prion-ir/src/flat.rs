@@ -1,16 +1,16 @@
-//! 扁平索引载体：指令以数组下标为身份（`flat`）
-//!
-//! 指令存扁平数组，值 = 指令索引，变长载荷进 extra 区。
-//! 每条指令产一个值；语句类指令不产值。块参数 = φ 承接。
-//! 与树形 IR 并存：由 from_program 转换，dump 对拍后两个后端改吃本载体。
+
+
+
+
+
 
 use crate::{BinOp, Function, LocalId, MapKey, Place, Program, Proj, Rvalue, Stmt, Ty, Value};
 use prion_error::Span;
 
-//nt: 指令号
+
 pub type InstId = u32;
 
-//nt: 二元运算
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Op {
     Add,
@@ -33,7 +33,7 @@ pub enum Op {
     Shr,
 }
 
-//nt: 树形转
+
 impl Op {
     pub fn from_binop(op: &BinOp) -> Op {
         match op {
@@ -58,7 +58,7 @@ impl Op {
         }
     }
 
-    //nt: 转回树形运算
+    
     pub fn to_binop(&self) -> BinOp {
         match self {
             Op::Add => BinOp::Add,
@@ -82,7 +82,7 @@ impl Op {
         }
     }
 
-    //nt: 从编号转
+    
     pub fn from_u32(v: u32) -> Option<Op> {
         match v {
             0 => Some(Op::Add),
@@ -108,7 +108,7 @@ impl Op {
     }
 }
 
-//nt: 指令种类
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tag {
     ConstInt,
@@ -150,17 +150,17 @@ pub enum Tag {
     Nop,
 }
 
-//nt: 指令
+
 #[derive(Debug, Clone, Copy)]
 pub struct Inst {
     pub tag: Tag,
     pub a: u32,
     pub b: u32,
-    //nt: 变长载荷长度
+    
     pub c: u32,
 }
 
-//nt: 块出口
+
 #[derive(Debug, Clone)]
 pub enum FExit {
     Return(Option<InstId>),
@@ -171,69 +171,69 @@ pub enum FExit {
     Unreachable,
 }
 
-//nt: 块
+
 #[derive(Debug, Clone)]
 pub struct FlatBlock {
-    //nt: 块名 bbN
+    
     pub name: String,
     pub start: InstId,
-    //nt: 块参数值
+    
     pub params: Vec<InstId>,
     pub exit: FExit,
 }
 
-//nt: 函数级扁平体
+
 #[derive(Debug, Clone, Default)]
 pub struct FlatFn {
     pub name: String,
     pub ret: Option<String>,
-    //nt: 形参名
+    
     pub params: Vec<String>,
     pub insts: Vec<Inst>,
-    //nt: 逐指令类型号
+    
     pub itys: Vec<u32>,
-    //nt: 逐指令源行
+    
     pub lines: Vec<u32>,
-    //nt: 逐指令源列
+    
     pub cols: Vec<u32>,
-    //nt: 逐指令源宽
+    
     pub lens: Vec<u32>,
     pub extra: Vec<u32>,
     pub ints: Vec<i64>,
     pub floats: Vec<f64>,
     pub strings: Vec<String>,
     pub blocks: Vec<FlatBlock>,
-    //nt: 投影写目标位置
+    
     pub places: Vec<Option<crate::Place>>,
 }
 
-//nt: 全程序扁平体
+
 #[derive(Debug, Clone, Default)]
 pub struct Flat {
     pub fns: Vec<FlatFn>,
 }
 
-//nt: 转换中的一个函数
+
 struct 转中<'a> {
     f: &'a Function,
-    //nt: 局部号 → 当前定义指令
+    
     定义: Vec<Option<InstId>>,
-    //nt: 多变局部走存储
+    
     多变: Vec<bool>,
-    //nt: 块号 → 块参数值
+    
     块参: Vec<Vec<InstId>>,
     insts: Vec<Inst>,
-    //nt: 逐指令类型号
+    
     itys: Vec<u32>,
-    //nt: 逐指令源行
+    
     lines: Vec<u32>,
-    //nt: 逐指令源列
+    
     cols: Vec<u32>,
-    //nt: 逐指令源宽
+    
     lens: Vec<u32>,
-    //nt: 投影写目标位置
+    
     places: Vec<Option<crate::Place>>,
-    //nt: 当前语句行列宽
+    
     行: u32,
     列: u32,
     宽: u32,
@@ -245,7 +245,7 @@ struct 转中<'a> {
 }
 
 impl 转中<'_> {
-    //nt: 入名池
+    
     fn intern(&mut self, s: &str) -> u32 {
         if let Some(i) = self.名池.get(s) {
             return *i;
@@ -256,7 +256,7 @@ impl 转中<'_> {
         i
     }
 
-    //nt: 追加指令
+    
     fn push(&mut self, tag: Tag, a: u32, b: u32, c: u32) -> InstId {
         let id = self.insts.len() as InstId;
         self.insts.push(Inst { tag, a, b, c });
@@ -268,53 +268,53 @@ impl 转中<'_> {
         id
     }
 
-    //nt: 带类型追加
+    
     fn push_ty(&mut self, tag: Tag, a: u32, b: u32, c: u32, ty: &str) -> u32 {
         let id = self.push(tag, a, b, c);
         self.itys[id as usize] = self.intern(ty);
         id
     }
 
-    //nt: 变长载荷
+    
     fn push_extra(&mut self, items: &[InstId]) -> (u32, u32) {
         let start = self.extra.len() as u32;
         self.extra.extend_from_slice(items);
         (start, items.len() as u32)
     }
 
-    //nt: 常量整数
+    
     fn int_c(&mut self, v: i64) -> InstId {
         self.ints.push(v);
         self.push_ty(Tag::ConstInt, (self.ints.len() - 1) as u32, 0, 0, "int")
     }
 
-    //nt: 常量浮点
+    
     fn float_c(&mut self, v: f64) -> InstId {
         self.floats.push(v);
         self.push_ty(Tag::ConstFloat, (self.floats.len() - 1) as u32, 0, 0, "float")
     }
 
-    //nt: 常量串
+    
     fn str_c(&mut self, v: &str) -> InstId {
         let id = self.intern(v);
         self.push_ty(Tag::ConstStr, id, 0, 0, "str")
     }
 
-    //nt: 常量布尔
+    
     fn bool_c(&mut self, v: bool) -> InstId {
         self.push_ty(Tag::ConstBool, v as u32, 0, 0, "bool")
     }
 
-    //nt: 入类型池
+    
     fn ty_id(&mut self, t: &Ty) -> u32 {
         self.intern(&t.0)
     }
 
-    //nt: 值转换
+    
     fn val(&mut self, v: &Value) -> InstId {
         match v {
             Value::Local(id) => {
-                //nt: 多变局部立读点
+                
                 if self.多变.get(*id).copied().unwrap_or(true) {
                     let n = self
                         .f
@@ -331,7 +331,7 @@ impl 转中<'_> {
                         .unwrap_or_default();
                     return self.push_ty(Tag::ReadLocal, sid, *id as u32, 0, &ty_name);
                 }
-                //nt: 单定义直连
+                
                 if let Some(Some(d)) = self.定义.get(*id) {
                     return *d;
                 }
@@ -358,7 +358,7 @@ impl 转中<'_> {
         }
     }
 
-    //nt: 登记定义
+    
     fn 定(&mut self, id: LocalId, inst: InstId) {
         if self.定义.len() <= id {
             self.定义.resize(id + 1, None);
@@ -366,7 +366,7 @@ impl 转中<'_> {
         self.定义[id] = Some(inst);
     }
 
-    //nt: 位置转投影读链
+    
     fn place(&mut self, p: &Place) -> InstId {
         let mut cur = self.val(&Value::Local(p.base));
         for pr in &p.proj {
@@ -382,14 +382,14 @@ impl 转中<'_> {
                 Proj::Deref => self.push(Tag::Deref, cur, 0, 0),
             };
         }
-        //nt: 链尾记位
+        
         if !p.proj.is_empty() && (cur as usize) < self.places.len() {
             self.places[cur as usize] = Some(p.clone());
         }
         cur
     }
 
-    //nt: 右值转换
+    
     fn rvalue(&mut self, r: &Rvalue) -> InstId {
         match r {
             Rvalue::Use(p) => self.place(p),
@@ -457,14 +457,14 @@ impl 转中<'_> {
             Rvalue::VariantGet { value, idx, ty } => {
                 let x = self.val(value);
                 let tid = self.ty_id(ty);
-                //nt: 载荷型下标进变长区
+                
                 let (st, ln) = self.push_extra(&[tid, *idx as u32]);
                 self.push(Tag::VariantGet, x, st, ln)
             }
             Rvalue::Ref(p) => {
                 let x = self.place(p);
                 let r = self.push(Tag::Ref, x, 0, 0);
-                //nt: 记取址位置
+                
                 if (r as usize) < self.places.len() {
                     self.places[r as usize] = Some(p.clone());
                 }
@@ -474,9 +474,9 @@ impl 转中<'_> {
     }
 }
 
-//nt: 单函数转换
+
 fn 转函数(f: &Function) -> FlatFn {
-    //nt: 多变局部预扫
+    
     let n = f.locals.len();
     let mut 定义数 = vec![0usize; n];
     let mut 要址 = vec![false; n];
@@ -491,7 +491,7 @@ fn 转函数(f: &Function) -> FlatFn {
                     if lhs.proj.is_empty() {
                         定义数[lhs.base] += 1;
                     } else {
-                        //nt: 投影写要地址
+                        
                         要址[lhs.base] = true;
                     }
                 }
@@ -529,7 +529,7 @@ fn 转函数(f: &Function) -> FlatFn {
         strings: Vec::new(),
         名池: std::collections::BTreeMap::new(),
     };
-    //nt: 先扫块参数
+    
     for b in &f.blocks {
         let mut ps: Vec<InstId> = Vec::new();
         for (lid, _ty) in &b.params {
@@ -546,14 +546,14 @@ fn 转函数(f: &Function) -> FlatFn {
     let mut blocks: Vec<FlatBlock> = Vec::new();
     for b in &f.blocks {
         let start = t.insts.len() as u32;
-        //nt: 块参数定义登记
+        
         for (k, (lid, _ty)) in b.params.iter().enumerate() {
             if let Some(&v) = t.块参[b.id as usize].get(k) {
                 t.定(*lid, v);
             }
         }
         for (si, st) in b.stmts.iter().enumerate() {
-            //nt: 源行列宽随语句
+            
             let sp = b.spans.get(si).copied().unwrap_or_default();
             t.行 = sp.line as u32;
             t.列 = sp.col as u32;
@@ -607,22 +607,22 @@ fn 转函数(f: &Function) -> FlatFn {
     }
 }
 
-//nt: 语句转换
+
 fn 转语句(t: &mut 转中, st: &Stmt) {
     match st {
         Stmt::Assign { lhs, rhs } => {
-            //nt: 移交源编号加一存b
+            
             let 裸 = match rhs {
                 Rvalue::Use(p) if p.proj.is_empty() => Some(p.base),
                 Rvalue::Const(Value::Local(u)) => Some(*u),
                 _ => None,
             };
             let nb = 裸.map(|u| u as u32 + 1).unwrap_or(0);
-            //nt: 串赋值要拷的形态记c
+            
             let nc: u32 = if matches!(rhs, Rvalue::BinOp { .. }) { 0 } else { 1 };
-            //nt: 纯值赋：转右值记定义
+            
             if lhs.proj.is_empty() {
-                //nt: 裸局部读另立读点
+                
                 let v = match 裸 {
                     Some(u) => {
                         let nm = t
@@ -642,7 +642,7 @@ fn 转语句(t: &mut 转中, st: &Stmt) {
                     }
                     None => t.rvalue(rhs),
                 };
-                //nt: 赋值收口
+                
                 let np = t.push(Tag::Nop, v, nb, nc);
                 let np = np as usize;
                 if np < t.places.len() {
@@ -651,7 +651,7 @@ fn 转语句(t: &mut 转中, st: &Stmt) {
                 t.定(lhs.base, v);
                 return;
             }
-            //nt: 投影写
+            
             let mut cur = t.val(&Value::Local(lhs.base));
             let pc = lhs.proj.len();
             for (pi, pr) in lhs.proj.iter().enumerate() {
@@ -677,10 +677,10 @@ fn 转语句(t: &mut 转中, st: &Stmt) {
                 };
             }
             let v = t.rvalue(rhs);
-            //nt: 收口同记移交源
+            
             let nop = t.push(Tag::Nop, v, nb, nc);
             let _ = cur;
-            //nt: 记录投影写的目标位置
+            
             let np = nop as usize;
             if np < t.places.len() {
                 t.places[np] = Some(lhs.clone());
@@ -734,14 +734,14 @@ fn 转语句(t: &mut 转中, st: &Stmt) {
         }
         Stmt::Assert { cond, msg, fix } => {
             let c = t.val(cond);
-            //nt: 文与修文都入变长区
+            
             let mid = t.intern(msg);
             let fid = t.intern(fix);
             let (st, ln) = t.push_extra(&[mid, fid]);
             t.push(Tag::Assert, c, st, ln);
         }
         Stmt::Asm(form) => {
-            //nt: 汇编形串化
+            
             let mut s = String::new();
             s.push_str(&form.tmpl);
             s.push('\u{1d}');
@@ -771,7 +771,7 @@ fn 转语句(t: &mut 转中, st: &Stmt) {
     }
 }
 
-//nt: 汇编形串解回
+
 pub fn 解汇编(blob: &str) -> Option<crate::AsmForm> {
     let mut it = blob.split('\u{1d}');
     let tmpl = it.next()?.to_string();
@@ -807,7 +807,7 @@ pub fn 解汇编(blob: &str) -> Option<crate::AsmForm> {
     Some(crate::AsmForm { tmpl, outs, ins, clobbers })
 }
 
-//nt: 值从汇编形串解回
+
 fn 值解(s: &str) -> Option<Value> {
     let mut ch = s.chars();
     let h = ch.next()?;
@@ -831,7 +831,7 @@ fn 值解(s: &str) -> Option<Value> {
     })
 }
 
-//nt: 值编码进汇编形串
+
 fn 值串(v: &Value, s: &mut String) {
 
     match v {
@@ -861,7 +861,7 @@ fn 值串(v: &Value, s: &mut String) {
     }
 }
 
-//nt: 全程序转换
+
 pub fn from_program(p: &Program) -> Flat {
     let mut out = Flat::default();
     for f in &p.functions {
@@ -870,7 +870,7 @@ pub fn from_program(p: &Program) -> Flat {
     out
 }
 
-//nt: 扁平体转回树形
+
 pub fn to_program(flat: &Flat, src: &Program) -> Program {
     let mut out = src.clone();
     for (i, ffn) in flat.fns.iter().enumerate() {
@@ -881,9 +881,9 @@ pub fn to_program(flat: &Flat, src: &Program) -> Program {
     out
 }
 
-//nt: 单函数还原
+
 fn 还原函数(f: &mut Function, ffn: &FlatFn, src: &Program) {
-    //nt: 纯赋值定义表
+    
     let n = f.locals.len();
     let mut defs: Vec<Option<u32>> = vec![None; n];
     for (iid, inst) in ffn.insts.iter().enumerate() {
@@ -896,7 +896,7 @@ fn 还原函数(f: &mut Function, ffn: &FlatFn, src: &Program) {
             }
         }
     }
-    //nt: 被引用的右值顶指令
+    
     let mut 被引: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
     for inst in &ffn.insts {
         if inst.tag == Tag::Nop {
@@ -940,7 +940,7 @@ fn 还原函数(f: &mut Function, ffn: &FlatFn, src: &Program) {
     }
 }
 
-//nt: 单语句还原
+
 fn 还原语句(
     ffn: &FlatFn,
     iid: usize,
@@ -953,7 +953,7 @@ fn 还原语句(
         Tag::Nop => {
             let lhs = ffn.places.get(iid).and_then(|x| x.clone())?;
             let rhs = if inst.b > 0 {
-                //nt: 裸局部或转交源
+                
                 Rvalue::Use(Place::local((inst.b - 1) as usize))
             } else {
                 右值还原(ffn, inst.a, defs, src)?
@@ -1018,9 +1018,9 @@ fn 还原语句(
     })
 }
 
-//nt: 指令转值
+
 fn 值还原(ffn: &FlatFn, id: u32, defs: &[Option<u32>]) -> Option<Value> {
-    //nt: 定义指令按所属局部
+    
     if let Some(lid) = defs.iter().position(|d| *d == Some(id)) {
         return Some(Value::Local(lid));
     }
@@ -1036,7 +1036,7 @@ fn 值还原(ffn: &FlatFn, id: u32, defs: &[Option<u32>]) -> Option<Value> {
     })
 }
 
-//nt: 指令转右值
+
 fn 右值还原(ffn: &FlatFn, id: u32, defs: &[Option<u32>], src: &Program) -> Option<Rvalue> {
     let inst = ffn.insts.get(id as usize).copied()?;
     Some(match inst.tag {
@@ -1046,7 +1046,7 @@ fn 右值还原(ffn: &FlatFn, id: u32, defs: &[Option<u32>], src: &Program) -> O
         Tag::ConstStr => Rvalue::Const(Value::Str(ffn.strings.get(inst.a as usize).cloned().unwrap_or_default())),
         Tag::ConstBool => Rvalue::Const(Value::Bool(inst.a != 0)),
         Tag::ConstNull => Rvalue::Const(Value::Null),
-        //nt: 链尾读按记位还原
+        
         Tag::GetField | Tag::GetIndex | Tag::Deref => {
             Rvalue::Use(ffn.places.get(id as usize).and_then(|x| x.clone())?)
         }
@@ -1135,7 +1135,7 @@ fn 右值还原(ffn: &FlatFn, id: u32, defs: &[Option<u32>], src: &Program) -> O
     })
 }
 
-//nt: 文本化
+
 pub fn dump(flat: &Flat) -> String {
     let mut s = String::new();
     for f in &flat.fns {
@@ -1153,7 +1153,7 @@ pub fn dump(flat: &Flat) -> String {
                 s.push_str(&format!("({})", ps.join(", ")));
             }
             s.push('\n');
-            //nt: 块指令区间
+            
             let end = f
                 .blocks
                 .get(bi + 1)

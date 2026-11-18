@@ -1,14 +1,14 @@
-//! 编译期求值（常量折叠）
-//!
-//! 只折字面量与运算符：整数 / 浮点 / 字符串 / 真假值，
-//! 算术 `+ - * / %`、比较、`and` / `or` / `not`、括号。
-//! 含名字、调用、下标的表达式返回 None，交调用方按普通表达式处理。
+
+
+
+
+
 
 use prion_lexer::Token;
 
 use prion_ir::Value;
 
-//nt: 折叠结果
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Const {
     Int(i64),
@@ -18,7 +18,7 @@ pub enum Const {
 }
 
 impl Const {
-    //nt: 转 IR 值
+    
     pub fn 转值(&self) -> Value {
         match self {
             Const::Int(n) => Value::Int(*n),
@@ -44,7 +44,7 @@ impl Const {
     }
 }
 
-//nt: 折整个记号段
+
 pub fn 折叠(段: &[Token]) -> Option<Const> {
     let mut p = 解 { t: 段, i: 0 };
     let v = p.三元()?;
@@ -54,7 +54,7 @@ pub fn 折叠(段: &[Token]) -> Option<Const> {
     Some(v)
 }
 
-//nt: 折条件真假
+
 pub fn 折叠条件(段: &[Token]) -> Option<bool> {
     match 折叠(段)? {
         Const::Bool(b) => Some(b),
@@ -68,7 +68,7 @@ struct 解<'a> {
 }
 
 impl<'a> 解<'a> {
-    //nt: 三元最低优先
+    
     fn 三元(&mut self) -> Option<Const> {
         let 条 = self.或()?;
         if matches!(self.t.get(self.i), Some(Token::Sym("?"))) {
@@ -171,7 +171,7 @@ impl<'a> 解<'a> {
                 let v = self.元()?;
                 Some(Const::Bool(!作真(&v)))
             }
-            //nt: 纯内置调用
+            
             Token::Ident(n) if matches!(self.t.get(self.i + 1), Some(Token::Sym("("))) => {
                 let 名 = n.clone();
                 { crate::quota::记步(1); self.i += 2; }
@@ -209,10 +209,10 @@ impl<'a> 解<'a> {
     }
 }
 
-//nt: 纯内置求值
+
 fn 内置(名: &str, 实参: &[Const]) -> Option<Const> {
     match 名 {
-        //nt: 串按字符数
+        
         "len" => match 实参.first()? {
             Const::Str(s) => Some(Const::Int(s.chars().count() as i64)),
             _ => None,
@@ -221,7 +221,7 @@ fn 内置(名: &str, 实参: &[Const]) -> Option<Const> {
             Const::Str(s) => Some(Const::Bool(s.is_empty())),
             _ => None,
         },
-        //nt: 子串位置 1 基
+        
         "index" | "str_index" => {
             let Const::Str(s) = 实参.first()? else { return None };
             let Const::Str(sub) = 实参.get(1)? else { return None };
@@ -233,7 +233,7 @@ fn 内置(名: &str, 实参: &[Const]) -> Option<Const> {
                 None => Some(Const::Int(0)),
             }
         }
-        //nt: 串包含
+        
         "has" | "contains" => {
             let Const::Str(s) = 实参.first()? else { return None };
             let Const::Str(sub) = 实参.get(1)? else { return None };
@@ -253,7 +253,7 @@ fn 作真(c: &Const) -> bool {
 }
 
 fn 比较(l: &Const, r: &Const, op: &str) -> Option<bool> {
-    //nt: 数值比较
+    
     let 数值 = |c: &Const| match c {
         Const::Int(n) => Some(*n as f64),
         Const::Float(x) => Some(*x),
@@ -345,8 +345,8 @@ fn 作浮(c: &Const) -> Option<f64> {
     }
 }
 
-//nt: 带环境折叠
-//nt: 查变量与调函数
+
+
 pub fn 折叠带环境(
     段: &[Token],
     取变量: &mut dyn FnMut(&str) -> Option<Const>,
@@ -368,7 +368,7 @@ struct 解带环境<'a> {
 }
 
 impl<'a> 解带环境<'a> {
-    //nt: 三元最低优先
+    
     fn 三元(&mut self) -> Option<Const> {
         let 条 = self.或()?;
         if matches!(self.t.get(self.i), Some(Token::Sym("?"))) {
@@ -469,7 +469,7 @@ impl<'a> 解带环境<'a> {
                 { crate::quota::记步(1); self.i += 1; }
                 Some(Const::Bool(!作真(&self.元()?)))
             }
-            //nt: 纯内置调用
+            
             Token::Ident(n) if matches!(self.t.get(self.i + 1), Some(Token::Sym("("))) => {
                 let 名 = n.clone();
                 { crate::quota::记步(1); self.i += 2; }
@@ -492,7 +492,7 @@ impl<'a> 解带环境<'a> {
                 内置(&名, &实参)
             }
 
-            //nt: 读环境
+            
             Token::Kw("val") => {
                 let n = match self.t.get(self.i + 1) {
                     Some(Token::Str(s)) | Some(Token::Ident(s)) => s.clone(),
@@ -501,9 +501,9 @@ impl<'a> 解带环境<'a> {
                 self.i += 2;
                 (self.取变量)(&n)
             }
-            //nt: 折实参再调用
+            
             Token::Kw("call") => {
-                //nt: call fix 查表
+                
                 if matches!(self.t.get(self.i + 1), Some(Token::Kw("fix"))) {
                     let n = match self.t.get(self.i + 2) {
                         Some(Token::Str(s2)) | Some(Token::Ident(s2)) => s2.clone(),
@@ -512,12 +512,12 @@ impl<'a> 解带环境<'a> {
                     { crate::quota::记步(1); self.i += 3; }
                     return (self.取变量)(&n);
                 }
-                //nt: 跨模块形态跳过模块名
+                
                 let mut k = 1usize;
                 if matches!(self.t.get(self.i + 1), Some(Token::HashHashColon)) {
                     k = 4;
                 } else if matches!(self.t.get(self.i + 1), Some(Token::HashColon)) {
-                    //nt: 块名到 fn
+                    
                     let mut j = self.i + 2;
                     while j < self.t.len() && !matches!(self.t.get(j), Some(Token::Kw("fn"))) {
                         j += 1;

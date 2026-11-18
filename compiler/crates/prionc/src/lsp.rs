@@ -1,14 +1,14 @@
-//! 语言服务器：标准输入输出上的 JSON-RPC
-//!
-//! 帧格式为 Content-Length 头 + JSON 体；单客户端顺序处理；
-//! 打开的源文件全文存在内存里，分析结果按 uri 缓存。
+
+
+
+
 
 use std::collections::BTreeMap;
 use std::io::{self, BufRead, Write};
 
 use serde_json::{json, Value};
 
-// nt: 全文表
+
 struct 状态 {
     docs: BTreeMap<String, String>,
     已保存: BTreeMap<String, bool>,
@@ -16,24 +16,24 @@ struct 状态 {
     关闭: bool,
 }
 
-// nt: 一次解析的产物
+
 struct 分析 {
     源: String,
     语法错: Vec<prion_parser::ParseError>,
     检查错: Vec<prion_check::Diag>,
     符号: Vec<prion_check::SymbolInfo>,
-    // nt: 令牌原件
+    
     原件: Vec<(usize, usize, usize, u32)>,
-    // nt: 名字与类型
+    
     局部: Vec<prion_check::LocalInfo>,
-    // nt: 参数名与行域
+    
     域: Vec<(String, usize, usize)>,
 }
 
-// nt: 元组编码成令牌
+
 fn 编码(原件: &[(usize, usize, usize, u32)], 起行: usize, 止行: usize) -> Vec<u32> {
     let mut 结果: Vec<u32> = Vec::new();
-    //nt: 首个令牌相对文献头
+    
     let mut 前行 = 0usize;
     let mut 前列 = 0usize;
     for &(行, 列, 长, 类) in 原件 {
@@ -49,7 +49,7 @@ fn 编码(原件: &[(usize, usize, usize, u32)], 起行: usize, 止行: usize) -
     结果
 }
 
-// nt: 服务主循环
+
 pub fn 服务() -> i32 {
     let stdin = io::stdin();
     let mut 读 = stdin.lock();
@@ -72,23 +72,23 @@ pub fn 服务() -> i32 {
                     回(&mut 写, json!({
                         "jsonrpc": "2.0", "id": id,
                         "result": { "capabilities": {
-                            // nt: 全量同步
+                            
                             "textDocumentSync": 1,
-                            // nt: 报错由服务端推
+                            
                             "diagnosticProvider": Value::Null,
-                            // nt: 语义高亮图例
+                            
                             "semanticTokensProvider": {
                                 "legend": { "tokenTypes": 图例, "tokenModifiers": [] },
                                 "full": true, "range": true
                             },
-                            // nt: 补全触发符
+                            
                             "completionProvider": { "triggerCharacters": ["\"", " ", "."] },
-                            // nt: 全文格式化
+                            
                             "documentFormattingProvider": true,
-                            // nt: 悬停与跳转
+                            
                             "hoverProvider": true,
                             "definitionProvider": true,
-                            // nt: 重命名含预备
+                            
                             "renameProvider": { "prepareProvider": true },
                         } }
                     }));
@@ -216,7 +216,7 @@ pub fn 服务() -> i32 {
                 态.关闭 = true;
             }
             _ => {
-                // nt: 未支持方法回空
+                
                 if let Some(id) = id.clone() {
                     回(&mut 写, json!({
                         "jsonrpc": "2.0", "id": id,
@@ -234,7 +234,7 @@ pub fn 服务() -> i32 {
     if 态.关闭 { 0 } else { 1 }
 }
 
-// nt: 读一帧
+
 fn 读一帧(读: &mut impl BufRead) -> io::Result<Option<Value>> {
     let mut 长 = 0usize;
     let mut 有头 = false;
@@ -262,14 +262,14 @@ fn 读一帧(读: &mut impl BufRead) -> io::Result<Option<Value>> {
     Ok(Some(serde_json::from_str(&文本).unwrap_or(Value::Null)))
 }
 
-// nt: 写一帧
+
 fn 回(写: &mut impl Write, v: Value) {
     let 体 = v.to_string();
     let _ = write!(写, "Content-Length: {}\r\n\r\n{}", 体.len(), 体);
     let _ = 写.flush();
 }
 
-// nt: 取全文
+
 fn 取文档(参: &Value, 文档键: &str, 文本键: &str) -> Option<(String, String)> {
     let d = 参.get(文档键)?;
     let uri = d.get("uri")?.as_str()?.to_string();
@@ -277,7 +277,7 @@ fn 取文档(参: &Value, 文档键: &str, 文本键: &str) -> Option<(String, S
     Some((uri, text))
 }
 
-// nt: 取变更后的全文
+
 fn 取变更(参: &Value) -> Option<(String, String)> {
     let uri = 取uri(参)?;
     let 变更 = 参.get("contentChanges")?.as_array()?;
@@ -286,13 +286,13 @@ fn 取变更(参: &Value) -> Option<(String, String)> {
     Some((uri, text))
 }
 
-// nt: 取 URI
+
 fn 取uri(参: &Value) -> Option<String> {
     Some(参.get("textDocument")?.get("uri")?.as_str()?.to_string())
 }
 
 
-//nt: 取分析
+
 fn 取分析<'a>(态: &'a mut 状态, uri: &str) -> Option<&'a 分析> {
     let 源 = 态.docs.get(uri)?.clone();
     let 要算 = match 态.缓存.get(uri) {
@@ -308,24 +308,24 @@ fn 取分析<'a>(态: &'a mut 状态, uri: &str) -> Option<&'a 分析> {
         } else {
             (Vec::new(), Vec::new(), Vec::new())
         };
-        //nt: 有残树就发令牌
+        
         let 原件 = if ast.blocks.is_empty() {
             词法令牌(&prion_lexer::lex(&源).unwrap_or_default())
         } else {
             语义令牌(&ast, &符号)
         };
-        //nt: 参数改名限作用域
+        
         let 域 = 参数域(&ast);
         态.缓存.insert(uri.to_string(), 分析 { 源, 语法错, 检查错, 符号, 原件, 局部, 域 });
     }
     态.缓存.get(uri)
 }
-// nt: 推报错
+
 fn 推诊断(写: &mut impl Write, 态: &mut 状态, uri: &str) {
     let mut 列表: Vec<Value> = Vec::new();
     let 已存 = *态.已保存.get(uri).unwrap_or(&false);
     if let Some(a) = 取分析(态, uri) {
-        // nt: 未闭合延到保存
+        
         for e in &a.语法错 {
             if e.可延后 && !已存 {
                 continue;
@@ -343,7 +343,7 @@ fn 推诊断(写: &mut impl Write, 态: &mut 状态, uri: &str) {
         "params": { "uri": uri, "diagnostics": 列表 }
     }));
 }
-// nt: 造一条报错
+
 fn 一条(行: usize, 列: usize, 长: usize, 文案: &str) -> Value {
     let l = 行.saturating_sub(1);
     let c = 列.saturating_sub(1);
@@ -357,13 +357,13 @@ fn 一条(行: usize, 列: usize, 长: usize, 文案: &str) -> Value {
     })
 }
 
-// nt: 语义令牌图例
+
 pub const 图例: [&str; 10] = [
     "keyword", "namespace", "type", "function", "variable", "parameter", "modifier", "string",
     "number", "method",
 ];
 
-// nt: 关键字分类
+
 fn 关键字类(k: &str) -> u32 {
     match k {
         "if" | "else" | "while" | "for" | "match" | "case" | "call" | "give"
@@ -377,7 +377,7 @@ fn 关键字类(k: &str) -> u32 {
     }
 }
 
-// nt: 符号类别映射
+
 fn 符号类(k: &prion_check::SymKind) -> u32 {
     use prion_check::SymKind as K;
     match k {
@@ -388,7 +388,7 @@ fn 符号类(k: &prion_check::SymKind) -> u32 {
     }
 }
 
-// nt: 逐语句发令牌
+
 fn 扫语句(
     stmts: &[prion_parser::Stmt],
     行: &mut Vec<(usize, usize, usize, u32)>,
@@ -406,7 +406,7 @@ fn 扫语句(
     }
 }
 
-// nt: 扫一行
+
 fn 扫一行(
     行号: usize,
     段: &prion_parser::TokStream,
@@ -424,7 +424,7 @@ fn 扫一行(
             T::Int(_) | T::Float(_) => 8,
             T::Str(s) | T::RawStr(s) => *表.get(s.as_ref()).unwrap_or(&7),
             T::Ident(s) => {
-                //nt: 内置函数
+                
                 if prion_check::BUILTINS.iter().any(|u| *u == s.as_ref()) {
                     9
                 } else {
@@ -437,18 +437,18 @@ fn 扫一行(
     }
 }
 
-//nt: 声明表
+
 fn 声明表(ast: &prion_parser::Program) -> std::collections::BTreeMap<String, u32> {
     use prion_lexer::Token as T;
     use prion_parser::Stmt as S;
     fn 扫(stmts: &[S], 表: &mut std::collections::BTreeMap<String, u32>) {
         for s in stmts {
             let (head, body): (&[prion_lexer::Token], &[S]) = match s {
-                //nt: 单行公式 fn
+                
                 S::Line { kind, .. } => (kind.tokens(), &[]),
                 S::Struct { head, body, .. } | S::Fn { head, body, .. } => (head, body),
             };
-            //nt: 声明类别
+            
             let 类别 = match (head.first(), head.get(1)) {
                 (Some(T::Kw("add")), Some(T::Kw("fn"))) => Some(3u32),
                 (Some(T::Kw("add")), Some(T::Kw("val"))) => Some(4u32),
@@ -468,17 +468,17 @@ fn 声明表(ast: &prion_parser::Program) -> std::collections::BTreeMap<String, 
     表
 }
 
-// nt: 生成语义令牌
+
 pub fn 语义令牌(ast: &prion_parser::Program, 符号: &[prion_check::SymbolInfo]) -> Vec<(usize, usize, usize, u32)> {
     let mut 表: std::collections::BTreeMap<String, u32> = std::collections::BTreeMap::new();
     for s in 符号 {
         表.insert(s.name.clone(), 符号类(&s.kind));
     }
-    //nt: 检查没跑就靠声明
+    
     if 表.is_empty() {
         表 = 声明表(ast);
     }
-    // nt: 参数也算名字
+    
     for (n, _, _) in 参数域(ast) {
         表.entry(n).or_insert(4);
     }
@@ -490,10 +490,10 @@ pub fn 语义令牌(ast: &prion_parser::Program, 符号: &[prion_check::SymbolIn
     出
 }
 
-// nt: 取语义令牌
+
 fn 取语义(态: &mut 状态, 参: &Value) -> Vec<u32> {
     let Some(uri) = 取uri(参) else { return Vec::new() };
-    // nt: 范围请求只给可见行
+    
     let (起, 止) = match 参.get("range") {
         Some(r) => (
             r.get("start").and_then(|x| x.get("line")).and_then(|x| x.as_u64()).unwrap_or(0) as usize,
@@ -506,7 +506,7 @@ fn 取语义(态: &mut 状态, 参: &Value) -> Vec<u32> {
         None => Vec::new(),
     }
 }
-//nt: 纯词法令牌
+
 fn 词法令牌(段: &[prion_lexer::Spanned]) -> Vec<(usize, usize, usize, u32)> {
     use prion_lexer::Token as T;
     let mut 出: Vec<(usize, usize, usize, u32)> = Vec::new();
@@ -526,7 +526,7 @@ fn 词法令牌(段: &[prion_lexer::Spanned]) -> Vec<(usize, usize, usize, u32)>
     出
 }
 
-// nt: 取补全候选
+
 fn 取补全(态: &mut 状态, 参: &Value) -> Vec<Value> {
     let Some(uri) = 取uri(参) else { return Vec::new() };
     let mut 名: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
@@ -542,7 +542,7 @@ fn 取补全(态: &mut 状态, 参: &Value) -> Vec<Value> {
         .map(|n| json!({ "label": n, "kind": 6 }))
         .collect()
 }
-// nt: 关键字全集
+
 fn 关键字全集() -> &'static [&'static str] {
     &[
         "add", "call", "fn", "val", "type", "hide", "give", "outs", "if", "else", "for",
@@ -552,7 +552,7 @@ fn 关键字全集() -> &'static [&'static str] {
     ]
 }
 
-// nt: 取大纲
+
 fn 取大纲(态: &mut 状态, 参: &Value) -> Vec<Value> {
     let Some(uri) = 取uri(参) else { return Vec::new() };
     let Some(a) = 取分析(态, &uri) else { return Vec::new() };
@@ -572,7 +572,7 @@ fn 取大纲(态: &mut 状态, 参: &Value) -> Vec<Value> {
         })
         .collect()
 }
-// nt: 取光标行列
+
 fn 取位置(参: &Value) -> (usize, usize) {
     let p = 参.get("position");
     let l = p.and_then(|x| x.get("line")).and_then(|x| x.as_u64()).unwrap_or(0) as usize;
@@ -580,12 +580,12 @@ fn 取位置(参: &Value) -> (usize, usize) {
     (l, c)
 }
 
-// nt: 令牌去引号取内名
+
 fn 取词(a: &分析, 行: usize, 列: usize, 长: usize) -> Option<(String, usize, usize)> {
     let 文 = a.源.lines().nth(行)?;
     let 原: String = 文.chars().skip(列).take(长).collect();
     let 数 = 原.chars().count();
-    // nt: 字符串带引号
+    
     let (跳, 取) = if 原.starts_with("@\"") && 数 >= 3 && 原.ends_with('"') {
         (2, 数 - 3)
     } else if 原.starts_with('"') && 数 >= 2 && 原.ends_with('"') {
@@ -600,7 +600,7 @@ fn 取词(a: &分析, 行: usize, 列: usize, 长: usize) -> Option<(String, usi
     Some((词, 列 + 跳, 取))
 }
 
-// nt: 光标下的词
+
 fn 找词(a: &分析, 行: usize, 列: usize) -> Option<(String, u32, usize, usize, usize)> {
     for &(l, c, n, 类) in &a.原件 {
         if l != 行 || 列 < c || 列 >= c + n {
@@ -612,11 +612,11 @@ fn 找词(a: &分析, 行: usize, 列: usize) -> Option<(String, u32, usize, usi
     None
 }
 
-// nt: 收集 fn 参数域
+
 fn 参数域(ast: &prion_parser::Program) -> Vec<(String, usize, usize)> {
     use prion_lexer::Token as T;
     use prion_parser::Stmt as S;
-    // nt: 语句最大行
+    
     fn 最大行(stmts: &[S]) -> usize {
         let mut 大 = 0;
         for s in stmts {
@@ -631,7 +631,7 @@ fn 参数域(ast: &prion_parser::Program) -> Vec<(String, usize, usize)> {
         }
         大
     }
-    // nt: 从 fn 头取参数
+    
     fn 收参(段: &[prion_lexer::Token], 起: usize, 止: usize, 出: &mut Vec<(String, usize, usize)>) {
         let mut 深 = 0i32;
         let mut 段起 = false;
@@ -639,14 +639,14 @@ fn 参数域(ast: &prion_parser::Program) -> Vec<(String, usize, usize)> {
             match t {
                 T::Sym("(") => {
                     深 += 1;
-                    // nt: 参数表开头
+                    
                     if 深 == 1 {
                         段起 = true;
                     }
                 }
                 T::Sym(")") => {
                     深 -= 1;
-                    // nt: 参数表收尾
+                    
                     if 深 == 0 {
                         break;
                     }
@@ -660,7 +660,7 @@ fn 参数域(ast: &prion_parser::Program) -> Vec<(String, usize, usize)> {
             }
         }
     }
-    // nt: 递归找 fn 头
+    
     fn 走(stmts: &[S], 出: &mut Vec<(String, usize, usize)>) {
         for s in stmts {
             match s {
@@ -670,7 +670,7 @@ fn 参数域(ast: &prion_parser::Program) -> Vec<(String, usize, usize)> {
                     走(body, 出);
                 }
                 S::Struct { body, .. } => 走(body, 出),
-                // nt: 单行公式 fn
+                
                 S::Line { line, kind, .. } => {
                     let 段 = kind.tokens();
                     if matches!(段.first(), Some(T::Kw("add")) | Some(T::Kw("fix")))
@@ -689,7 +689,7 @@ fn 参数域(ast: &prion_parser::Program) -> Vec<(String, usize, usize)> {
     出
 }
 
-// nt: 找最近参数域
+
 fn 找域(a: &分析, 词: &str, 行: usize) -> Option<(usize, usize)> {
     let 行1 = 行 + 1;
     a.域
@@ -699,7 +699,7 @@ fn 找域(a: &分析, 词: &str, 行: usize) -> Option<(usize, usize)> {
         .map(|(_, s, e)| (s.saturating_sub(1), e.saturating_sub(1)))
 }
 
-// nt: 选声明符号
+
 fn 选符号<'a>(a: &'a 分析, 词: &str) -> Option<&'a prion_check::SymbolInfo> {
     use prion_check::SymKind as K;
     a.符号
@@ -708,7 +708,7 @@ fn 选符号<'a>(a: &'a 分析, 词: &str) -> Option<&'a prion_check::SymbolInfo
         .or_else(|| a.符号.iter().find(|s| s.name == 词))
 }
 
-// nt: 符号种类名
+
 fn 种类名(k: &prion_check::SymKind) -> &'static str {
     use prion_check::SymKind as K;
     match k {
@@ -721,21 +721,21 @@ fn 种类名(k: &prion_check::SymKind) -> &'static str {
     }
 }
 
-// nt: 取悬停
+
 fn 取悬停(态: &mut 状态, 参: &Value) -> Value {
     let Some(uri) = 取uri(参) else { return Value::Null };
     let (行, 列) = 取位置(参);
     let Some(a) = 取分析(态, &uri) else { return Value::Null };
     let Some((词, 类, l, c, n)) = 找词(a, 行, 列) else { return Value::Null };
-    // nt: 字面量不提示
+    
     if 类 == 7 || 类 == 8 {
         return Value::Null;
     }
     let 值 = match 选符号(a, &词) {
         Some(s) => format!("**{}** `{}`\n\n定义于第 {} 行第 {} 列", 种类名(&s.kind), 词, s.line, s.col),
-        // nt: 内置函数
+        
         None if 类 == 9 => format!("**内置函数** `{}`", 词),
-        // nt: 局部值与参数
+        
         None => match a.局部.iter().find(|l| l.name == 词) {
             Some(l) => format!("**值** `{}` : {}", 词, l.ty),
             None => return Value::Null,
@@ -748,20 +748,20 @@ fn 取悬停(态: &mut 状态, 参: &Value) -> Value {
     })
 }
 
-// nt: 取定义位置
+
 fn 取定义(态: &mut 状态, 参: &Value) -> Value {
     let Some(uri) = 取uri(参) else { return Value::Null };
     let (行, 列) = 取位置(参);
     let Some(a) = 取分析(态, &uri) else { return Value::Null };
     let Some((词, 类, ..)) = 找词(a, 行, 列) else { return Value::Null };
-    // nt: 内置与字面量无定义
+    
     if 类 == 9 || 类 == 7 || 类 == 8 {
         return Value::Null;
     }
     let (sl, sc, sn) = match 选符号(a, &词) {
         Some(s) => (s.line.saturating_sub(1), s.col.saturating_sub(1), s.len.max(1)),
         None => {
-            // nt: 参数取域内首现
+            
             let Some((起, 止)) = 找域(a, &词, 行) else { return Value::Null };
             let mut 首: Option<(usize, usize, usize)> = None;
             for &(l, c, n, k) in &a.原件 {
@@ -787,12 +787,12 @@ fn 取定义(态: &mut 状态, 参: &Value) -> Value {
     })
 }
 
-// nt: 可改名的类
+
 fn 可改(类: u32) -> bool {
     (1..=4).contains(&类)
 }
 
-// nt: 取预备重命名
+
 fn 取预备重命名(态: &mut 状态, 参: &Value) -> Value {
     let Some(uri) = 取uri(参) else { return Value::Null };
     let (行, 列) = 取位置(参);
@@ -809,7 +809,7 @@ fn 取预备重命名(态: &mut 状态, 参: &Value) -> Value {
     })
 }
 
-// nt: 收集同名出现
+
 fn 取重命名(态: &mut 状态, 参: &Value, 新名: &str) -> Value {
     let Some(uri) = 取uri(参) else { return Value::Null };
     let (行, 列) = 取位置(参);
@@ -825,7 +825,7 @@ fn 取重命名(态: &mut 状态, 参: &Value, 新名: &str) -> Value {
         if !可改(本类) {
             continue;
         }
-        // nt: 参数只改域内
+        
         if let Some((起, 止)) = 域 {
             if l < 起 || l > 止 {
                 continue;
@@ -847,7 +847,7 @@ fn 取重命名(态: &mut 状态, 参: &Value, 新名: &str) -> Value {
     json!({ "changes": { uri: 编辑 } })
 }
 
-// nt: 大纲类别码
+
 fn 类别码(k: &prion_check::SymKind) -> u32 {
     use prion_check::SymKind as K;
     match k {

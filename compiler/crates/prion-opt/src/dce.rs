@@ -1,11 +1,11 @@
-//! 不可达块消除
-//!
-//! 从入口块做可达性标记，删去标记外的块。
-//! 不可达块没有执行路径进入，删去不改变任何可观察行为。
+
+
+
+
 
 use prion_ir::{Exit, Program};
 
-//nt: 每函数可达标记
+
 fn 可达_of(f: &prion_ir::Function) -> Vec<bool> {
     let mut vis = vec![false; f.blocks.len()];
     let mut stack = vec![0usize];
@@ -26,7 +26,7 @@ fn 可达_of(f: &prion_ir::Function) -> Vec<bool> {
     vis
 }
 
-//nt: 跑一遍
+
 pub fn run(prog: &mut Program) {
     for f in &mut prog.functions {
         if f.blocks.is_empty() {

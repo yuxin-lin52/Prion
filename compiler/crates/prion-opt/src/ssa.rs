@@ -1,12 +1,12 @@
-//! SSA 构造：多定义局部版本化
-//!
-//! 做法：支配边界插块参数（φ），按支配树前序重命名，边实参在出口回填。
-//! 只处理标量局部；参数、被取址者、聚合体一律跳过。
+
+
+
+
 
 use prion_ir::{BlockId, Exit, Function, Local, Place, Program, Rvalue, Stmt, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
-//nt: 后继块
+
 fn 后继(f: &Function, b: usize) -> Vec<BlockId> {
     match &f.blocks[b].exit {
         Exit::Branch { targets, .. } => targets.iter().map(|s| s.target).collect(),
@@ -14,7 +14,7 @@ fn 后继(f: &Function, b: usize) -> Vec<BlockId> {
     }
 }
 
-//nt: 前驱表
+
 fn 前驱表(f: &Function) -> Vec<Vec<BlockId>> {
     let mut ps: Vec<Vec<BlockId>> = vec![Vec::new(); f.blocks.len()];
     for i in 0..f.blocks.len() {
@@ -27,7 +27,7 @@ fn 前驱表(f: &Function) -> Vec<Vec<BlockId>> {
     ps
 }
 
-//nt: 链深
+
 fn 链深(idom: &[Option<BlockId>], mut b: BlockId) -> usize {
     let mut d = 0;
     while let Some(p) = idom[b as usize] {
@@ -40,7 +40,7 @@ fn 链深(idom: &[Option<BlockId>], mut b: BlockId) -> usize {
     d
 }
 
-//nt: 支配链求交
+
 fn 求交(idom: &[Option<BlockId>], mut a: BlockId, mut b: BlockId) -> BlockId {
     let mut 圈 = 0;
     while a != b {
@@ -65,7 +65,7 @@ fn 求交(idom: &[Option<BlockId>], mut a: BlockId, mut b: BlockId) -> BlockId {
     a
 }
 
-//nt: 立即支配者
+
 fn 支配树(f: &Function) -> Vec<Option<BlockId>> {
     let n = f.blocks.len();
     let mut idom: Vec<Option<BlockId>> = vec![None; n];
@@ -81,7 +81,7 @@ fn 支配树(f: &Function) -> Vec<Option<BlockId>> {
         for b in 1..n {
             let mut 新: Option<BlockId> = None;
             for &p in &ps[b] {
-                //nt: 入口视作已入场
+                
                 if idom[p as usize].is_none() && p != 0 {
                     continue;
                 }
@@ -99,7 +99,7 @@ fn 支配树(f: &Function) -> Vec<Option<BlockId>> {
     idom
 }
 
-//nt: 支配边界
+
 fn 支配边界(f: &Function, idom: &[Option<BlockId>], ps: &[Vec<BlockId>]) -> Vec<BTreeSet<BlockId>> {
     let n = f.blocks.len();
     let mut df: Vec<BTreeSet<BlockId>> = vec![BTreeSet::new(); n];
@@ -112,7 +112,7 @@ fn 支配边界(f: &Function, idom: &[Option<BlockId>], ps: &[Vec<BlockId>]) -> 
             let mut 跑 = p;
             let mut 圈 = 0;
             while Some(跑) != 停 {
-                //nt: 入口不插
+                
                 if 跑 != 0 {
                     df[跑 as usize].insert(b as BlockId);
                 }
@@ -135,12 +135,12 @@ fn 支配边界(f: &Function, idom: &[Option<BlockId>], ps: &[Vec<BlockId>]) -> 
     df
 }
 
-//nt: 标量判定
+
 fn 是标量(t: &str) -> bool {
     matches!(t, "int" | "float" | "bool")
 }
 
-//nt: 新建局部
+
 fn 新局部(f: &mut Function, 名: String, ty: prion_ir::Ty) -> prion_ir::LocalId {
     let id = f.locals.len() as prion_ir::LocalId;
     f.locals.push(Local {
@@ -157,7 +157,7 @@ fn 新局部(f: &mut Function, 名: String, ty: prion_ir::Ty) -> prion_ir::Local
     id
 }
 
-//nt: 读值替换
+
 fn 换值(v: &mut Value, 版: &BTreeMap<prion_ir::LocalId, prion_ir::LocalId>) {
     if let Value::Local(id) = v {
         if let Some(n) = 版.get(id) {
@@ -166,14 +166,14 @@ fn 换值(v: &mut Value, 版: &BTreeMap<prion_ir::LocalId, prion_ir::LocalId>) {
     }
 }
 
-//nt: 位置基替换
+
 fn 换位(p: &mut Place, 版: &BTreeMap<prion_ir::LocalId, prion_ir::LocalId>) {
     if let Some(n) = 版.get(&p.base) {
         p.base = *n;
     }
 }
 
-//nt: 右值里的读
+
 fn 换右值(r: &mut Rvalue, 版: &BTreeMap<prion_ir::LocalId, prion_ir::LocalId>) {
     match r {
         Rvalue::Use(p) => 换位(p, 版),
@@ -217,7 +217,7 @@ fn 换右值(r: &mut Rvalue, 版: &BTreeMap<prion_ir::LocalId, prion_ir::LocalId
     }
 }
 
-//nt: 语句里的读
+
 fn 换语句(s: &mut Stmt, 版: &BTreeMap<prion_ir::LocalId, prion_ir::LocalId>) {
     match s {
         Stmt::Assign { lhs, rhs } => {
@@ -255,7 +255,7 @@ fn 换语句(s: &mut Stmt, 版: &BTreeMap<prion_ir::LocalId, prion_ir::LocalId>)
     }
 }
 
-//nt: 可版本化的局部
+
 fn 待版本化(f: &Function) -> BTreeSet<prion_ir::LocalId> {
     let n = f.locals.len();
     let mut 写数 = vec![0usize; n];
@@ -295,7 +295,7 @@ fn 待版本化(f: &Function) -> BTreeSet<prion_ir::LocalId> {
     出
 }
 
-//nt: 给一条边补实参
+
 fn 补实参(f: &mut Function, 从: BlockId, 到: BlockId, 值: Value) {
     if let Exit::Branch { targets, .. } = &mut f.blocks[从 as usize].exit {
         for s in targets.iter_mut() {
@@ -306,7 +306,7 @@ fn 补实参(f: &mut Function, 从: BlockId, 到: BlockId, 值: Value) {
     }
 }
 
-//nt: 重命名一块
+
 fn 重命名(
     f: &mut Function,
     块: BlockId,
@@ -325,14 +325,14 @@ fn 重命名(
             &mut f.blocks[块 as usize].stmts[si],
             Stmt::Kill { block: String::new() },
         );
-        //nt: 记原写目标
+        
         let 原写 = match &s {
             Stmt::Assign { lhs, .. } if lhs.proj.is_empty() => Some(lhs.base),
             _ => None,
         };
-        //nt: 先换读
+        
         换语句(&mut s, &版);
-        //nt: 再换写
+        
         if let (Some(v), Stmt::Assign { lhs, .. }) = (原写, &mut s) {
             if 改.contains(&v) {
                 let ty = f.locals[v as usize].ty.clone();
@@ -345,13 +345,13 @@ fn 重命名(
         }
         f.blocks[块 as usize].stmts[si] = s;
     }
-    //nt: 出口也要换版本
+    
     match &mut f.blocks[块 as usize].exit {
         Exit::Return(Some(v)) => 换值(v, &版),
         Exit::Branch { cond, .. } => 换值(cond, &版),
         _ => {}
     }
-    //nt: 出口实参
+    
     let 目标: Vec<BlockId> = 后继(f, 块 as usize);
     for t in 目标 {
         for (&v, _) in &有φ[t as usize] {
@@ -365,7 +365,7 @@ fn 重命名(
     }
 }
 
-//nt: 单函数构造
+
 fn 构造(f: &mut Function) {
     if f.blocks.is_empty() {
         return;
@@ -374,14 +374,14 @@ fn 构造(f: &mut Function) {
     if 改.is_empty() {
         return;
     }
-    //nt: 原有块参数者跳过
+    
     if f.blocks.iter().any(|b| !b.params.is_empty()) {
         return;
     }
     let idom = 支配树(f);
     let ps = 前驱表(f);
     let df = 支配边界(f, &idom, &ps);
-    //nt: 定义块
+    
     let mut 定义块: BTreeMap<prion_ir::LocalId, BTreeSet<BlockId>> = BTreeMap::new();
     for (bi, b) in f.blocks.iter().enumerate() {
         for s in &b.stmts {
@@ -392,7 +392,7 @@ fn 构造(f: &mut Function) {
             }
         }
     }
-    //nt: 插块参数
+    
     let 块数 = f.blocks.len();
     let mut 有φ: Vec<BTreeMap<prion_ir::LocalId, prion_ir::LocalId>> = vec![BTreeMap::new(); 块数];
     let mut 计数 = 0usize;
@@ -417,7 +417,7 @@ fn 构造(f: &mut Function) {
             }
         }
     }
-    //nt: 支配树子表
+    
     let mut 子: Vec<Vec<BlockId>> = vec![Vec::new(); 块数];
     for (i, p) in idom.iter().enumerate() {
         if let Some(p) = p {
@@ -430,8 +430,8 @@ fn 构造(f: &mut Function) {
     重命名(f, 0, &有φ, &子, BTreeMap::new(), &改, &mut 计数2);
 }
 
-//nt: 平凡φ消除
-//nt: 实参全同则直连
+
+
 fn 消除平凡φ(f: &mut Function) {
     let mut 轮 = 0;
     loop {
@@ -485,7 +485,7 @@ fn 消除平凡φ(f: &mut Function) {
                     continue;
                 }
                 let Some(目标) = 值 else { continue };
-                //nt: 换成目标值
+                
                 let mut 版: BTreeMap<prion_ir::LocalId, prion_ir::LocalId> = BTreeMap::new();
                 版.insert(*pid, 目标);
                 for b in &mut f.blocks {
@@ -498,7 +498,7 @@ fn 消除平凡φ(f: &mut Function) {
                         _ => {}
                     }
                 }
-                //nt: 删参数与该位实参
+                
                 f.blocks[bi].params.remove(k);
                 for p in &前[bi] {
                     if let Exit::Branch { targets, .. } = &mut f.blocks[*p as usize].exit {
@@ -519,19 +519,19 @@ fn 消除平凡φ(f: &mut Function) {
     }
 }
 
-//nt: 走值里的局部
+
 fn 走值<F: FnMut(&mut prion_ir::LocalId)>(v: &mut Value, g: &mut F) {
     if let Value::Local(id) = v {
         g(id);
     }
 }
 
-//nt: 走位置基
+
 fn 走位<F: FnMut(&mut prion_ir::LocalId)>(p: &mut Place, g: &mut F) {
     g(&mut p.base);
 }
 
-//nt: 走右值
+
 fn 走右值<F: FnMut(&mut prion_ir::LocalId)>(r: &mut Rvalue, g: &mut F) {
     match r {
         Rvalue::Use(p) | Rvalue::Ref(p) => 走位(p, g),
@@ -574,7 +574,7 @@ fn 走右值<F: FnMut(&mut prion_ir::LocalId)>(r: &mut Rvalue, g: &mut F) {
     }
 }
 
-//nt: 走语句
+
 fn 走语句<F: FnMut(&mut prion_ir::LocalId)>(s: &mut Stmt, g: &mut F) {
     match s {
         Stmt::Assign { lhs, rhs } => {
@@ -611,7 +611,7 @@ fn 走语句<F: FnMut(&mut prion_ir::LocalId)>(s: &mut Stmt, g: &mut F) {
     }
 }
 
-//nt: 走出口
+
 fn 走出口<F: FnMut(&mut prion_ir::LocalId)>(e: &mut Exit, g: &mut F) {
     match e {
         Exit::Return(Some(v)) => 走值(v, g),
@@ -627,7 +627,7 @@ fn 走出口<F: FnMut(&mut prion_ir::LocalId)>(e: &mut Exit, g: &mut F) {
     }
 }
 
-//nt: 清未引用局部
+
 fn 清死局部(f: &mut Function) {
     let n = f.locals.len();
     if n == 0 {
@@ -654,7 +654,7 @@ fn 清死局部(f: &mut Function) {
         });
     }
     for (i, l) in f.locals.iter().enumerate() {
-        //nt: 参数与对象绑定必留
+        
         if l.is_param || l.obj.is_some() || l.fn_owned {
             用[i] = true;
         }
@@ -686,7 +686,7 @@ fn 清死局部(f: &mut Function) {
     }
 }
 
-//nt: 全程序入口
+
 pub fn run(p: &mut Program) {
     for f in &mut p.functions {
         构造(f);

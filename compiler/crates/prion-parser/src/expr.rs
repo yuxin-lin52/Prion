@@ -1,96 +1,96 @@
-//! 表达式语法树
-//!
-//! 表达式在语法层就解析成树，check 与中间表示共用同一份结构。
-//! 不再各自扫 token 推断——两条路径判定不同步会静默分歧。
-//!
-//! 节点按引用形态组织：动词 + 前缀 + 类别 + 名，收成一个 `Call`。
+
+
+
+
+
+
 
 use prion_error::Span;
 use prion_lexer::Token;
 
-//nt: 动词位
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Verb {
-    //nt: 取值调用
+    
     Call,
-    //nt: 增量改写
+    
     Delta,
-    //nt: 构造
+    
     None,
 }
 
-//nt: 名字类别
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Target {
-    //nt: 值
+    
     Val,
-    //nt: 函数
+    
     Fn,
-    //nt: 类型
+    
     Type,
-    //nt: 变体
+    
     Variant,
-    //nt: 内置
+    
     Builtin,
 }
 
-//nt: 一元运算
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnOp {
-    //nt: 逻辑非
+    
     Not,
-    //nt: 负号
+    
     Neg,
-    //nt: 按位取反
+    
     BitNot,
-    //nt: 取地址
+    
     Ref,
-    //nt: 解引用
+    
     Deref,
 }
 
-//nt: 二元运算
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinOp {
-    //nt: 算术
+    
     Add,
     Sub,
     Mul,
     Div,
     Mod,
-    //nt: 比较
+    
     Eq,
     Ne,
     Lt,
     Le,
     Gt,
     Ge,
-    //nt: 逻辑
+    
     And,
     Or,
-    //nt: 位运算
+    
     BitAnd,
     BitOr,
     BitXor,
     Shl,
     Shr,
-    //nt: 范围
+    
     Range,
 }
 
-//nt: 子节点
+
 pub type ExprRef = std::boxed::Box<Expr>;
 
-//nt: 表达式
+
 #[derive(Debug, Clone)]
 pub struct Expr {
-    //nt: 节点号
+    
     pub id: u32,
     pub kind: ExprKind,
     pub span: Span,
 }
 
-//nt: 节点号发号器
+
 fn 下一个节点号() -> u32 {
     use std::cell::Cell;
     thread_local! {
@@ -103,72 +103,72 @@ fn 下一个节点号() -> u32 {
     })
 }
 
-//nt: 表达式种类
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExprKind {
-    //nt: 字面量
+    
     Int(i64),
     Float(f64),
     Str(String),
     Bool(bool),
     Null,
 
-    //nt: 名字引用
+    
     Name { target: Target, name: String },
 
-    //nt: 调用与限定引用
+    
     Call {
         verb: Verb,
         target: Target,
-        //nt: 模块前缀
+        
         module: Option<String>,
-        //nt: 块前缀
+        
         block: Option<String>,
         name: String,
         args: Vec<Expr>,
     },
 
-    //nt: 位置运算
+    
     Index { base: ExprRef, index: ExprRef },
-    //nt: 切片
+    
     Slice { base: ExprRef, from: ExprRef, to: ExprRef },
-    //nt: 字段
+    
     Field { base: ExprRef, name: String },
-    //nt: 解引用
+    
     Deref(ExprRef),
 
-    //nt: 运算
+    
     Unary { op: UnOp, operand: ExprRef },
     Binary { op: BinOp, lhs: ExprRef, rhs: ExprRef },
-    //nt: 三元
+    
     Ternary { cond: ExprRef, then: ExprRef, otherwise: ExprRef },
 
-    //nt: 字面量容器
+    
     ListLit(Vec<Expr>),
-    //nt: 键值表字面量
+    
     MapLit(Vec<(Expr, Expr)>),
 }
 
 impl Expr {
-    //nt: 造节点
+    
     pub fn new(kind: ExprKind, span: Span) -> Self {
         Self { id: 下一个节点号(), kind, span }
     }
 
-    //nt: 节点号
+    
     pub fn id(&self) -> u32 {
         self.id
     }
 }
 
-//nt: 相等只看结构与位置
+
 impl PartialEq for Expr {
     fn eq(&self, other: &Self) -> bool {
         self.kind == other.kind && self.span == other.span
     }
 }
 
-//nt: 语法树文本
+
 impl std::fmt::Display for Expr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.kind {
@@ -219,41 +219,41 @@ impl std::fmt::Display for Expr {
     }
 }
 
-//nt: 表达式解析器
+
 pub struct Parser<'a> {
-    //nt: 记号流
+    
     toks: &'a [Token],
-    //nt: 位置表
+    
     spans: &'a [(usize, usize)],
-    //nt: 游标
+    
     pub i: usize,
-    //nt: 行号
+    
     pub line: usize,
 }
 
 impl<'a> Parser<'a> {
-    //nt: 构造
+    
     pub fn new(toks: &'a [Token], spans: &'a [(usize, usize)], line: usize) -> Self {
         Self { toks, spans, i: 0, line }
     }
 
-    //nt: 看当前
+    
     fn peek(&self) -> Option<&Token> {
         self.toks.get(self.i)
     }
 
-    //nt: 取跨度
+    
     fn span(&self) -> Span {
         let (c, l) = self.spans.get(self.i).copied().unwrap_or((1, 0));
         Span { line: self.line, col: c, len: l }
     }
 
-    //nt: 收尾检查
+    
     pub fn done(&self) -> bool {
         self.i >= self.toks.len()
     }
 
-    //nt: 解析入口
+    
     pub fn parse(&mut self) -> Result<Expr, String> {
         let e = self.ternary()?;
         if !self.done() {
@@ -262,7 +262,7 @@ impl<'a> Parser<'a> {
         Ok(e)
     }
 
-    //nt: 三元最低
+    
     fn ternary(&mut self) -> Result<Expr, String> {
         let cond = self.or()?;
         if matches!(self.peek(), Some(Token::Sym("?"))) {
@@ -280,7 +280,7 @@ impl<'a> Parser<'a> {
         Ok(cond)
     }
 
-    //nt: 或
+    
     fn or(&mut self) -> Result<Expr, String> {
         let mut l = self.and()?;
         while matches!(self.peek(), Some(Token::Kw("or"))) {
@@ -292,7 +292,7 @@ impl<'a> Parser<'a> {
         Ok(l)
     }
 
-    //nt: 与
+    
     fn and(&mut self) -> Result<Expr, String> {
         let mut l = self.cmp()?;
         while matches!(self.peek(), Some(Token::Kw("and"))) {
@@ -304,7 +304,7 @@ impl<'a> Parser<'a> {
         Ok(l)
     }
 
-    //nt: 比较
+    
     fn cmp(&mut self) -> Result<Expr, String> {
         let mut l = self.bitor()?;
         loop {
@@ -324,7 +324,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    //nt: 位或
+    
     fn bitor(&mut self) -> Result<Expr, String> {
         let mut l = self.bitxor()?;
         while matches!(self.peek(), Some(Token::Sym("|"))) {
@@ -336,7 +336,7 @@ impl<'a> Parser<'a> {
         Ok(l)
     }
 
-    //nt: 位异或
+    
     fn bitxor(&mut self) -> Result<Expr, String> {
         let mut l = self.bitand()?;
         while matches!(self.peek(), Some(Token::Sym("^"))) {
@@ -348,7 +348,7 @@ impl<'a> Parser<'a> {
         Ok(l)
     }
 
-    //nt: 位与
+    
     fn bitand(&mut self) -> Result<Expr, String> {
         let mut l = self.shift()?;
         while matches!(self.peek(), Some(Token::Sym("&"))) {
@@ -360,7 +360,7 @@ impl<'a> Parser<'a> {
         Ok(l)
     }
 
-    //nt: 移位
+    
     fn shift(&mut self) -> Result<Expr, String> {
         let mut l = self.add()?;
         loop {
@@ -376,7 +376,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    //nt: 加减
+    
     fn add(&mut self) -> Result<Expr, String> {
         let mut l = self.mul()?;
         loop {
@@ -392,7 +392,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    //nt: 乘除模
+    
     fn mul(&mut self) -> Result<Expr, String> {
         let mut l = self.unary()?;
         loop {
@@ -409,7 +409,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    //nt: 一元
+    
     fn unary(&mut self) -> Result<Expr, String> {
         let span = self.span();
         let op = match self.peek() {
@@ -419,7 +419,7 @@ impl<'a> Parser<'a> {
             Some(Token::Sym("&")) => Some(UnOp::Ref),
             _ => None,
         };
-        //nt: 一元加号无意义
+        
         if matches!(self.peek(), Some(Token::Sym("+"))) {
             self.i += 1;
             return self.unary();
@@ -432,7 +432,7 @@ impl<'a> Parser<'a> {
         self.postfix()
     }
 
-    //nt: 后缀
+    
     fn postfix(&mut self) -> Result<Expr, String> {
         let mut e = self.atom()?;
         loop {
@@ -465,7 +465,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    //nt: 吃掉期望记号
+    
     fn expect(&mut self, t: Token) -> Result<(), String> {
         if self.peek() == Some(&t) {
             self.i += 1;
@@ -475,7 +475,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    //nt: 实参表
+    
     fn args(&mut self) -> Result<Vec<Expr>, String> {
         self.expect(Token::Sym("("))?;
         let mut xs = Vec::new();
@@ -489,7 +489,7 @@ impl<'a> Parser<'a> {
         Ok(xs)
     }
 
-    //nt: 跨块引用
+    
     fn cross_expr(&mut self, span: Span) -> Result<Expr, String> {
         let mut module = None;
         if matches!(self.peek(), Some(Token::HashHashColon)) {
@@ -533,7 +533,7 @@ impl<'a> Parser<'a> {
         }, span))
     }
 
-    //nt: 调用形态
+    
     fn call_expr(&mut self, span: Span) -> Result<Expr, String> {
         self.i += 1;
         if matches!(self.peek(), Some(Token::HashColon) | Some(Token::HashHashColon)) {
@@ -543,7 +543,7 @@ impl<'a> Parser<'a> {
             Some(Token::Kw("val")) => {
                 self.i += 1;
                 let n = self.take_name()?;
-                //nt: 有实参即间接调用
+                
                 let args = if matches!(self.peek(), Some(Token::Sym("("))) {
                     self.args()?
                 } else {
@@ -572,7 +572,7 @@ impl<'a> Parser<'a> {
         }, span))
     }
 
-    //nt: 取名字
+    
     fn take_name(&mut self) -> Result<String, String> {
         match self.peek().cloned() {
             Some(Token::Ident(n)) | Some(Token::Str(n)) => {
@@ -583,13 +583,13 @@ impl<'a> Parser<'a> {
         }
     }
 
-    //nt: 跳过类别取名字
+    
     fn take_name_after(&mut self) -> Result<String, String> {
         self.i += 1;
         self.take_name()
     }
 
-    //nt: 原子
+    
     fn atom(&mut self) -> Result<Expr, String> {
         let span = self.span();
         match self.peek().cloned() {

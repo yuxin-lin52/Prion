@@ -1,21 +1,21 @@
-//! prionc —— Prion 编译器驱动
-//!
-//! CLI 规格（对齐 cargo 的命令形态与退出码契约）：
-//!   prionc build [名] [--mode debug|release] [--opt 0-3] [--backend c|llvm]
-//!   prionc run   [名] [--mode …] [--opt …] [--backend …] [-- 参数…]
-//!   prionc check [名]
-//!   prionc clean [名]
-//!   prionc -V / -h
-//!
-//! - 操作数 `[名]` 可省：省略 = 当前目录的项目（有 lib.anle）或目录下唯一的 .an；
-//!   给了 = 按名字找（lib.anle 的包名，或 <名>.an 文件）。
-//! - 产物：`build/<模式>/<名>.exe`，中间产物 `<名>.c` 同目录（模式分顶层，目标层位已预留）。
-//! - 配置：`lib.anle`（name/main/id/v）+ `build.anle`（mode/opt/backend），
-//!   `键 = 值`、`#` 注释；命令行旗子覆盖文件值。
-//! - 退出码：0 成功 / 101 失败 / 1 用法错误；run 透传被运行程序的退出码。
-//! - 诊断走 stderr；进度走 stdout。
-//! - 编译器取 `PRION_CC`，未设则用 PATH 里的 `clang`。MSVC target 与 GNU target 均可，
-//!   前提是它找得到系统头文件与链接器
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 use std::env;
 use std::fs;
@@ -26,7 +26,7 @@ mod alloc_stat;
 mod fmt;
 mod lsp;
 
-//nt: 计数分配器
+
 #[global_allocator]
 static ALLOC: alloc_stat::计数 = alloc_stat::计数;
 
@@ -42,13 +42,13 @@ use prion_parser::Program as AstProgram;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-//nt: 发版时改语法元数据
-//nt: 年月/日期/包
+
+
 const SYNTAX: &str = "none";
 const TIER: &str = "none";
 const PACKS: &[&str] = &[];
 
-//nt: 版本展示与机器行
+
 fn version_banner() -> String {
     let 包显示 = PACKS.iter().map(|p| format!("+{}", p)).collect::<String>();
     let 包机器 = PACKS.join(",");
@@ -70,8 +70,8 @@ fn version_banner() -> String {
     format!("{} v{}\n{}", 名, VERSION, 机器)
 }
 
-//nt: 后端编译器取哪个
-//nt: 「同根」= 本可执行
+
+
 #[cfg(feature = "backend")]
 fn 找cc() -> String {
     if let Ok(v) = env::var("PRION_CC") {
@@ -129,9 +129,9 @@ fn main() -> ExitCode {
     code
 }
 
-//nt: 命令分派
+
 fn 主逻辑() -> ExitCode {
-    //nt: E7 编译器内部
+    
     std::panic::set_hook(Box::new(|info| {
         let msg = info
             .payload()
@@ -150,8 +150,8 @@ fn 主逻辑() -> ExitCode {
 }
 
 
-//nt: 失败
-//nt: 已渲染的带码报错
+
+
 fn fail101(msg: impl AsRef<str>) -> ExitCode {
     let m = msg.as_ref();
     if m.starts_with('[') {
@@ -162,8 +162,8 @@ fn fail101(msg: impl AsRef<str>) -> ExitCode {
     ExitCode::from(101)
 }
 
-//nt: 无位置报错
-//nt: 码级默认
+
+
 fn render_nofile(code: &str, 做: &str, 缺: &str, 改: &str) -> String {
     let (de, dd) = prion_error::code_defaults(code);
     let parts = prion_error::DiagParts::full(String::new(), 做, 缺, "", 改)
@@ -173,7 +173,7 @@ fn render_nofile(code: &str, 做: &str, 缺: &str, 改: &str) -> String {
     prion_error::render_full(&parts, prion_error::Tone::Fix, &cx)
 }
 
-//nt: 带文件报错
+
 fn render_file(code: &str, 做: &str, 缺: &str, 改: &str, src: &std::path::Path) -> String {
     let file = src
         .file_name()
@@ -187,7 +187,7 @@ fn render_file(code: &str, 做: &str, 缺: &str, 改: &str, src: &std::path::Pat
     prion_error::render_full(&parts, prion_error::Tone::Fix, &cx)
 }
 
-//nt: 用法错误
+
 fn usage_err(rendered: impl AsRef<str>) -> ExitCode {
     eprintln!("{}", rendered.as_ref());
     eprintln!();
@@ -213,7 +213,7 @@ fn dispatch(args: &[String]) -> ExitCode {
         "build" | "run" | "check" | "clean" | "frontend" => run_command(&args[0], &args[1..]),
         "fmt" => do_fmt(&args[1..]),
         "lsp" => {
-            // nt: 语言服务器入口
+            
             let 码 = lsp::服务();
             if 码 == 0 { ExitCode::SUCCESS } else { ExitCode::from(1) }
         }
@@ -232,19 +232,19 @@ struct Opts {
     mode: Option<String>,
     opt: Option<u32>,
     incremental: Option<bool>,
-    //nt: 调试信息开关
+    
     debug_info: Option<bool>,
-    //nt: 本机指令集开关
+    
     march_native: Option<bool>,
     backend: Option<String>,
-    //nt: 编译期求值配额
+    
     const_depth: Option<usize>,
     const_steps: Option<usize>,
     pass_args: Vec<String>,
-    dump_ir: bool, // 未公开的调试开关
-    //nt: 词法快照开关
+    dump_ir: bool, 
+    
     dump_tokens: bool,
-    //nt: 语法快照开关
+    
     dump_ast: bool,
     help: bool,
 }
@@ -284,7 +284,7 @@ fn parse_opts(rest: &[String]) -> Result<Opts, String> {
                 Some((k, v)) => (k, Some(v.to_string())),
                 None => (body, None),
             };
-            //nt: 取旗子的值
+            
             macro_rules! val {
                 () => {{
                     match &inline {
@@ -415,11 +415,11 @@ fn command_help(cmd: &str) -> String {
 
 
 struct Target {
-    //nt: 项目根
+    
     root: PathBuf,
-    //nt: 产物名
+    
     name: String,
-    //nt: 源文件
+    
     src: PathBuf,
 }
 
@@ -439,10 +439,10 @@ fn resolve(name: Option<&str>) -> Result<Target, String> {
             return single(as_file);
         }
         let as_dir = cwd.join(n);
-//nt: 目录工程
+
         if as_dir.is_dir() {
             if as_dir.join("main.an").is_file() {
-                //nt: 产物名取目录 bas
+                
                 let base = as_dir
                     .file_name()
                     .map(|s| s.to_string_lossy().into_owned())
@@ -459,7 +459,7 @@ fn resolve(name: Option<&str>) -> Result<Target, String> {
                 "在目录根放一个 main.an，或把名字指向别的工程",
             ));
         }
-        //nt: 当前目录本身就是项目
+        
         if cwd.join("lib.anle").is_file() {
             let kv = read_kv(&cwd.join("lib.anle"));
             if kv_get(&kv, "name") == Some(n) {
@@ -474,7 +474,7 @@ fn resolve(name: Option<&str>) -> Result<Target, String> {
         ));
     }
 
-    //nt: 读库根配置
+    
     if cwd.join("lib.anle").is_file() {
         let kv = read_kv(&cwd.join("lib.anle"));
         let pkg = kv_get(&kv, "name")
@@ -520,7 +520,7 @@ fn single(f: PathBuf) -> Result<Target, String> {
 }
 
 fn project(root: PathBuf, name: String) -> Result<Target, String> {
-    //nt: 约定一文件一程序
+    
     let mut ans = list_an(&root)?;
     let src = match ans.len() {
         1 => ans.remove(0),
@@ -593,7 +593,7 @@ fn kv_get<'a>(kv: &'a [(String, String)], k: &str) -> Option<&'a str> {
     kv.iter().find(|(a, _)| a == k).map(|(_, v)| v.as_str())
 }
 
-//nt: 配置收敛
+
 fn resolve_config(t: &Target, o: &Opts) -> Result<(String, u32, String), ExitCode> {
     let kv = read_kv(&t.root.join("build.anle"));
     let f_mode = kv_get(&kv, "mode").map(String::from);
@@ -623,7 +623,7 @@ fn resolve_config(t: &Target, o: &Opts) -> Result<(String, u32, String), ExitCod
 }
 
 
-///nt: 格式化命令
+
 fn do_fmt(args: &[String]) -> ExitCode {
     let 只查 = args.iter().any(|a| a == "--check");
     let 名 = args.iter().find(|a| !a.starts_with('-'));
@@ -685,7 +685,7 @@ fn run_command(cmd: &str, rest: &[String]) -> ExitCode {
         println!("{}", command_help(cmd));
         return ExitCode::SUCCESS;
     }
-    //nt: 配额在构建前注入
+    
     prion_lower::quota::设(
         o.const_depth.unwrap_or(prion_lower::quota::默认深度),
         o.const_steps.unwrap_or(prion_lower::quota::默认步数),
@@ -713,8 +713,8 @@ fn run_command(cmd: &str, rest: &[String]) -> ExitCode {
                 Ok(v) => v,
                 Err(e) => return e,
             };
-            //nt: 增量编译实验状态
-            let incr = o.incremental; //nt: 无显式开关时按体量自动决策
+            
+            let incr = o.incremental; 
             let exe = match do_build(&t, &mode, opt, o.dump_ir, incr, &backend, o.debug_info.unwrap_or(false), o.march_native.unwrap_or(false)) {
                 Ok((_, exe)) => exe,
                 Err(e) => return e,
@@ -729,15 +729,15 @@ fn run_command(cmd: &str, rest: &[String]) -> ExitCode {
     }
 }
 
-//nt: 词法 → 语法
-//nt: 多文件工程
-//nt: 编译单位 = 目录；
-//nt: 取一段记号
+
+
+
+
 fn collect_module_refs(段: &[prion_lexer::Token], out: &mut Vec<String>) {
     let mut i = 0usize;
     while i < 段.len() {
         if matches!(段[i], prion_lexer::Token::HashHashColon) {
-            //nt: 模块前缀名
+            
             let mut name = String::new();
             let mut j = i + 1;
             while let Some(tok) = 段.get(j) {
@@ -767,7 +767,7 @@ fn collect_module_refs(段: &[prion_lexer::Token], out: &mut Vec<String>) {
     }
 }
 
-//nt: 递归走语句
+
 fn stmts_module_refs(stmts: &[prion_parser::Stmt], out: &mut Vec<String>) {
     for s in stmts {
         match s {
@@ -781,8 +781,8 @@ fn stmts_module_refs(stmts: &[prion_parser::Stmt], out: &mut Vec<String>) {
     }
 }
 
-//nt: 递归扫工程目录，收集
-//nt: 按尾名收集
+
+
 fn collect_by_tail(root: &Path, tail: &str, dir: &Path, out: &mut Vec<(String, PathBuf)>) {
     let rd = match fs::read_dir(dir) {
         Ok(r) => r,
@@ -801,7 +801,7 @@ fn collect_by_tail(root: &Path, tail: &str, dir: &Path, out: &mut Vec<(String, P
                 Ok(r) => r,
                 Err(_) => continue,
             };
-            //nt: 全路径 = 相对工程
+            
             let mut parts: Vec<String> = rel
                 .components()
                 .map(|c| c.as_os_str().to_string_lossy().into_owned())
@@ -817,7 +817,7 @@ fn collect_by_tail(root: &Path, tail: &str, dir: &Path, out: &mut Vec<(String, P
     }
 }
 
-//nt: 标准库根
+
 fn std_root() -> Option<PathBuf> {
     if let Ok(v) = env::var("PRION_STD") {
         if !v.trim().is_empty() {
@@ -853,7 +853,7 @@ fn load_project(dir: &Path) -> Result<AstProgram, ExitCode> {
     queue.push_back((String::new(), entry));
     while let Some((modname, path)) = queue.pop_front() {
         if !seen.insert(modname.clone()) {
-            continue; // 同一模块只编一次（循环引用天然无害）
+            continue; 
         }
         let text = fs::read_to_string(&path).map_err(|e| {
             fail101(render_nofile(
@@ -873,22 +873,22 @@ fn load_project(dir: &Path) -> Result<AstProgram, ExitCode> {
                 .collect();
             return Err(fail101(格式语法错(&全)));
         }
-//nt: 依赖收齐
+
         let mut deps: Vec<String> = Vec::new();
         for b in &ast.blocks {
             stmts_module_refs(&b.stmts, &mut deps);
         }
-        //nt: 合源
-        //nt: 依赖模块 = 相对工
+        
+        
         let mut ast = ast;
         for b in &mut ast.blocks {
             b.module = modname.clone();
-            //nt: 源文件路径
+            
             b.file = path.display().to_string();
         }
-        blocks.extend(ast.blocks); // main 的块在前，依赖按引用顺序追加
+        blocks.extend(ast.blocks); 
         for dep in deps {
-            //nt: std 前缀查表
+            
             if let Some(rest) = dep.strip_prefix("std.") {
                 let root = std_root().ok_or_else(|| {
                     fail101(render_nofile(
@@ -915,8 +915,8 @@ fn load_project(dir: &Path) -> Result<AstProgram, ExitCode> {
             let rel = dep.replace('.', std::path::MAIN_SEPARATOR_STR);
             let direct = dir.join(&rel).with_extension("an");
             let want = direct.display().to_string();
-//nt: 模块路径尾名退回
-            //nt: 先按给定名当全路径找
+
+            
             let resolved: Option<(String, std::path::PathBuf)> = if direct.is_file() {
                 Some((dep.clone(), direct))
             } else {
@@ -958,7 +958,7 @@ fn load_project(dir: &Path) -> Result<AstProgram, ExitCode> {
 }
 
 fn front(t: &Target) -> Result<AstProgram, ExitCode> {
-//nt: 目录 = 多文件工程
+
     if t.src.is_dir() {
         return load_project(&t.src);
     }
@@ -997,14 +997,14 @@ fn front(t: &Target) -> Result<AstProgram, ExitCode> {
     Ok(ast)
 }
 
-//nt: 构建错误
+
 fn render_coded(code: &str, message: &str, line: usize, err_file: &std::path::Path, text: &str) -> String {
-    //nt: 显示名 = 错误实际
+    
     let file = err_file
         .file_name()
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_default();
-    //nt: 源码行
+    
     let eff_text = if err_file.as_os_str().is_empty() {
         text.to_string()
     } else {
@@ -1029,7 +1029,7 @@ fn render_coded(code: &str, message: &str, line: usize, err_file: &std::path::Pa
     prion_error::render_full(&parts, prion_error::Tone::Fix, &cx)
 }
 
-//nt: 词法 / 语法错误
+
 fn render_front(
     code: &str,
     parts: &prion_error::DiagParts,
@@ -1063,7 +1063,7 @@ fn print_diags(checks: &prion_check::CheckResult, src_path: &std::path::Path, sr
     eprintln!("检查未通过，共 {} 个错误：", checks.errors().len());
     let mut cache: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
     for d in &checks.diags {
-        //nt: 错误归自身文件
+        
         let (file, text): (String, &str) = if d.file.is_empty() {
             (
                 src_path
@@ -1104,15 +1104,15 @@ fn print_diags(checks: &prion_check::CheckResult, src_path: &std::path::Path, sr
         let ctx = prion_error::RenderCtx { code: &d.code, file: &file, src_line };
         let full = prion_error::render_full(&parts, d.tone, &ctx);
         if full.trim().is_empty() || parts.缺.is_empty() {
-            eprintln!("  {}", d.message); // 非结构化诊断（如上限提示）：原样输出
+            eprintln!("  {}", d.message); 
         } else {
             eprintln!("  {}", full);
         }
     }
 }
 
-//nt: 只跑前端
-//nt: 用于性能测量
+
+
 fn do_frontend(t: &Target) -> ExitCode {
     use std::time::Instant;
     let src_file = if t.src.is_dir() {
@@ -1174,7 +1174,7 @@ fn do_frontend(t: &Target) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-//nt: 令牌类码
+
 fn 令牌码(t: &prion_lexer::Token) -> u32 {
     use prion_lexer::Token as T;
     match t {
@@ -1193,7 +1193,7 @@ fn 令牌码(t: &prion_lexer::Token) -> u32 {
     }
 }
 
-//nt: 词法快照
+
 fn do_dump_tokens(t: &Target) -> ExitCode {
     let src_file = if t.src.is_dir() { t.src.join("main.an") } else { t.src.clone() };
     let src_text = match fs::read_to_string(&src_file) {
@@ -1211,7 +1211,7 @@ fn do_dump_tokens(t: &Target) -> ExitCode {
         Ok(段) => {
             let mut 出 = String::new();
             for t in 段 {
-                //nt: 一项四字段
+                
                 出.push_str(&format!("{}\n{}\n{}\n{}\n", t.line, t.col, t.len, 令牌码(&t.tok)));
             }
             print!("{}", 出);
@@ -1224,7 +1224,7 @@ fn do_dump_tokens(t: &Target) -> ExitCode {
     }
 }
 
-//nt: 语法快照
+
 fn do_dump_ast(t: &Target) -> ExitCode {
     let src_file = if t.src.is_dir() { t.src.join("main.an") } else { t.src.clone() };
     let src_text = match fs::read_to_string(&src_file) {
@@ -1258,7 +1258,7 @@ fn do_dump_ast(t: &Target) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-//nt: 块后序
+
 fn 快照块(b: &prion_parser::Block, out: &mut String) {
     for s in &b.stmts {
         快照句(s, 1, out);
@@ -1275,7 +1275,7 @@ fn 快照块(b: &prion_parser::Block, out: &mut String) {
     ));
 }
 
-//nt: 语句后序
+
 fn 快照句(s: &prion_parser::Stmt, d: usize, out: &mut String) {
     use prion_parser::Stmt as S;
     let (kind, line, col, len, head, body) = match s {
@@ -1313,14 +1313,14 @@ fn do_check(t: &Target) -> ExitCode {
     }
 }
 
-//nt: 编译+链接；成功返回
-//nt: 调试模式编译参数
+
+
 fn cc_opt_args(mode: &str, opt: u32, native: bool) -> Vec<String> {
     let mut v = if mode == "debug" {
-        //nt: 调试态默认带调试信息
+        
         vec!["-O0".to_string(), "-g".to_string()]
     } else {
-        //nt: release 抽护栏
+        
         vec![format!("-O{}", opt), "-DPRION_NOGUARD".to_string(), "-s".to_string()]
     };
     if native {
@@ -1352,9 +1352,9 @@ fn do_build_llvm(
         )));
     }
     let st = Command::new(&cc)
-        //nt: 档位随 opt
+        
         .args(cc_opt_args(mode, opt, false).iter().filter(|a| a.as_str().starts_with("-O")))
-        //nt: release 抽护栏
+        
         .args(if mode == "release" { vec!["-DPRION_NOGUARD".to_string()] } else { vec![] })
         .arg("-c")
         .arg(&rt_c)
@@ -1377,7 +1377,7 @@ fn do_build_llvm(
         ))),
     }
     let obj = dir.join(format!("{}.o", name));
-    //nt: 扁平路径发射
+    
     let 发射 = if std::env::var("PRION_TREE_LLVM").as_deref() == Ok("1") {
         prion_llvm::emit_object(ir, &obj, opt, mode == "debug", src_file)
     } else {
@@ -1411,7 +1411,7 @@ fn do_build_llvm(
 }
 
 
-// nt: 精简构建不含后端
+
 #[cfg(not(feature = "backend"))]
 fn do_build(
     _t: &Target,
@@ -1431,7 +1431,7 @@ fn do_build(
 #[cfg(feature = "backend")]
 fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, incr: Option<bool>, backend: &str, dbg: bool, native: bool) -> Result<(PathBuf, PathBuf), ExitCode> {
     let ast = front(t)?;
-    //nt: 目录工程 ⇒ 报错以
+    
     let src_file = if t.src.is_dir() { t.src.join("main.an") } else { t.src.clone() };
     let src_text = fs::read_to_string(&src_file).unwrap_or_default();
     let checks = check(&ast);
@@ -1443,7 +1443,7 @@ fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, incr: Option<bool>,
         Ok(p) => p,
         Err(e) => return Err(fail101(render_coded(e.code.as_str(), &e.message, e.line, std::path::Path::new(&e.file), &src_text))),
     };
-    //nt: 对象三件套挂名
+    
     prion_opt::run(&mut ir);
     prion_walk::drop_pass::对象挂名(&mut ir);
     if dump_ir {
@@ -1481,7 +1481,7 @@ fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, incr: Option<bool>,
         }
     }
 
-    //nt: C 路径经扁平载体还原
+    
     let flat_ir = prion_ir::flat::from_program(&ir);
     let ir_c = prion_ir::flat::to_program(&flat_ir, &ir);
     let c_src = match lower_to_c(
@@ -1494,7 +1494,7 @@ fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, incr: Option<bool>,
         Err(e) => return Err(fail101(render_coded(&e.code, &e.message, e.line, std::path::Path::new(""), &src_text))),
     };
 
-    //nt: 按语句数决定切分
+    
     let 语句数: usize = ir
         .functions
         .iter()
@@ -1507,7 +1507,7 @@ fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, incr: Option<bool>,
     if incr {
         let (prelude, units) = prion_codegen::split_parts(&c_src);
         if units.is_empty() {
-            //nt: 没有可拆单元
+            
             if let Err(e) = fs::write(&c_path, &c_src) {
                 return Err(fail101(render_nofile(
                     prion_error::EnvCode::E602.number(),
@@ -1539,7 +1539,7 @@ fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, incr: Option<bool>,
             println!("可执行：{}", exe.display());
             return Ok((c_path, exe));
         }
-        //nt: 前置段拆头与体
+        
         let (hdr, defs) = match prion_codegen::split_prelude(&prelude) {
             Ok(v) => v,
             Err(e) => {
@@ -1565,7 +1565,7 @@ fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, incr: Option<bool>,
         let 参 = cc_opt_args(mode, opt, native);
         let 优化 = opt.to_string();
 
-        //nt: 待编任务表
+        
         let mut 任务: Vec<(PathBuf, PathBuf)> = Vec::new();
         let mut objs: Vec<PathBuf> = Vec::new();
         let mut hit = 0usize;
@@ -1588,7 +1588,7 @@ fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, incr: Option<bool>,
         }
         objs.push(rt_obj);
 
-        //nt: 批量合单元，控对象数
+        
         let 每批 = 64usize;
         let mut 批: Vec<(usize, String)> = Vec::new();
         let mut acc: Vec<(usize, String)> = Vec::new();
@@ -1625,7 +1625,7 @@ fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, incr: Option<bool>,
             objs.push(obj);
         }
 
-        //nt: 并行编单元
+        
         let 总 = objs.len();
         let 新 = 任务.len();
         if 新 > 0 {
@@ -1685,13 +1685,13 @@ fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, incr: Option<bool>,
         });
 
         let mut cmd = Command::new(&cc);
-        //nt: 对象多时走响应文件
+        
         let 总长: usize = objs.iter().map(|o| o.as_os_str().len() + 1).sum();
         if 总长 > 16000 {
             let rsp = dir.join(format!("{}.rsp", t.name));
             let mut 行 = String::new();
             for o in &objs {
-                //nt: 正斜杠防转义吃除
+                
                 let 斜 = o.display().to_string().replace(std::path::MAIN_SEPARATOR, "/");
                 行.push_str(&format!("\"{}\"\n", 斜));
             }
@@ -1771,7 +1771,7 @@ fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, incr: Option<bool>,
     Ok((c_path, exe))
 }
 
-//nt: 运行被编译的程序；退
+
 fn do_run(exe: &Path, args: &[String]) -> ExitCode {
     let st = match Command::new(exe).args(args).status() {
         Ok(s) => s,
@@ -1802,8 +1802,8 @@ fn do_run(exe: &Path, args: &[String]) -> ExitCode {
     }
 }
 
-//nt: 去掉 prelude
-//nt: 但它只影响报错行号、
+
+
 fn prelude_iface(prelude: &str) -> String {
     const MARK: &str = "PRION_SRC[] = {";
     match prelude.find(MARK) {
@@ -1821,7 +1821,7 @@ fn prelude_iface(prelude: &str) -> String {
     }
 }
 
-//nt: 编译单元的缓存键
+
 fn cache_unit_key(parts: &[&str]) -> String {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
@@ -1851,7 +1851,7 @@ fn do_clean(t: &Target) -> ExitCode {
         )),
     }
 }
-// nt: 多错输出
+
 fn 格式语法错(各: &[String]) -> String {
     if 各.len() == 1 {
         return 各[0].clone();

@@ -1,30 +1,30 @@
-//! prion-types —— 类型驻留与泛型实例表
-//!
-//! 规则：
-//! - **类型身份 = TyId**（同一类型只有一个 ID，比较是整数比较，不比文本）；
-//! - 文本只是显示形态：`对子(int,str)` 与 `对子(int, str)` 归一化成同一 ID；
-//! - 泛型实例 = `Applied(名, 实参)`，与普通参数化类型（`list(int)`）同一套表示与去重。
-//!
-//! 不做：类型推断、约束求解、生命周期。本 crate 只负责「同一类型的身份唯一」。
+
+
+
+
+
+
+
+
 
 use std::collections::HashMap;
 
-//nt: 类型身份
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct TyId(pub u32);
 
-//nt: 类型结构
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TyKind {
-    //nt: 裸名
+    
     Named(String),
-    //nt: 带实参
+    
     Applied(String, Vec<TyId>),
-    //nt: 把手
+    
     Ptr(TyId),
 }
 
-//nt: 类型驻留表
+
 #[derive(Debug, Default)]
 pub struct Types {
     kinds: Vec<TyKind>,
@@ -37,7 +37,7 @@ impl Types {
         Self::default()
     }
 
-    //nt: 文本转身份
+    
     pub fn intern(&mut self, text: &str) -> TyId {
         let mut cur = 0usize;
         let cs: Vec<char> = text.chars().collect();
@@ -49,7 +49,7 @@ impl Types {
         &self.kinds[id.0 as usize]
     }
 
-    //nt: 规范文本
+    
     pub fn text(&self, id: TyId) -> &str {
         &self.texts[id.0 as usize]
     }
@@ -62,13 +62,13 @@ impl Types {
         self.kinds.is_empty()
     }
 
-    //nt: 实例名
+    
     pub fn 实例文本(&self, 名: &str, 实参: &[TyId]) -> String {
         let 段: Vec<&str> = 实参.iter().map(|a| self.text(*a)).collect();
         format!("{}({})", 名, 段.join(", "))
     }
 
-    //nt: 按规范文本发号
+    
     fn 注册(&mut self, kind: TyKind, 文本: String) -> TyId {
         if let Some(id) = self.索引.get(&文本) {
             return *id;
@@ -188,11 +188,11 @@ mod tests {
     }
 }
 
-//nt: 名字身份
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Sym(pub u32);
 
-//nt: 名字驻留表
+
 #[derive(Debug, Default)]
 pub struct Names {
     texts: Vec<String>,
@@ -204,7 +204,7 @@ impl Names {
         Self::default()
     }
 
-    //nt: 登记名字
+    
     pub fn intern(&mut self, s: &str) -> Sym {
         if let Some(&id) = self.索引.get(s) {
             return id;
@@ -216,7 +216,7 @@ impl Names {
         id
     }
 
-    //nt: 只查不登记
+    
     pub fn lookup(&self, s: &str) -> Option<Sym> {
         self.索引.get(s).copied()
     }
@@ -234,7 +234,7 @@ impl Names {
     }
 }
 
-// nt: 存储类
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StorageClass {
     Tmp,

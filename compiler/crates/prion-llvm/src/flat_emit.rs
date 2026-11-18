@@ -1,10 +1,10 @@
-//! 扁平 IR → LLVM IR 发射器
-//!
-//! 消费 `prion_ir::flat::Flat`，逐指令解释发射。
-//! 语义全部复用树后端 `Lower` 的臂：读走 load_place，
-//! 写走 store_place，运算走 binop，内置走 builtin。
-//! 扁平侧只补三样：值迹（指令号 → LLVM 值）、
-//! 块参数 φ 的前区承接、赋值收口（Nop）的存与回填。
+
+
+
+
+
+
+
 
 use crate::{slot_idx_of, 单选局部, Dbg, Lower};
 use prion_ir::flat::{Flat, FlatFn, Op, Tag};
@@ -18,7 +18,7 @@ use inkwell::AddressSpace;
 use inkwell::OptimizationLevel;
 use std::path::Path;
 
-//nt: 序列元素类型
+
 fn seq_elem_ty(t: &str) -> Option<String> {
     let (head, inner) = t.split_once('(')?;
     let tail = inner.strip_suffix(')')?;
@@ -28,7 +28,7 @@ fn seq_elem_ty(t: &str) -> Option<String> {
     }
 }
 
-//nt: 槽宽与符号
+
 fn elem_esz_sgn(t: &str) -> (i64, i64) {
     match t {
         "int_8" => (1, 1),
@@ -43,7 +43,7 @@ fn elem_esz_sgn(t: &str) -> (i64, i64) {
     }
 }
 
-//nt: map 值类型
+
 fn map_value_ty(t: &str) -> Option<String> {
     let inner = t.strip_prefix("map(")?.strip_suffix(')')?;
     let mut depth = 0i32;
@@ -58,10 +58,10 @@ fn map_value_ty(t: &str) -> Option<String> {
     None
 }
 
-//nt: 指令值迹与定义表
+
 struct 迹<'ctx> {
     vals: Vec<Option<BasicValueEnum<'ctx>>>,
-    //nt: 局部号 → 定义指令号
+    
     def: Vec<Option<u32>>,
 }
 
@@ -85,7 +85,7 @@ impl<'ctx> 迹<'ctx> {
         self.vals[i] = Some(v);
     }
 
-    //nt: 记定义
+    
     fn 记(&mut self, lid: usize, id: u32) {
         let i = lid;
         if i >= self.def.len() {
@@ -94,18 +94,18 @@ impl<'ctx> 迹<'ctx> {
         self.def[i] = Some(id);
     }
 
-    //nt: 定义指令反查局部
+    
     fn 反查(&self, id: u32) -> Option<usize> {
         self.def.iter().position(|x| *x == Some(id))
     }
 
-    //nt: 取定义
+    
     fn 定义(&self, lid: usize) -> Option<u32> {
         self.def.get(lid).and_then(|x| *x)
     }
 }
 
-//nt: 扁平发射入口
+
 pub fn emit_flat_object(
     p: &Program,
     flat: &Flat,
@@ -162,7 +162,7 @@ pub fn emit_flat_object(
     } else {
         None
     };
-    //nt: 各文件源码行
+    
     let mut src_lines = std::collections::BTreeMap::new();
     if let Ok(t) = std::fs::read_to_string(file) {
         src_lines.insert(file.to_string(), t.lines().map(|s| s.to_string()).collect());
@@ -202,10 +202,10 @@ pub fn emit_flat_object(
         let ffn = flat.fns.get(i).ok_or_else(|| format!("扁平体缺函数 {}", f.name))?;
         lo.lower_fn_flat(f, ffn, p)?;
     }
-    //nt: 先收尾调试信息
+    
     lo.dbg = None;
     lo.module.verify().map_err(|e| format!("LLVM 校验失败：{}", e.to_string()))?;
-    //nt: IR优化管线
+    
     if opt != OptimizationLevel::None {
         use inkwell::passes::PassBuilderOptions;
         let 级 = match opt {
@@ -217,16 +217,16 @@ pub fn emit_flat_object(
             .run_passes(级, &tm, PassBuilderOptions::create())
             .map_err(|e| e.to_string())?;
     }
-    //nt: 循环元数据在优化后挂
+    
     lo.挂循环元数据()?;
-    //nt: 优化后快照
+    
     let _ = std::fs::write(path.with_extension("ll"), lo.module.print_to_string().to_string());
     tm.write_to_file(&lo.module, FileType::Object, path).map_err(|e| e.to_string())
 }
 
 impl<'ctx> Lower<'ctx> {
-    //nt: 优化后挂循环元数据
-    //nt: 回边 = 指回头的分支
+    
+    
     fn 挂循环元数据(&self) -> Result<(), String> {
         let 环 = self.循环环.borrow();
         for (fv, head, n) in 环.iter() {
@@ -244,7 +244,7 @@ impl<'ctx> Lower<'ctx> {
             let 块表 = fv.get_basic_blocks();
             let mut first = true;
             for bb in 块表 {
-                //nt: 入口块与头块不挂
+                
                 if first || bb.get_name().to_string_lossy() == *head {
                     first = false;
                     continue;
@@ -272,14 +272,14 @@ impl<'ctx> Lower<'ctx> {
         Ok(())
     }
 
-    //nt: 扁平解释一函数
+    
     pub fn lower_fn_flat(
         &mut self,
         f: &Function,
         ffn: &FlatFn,
         p: &Program,
     ) -> Result<(), String> {
-        //nt: 逃逸集按函数清
+        
         crate::ESCAPED.with(|s| s.borrow_mut().clear());
         let fv = *self.funcs.get(&f.name).ok_or_else(|| format!("缺函数 {}", f.name))?;
         if let Some(d) = self.dbg.as_mut() {
@@ -303,7 +303,7 @@ impl<'ctx> Lower<'ctx> {
         let entry = self.ctx.append_basic_block(fv, "entry");
         self.builder.position_at_end(entry);
         self.builder.unset_current_debug_location();
-        //nt: 当前源文件
+        
         let fg = self.ptr_global("prion_cur_file");
         let 文件名 = f.file.rsplit(['/', '\\']).next().unwrap_or("");
         let fval = if 文件名.is_empty() {
@@ -313,7 +313,7 @@ impl<'ctx> Lower<'ctx> {
         };
         self.builder.build_store(fg.as_pointer_value(), fval).map_err(|e| e.to_string())?;
         let mut allocas: Vec<Option<inkwell::values::PointerValue<'ctx>>> = vec![None; f.locals.len()];
-        //nt: 塊參數集合
+        
         let mut 塊參數集: std::collections::BTreeSet<usize> = std::collections::BTreeSet::new();
         for b in &f.blocks {
             for (pid, _) in &b.params {
@@ -321,21 +321,21 @@ impl<'ctx> Lower<'ctx> {
             }
         }
         self.块参数phi.borrow_mut().clear();
-        //nt: 单赋值局部走值槽
+        
         let 值槽集 = 单选局部(f);
         self.值槽.borrow_mut().clear();
         self.值槽.borrow_mut().resize(f.locals.len(), None);
-        //nt: 槽键索引与后端一致
+        
         let slot_idx = slot_idx_of(p);
         for (i, l) in f.locals.iter().enumerate() {
             if l.is_param {
                 continue;
             }
-            //nt: 塊參數走φ不建棧位
+            
             if 塊參數集.contains(&i) {
                 continue;
             }
-            //nt: 跨块槽用全局
+            
             if let Some(n) = &l.name {
                 if let Some(idx) = slot_idx.get(n) {
                     let g = self.slot_global(n, &l.ty, *idx)?;
@@ -344,11 +344,11 @@ impl<'ctx> Lower<'ctx> {
                 }
             }
             if 值槽集.contains(&i) {
-                continue; //nt: 值槽不建栈位
+                continue; 
             }
             let t = self.ty(&l.ty);
             let a = self.alloca(t, &format!("v{}", i)).map_err(|e| e.to_string())?;
-            //nt: 指针栈位先置空
+            
             if t.is_pointer_type() {
                 self.builder
                     .build_store(a, t.into_pointer_type().const_null())
@@ -368,7 +368,7 @@ impl<'ctx> Lower<'ctx> {
             allocas[i] = Some(a);
             pi += 1;
         }
-        //nt: 变量级调试
+        
         self.发变量调试(f, &allocas)?;
         let mut bbs = Vec::new();
         for b in &f.blocks {
@@ -377,7 +377,7 @@ impl<'ctx> Lower<'ctx> {
         if let Some(first) = bbs.first() {
             self.builder.build_unconditional_branch(*first).map_err(|e| e.to_string())?;
         }
-        //nt: 先建全部φ 再发射
+        
         for (bi, b) in f.blocks.iter().enumerate() {
             self.builder.position_at_end(bbs[bi]);
             for (pid, pty) in &b.params {
@@ -395,7 +395,7 @@ impl<'ctx> Lower<'ctx> {
             }
         }
         let mut 迹 = 迹::new(ffn.insts.len());
-        //nt: 前区读局部接φ
+        
         let pre_end = ffn.blocks.first().map(|b| b.start as usize).unwrap_or(ffn.insts.len());
         let mut pids: Vec<usize> = Vec::new();
         for b in &f.blocks {
@@ -418,7 +418,7 @@ impl<'ctx> Lower<'ctx> {
                 .ok_or_else(|| "块参数缺φ".to_string())?;
             迹.存(iid as u32, v);
         }
-        //nt: 赋值目标预扫
+        
         let mut want_of: Vec<Option<Ty>> = vec![None; ffn.insts.len()];
         for (iid, inst) in ffn.insts.iter().enumerate() {
             if inst.tag != Tag::Nop {
@@ -447,7 +447,7 @@ impl<'ctx> Lower<'ctx> {
                 let inst = ffn.insts[iid];
                 self.cur_line = ffn.lines.get(iid).copied().unwrap_or(0) as usize;
                 self.want = want_of[iid].clone();
-                //nt: 调试位置随指令
+                
                 if let Some(d) = self.dbg.as_ref() {
                     if let Some(sco) = d.scope {
                         if self.cur_line > 0 {
@@ -461,7 +461,7 @@ impl<'ctx> Lower<'ctx> {
                             self.builder.set_current_debug_location(loc);
                         }
                     }
-                    //nt: 溯源全局随指令
+                    
                     let ln = self.cur_line as u64;
                     let g = self.line_global();
                     self.builder
@@ -485,7 +485,7 @@ impl<'ctx> Lower<'ctx> {
                                 .const_int(ffn.lens.get(iid).copied().unwrap_or(0) as u64, false),
                         )
                         .map_err(|e| e.to_string())?;
-                    //nt: 当前源码行
+                    
                     let key = if f.file.is_empty() { self.entry_file.clone() } else { f.file.clone() };
                     let 行文本 = self
                         .src_lines
@@ -514,8 +514,8 @@ impl<'ctx> Lower<'ctx> {
                             .map_err(|e| e.to_string())?;
                     } else if let Some(v) = v {
                         let mut x = self.value(f, &allocas, v)?;
-                        //nt: fn自有对象复印重绑
-                        //nt: 复印目标 = 调用方地皮
+                        
+                        
                         if let Value::Local(lid) = v {
                             if f.locals.get(*lid).map(|l| l.fn_owned).unwrap_or(false) {
                                 if let BasicValueEnum::PointerValue(pv) = x {
@@ -534,7 +534,7 @@ impl<'ctx> Lower<'ctx> {
                                             if let Some(a) = allocas[*lid] {
                                                 self.builder.build_store(a, c).map_err(|e| e.to_string())?;
                                             } else if let Some(x) = self.值槽.borrow_mut().get_mut(*lid) {
-                                                //nt: 值槽也回写
+                                                
                                                 *x = Some(c.into());
                                             }
                                             crate::ESCAPED.with(|s| s.borrow_mut().insert(*lid));
@@ -550,7 +550,7 @@ impl<'ctx> Lower<'ctx> {
                     }
                 }
                 Exit::Unreachable => {
-                    //nt: 不可达先 abort
+                    
                     self.call_rt("abort", &[], None, &[])?;
                     self.builder.build_unreachable().map_err(|e| e.to_string())?;
                 }
@@ -584,7 +584,7 @@ impl<'ctx> Lower<'ctx> {
                     }
                 }
             }
-            //nt: 头块上限登记
+            
             if let Some(n) = b.max {
                 self.循环环
                     .borrow_mut()
@@ -594,7 +594,7 @@ impl<'ctx> Lower<'ctx> {
         Ok(())
     }
 
-    //nt: 解释一条指令
+    
     fn 解释一条(
         &mut self,
         f: &Function,
@@ -798,14 +798,14 @@ impl<'ctx> Lower<'ctx> {
                 let r = self.from_slot(out, &vt)?;
                 记(迹, Some(r));
             }
-            //nt: 链尾读取按记位走
+            
             Tag::GetField | Tag::GetIndex | Tag::Deref => {
                 if let Some(pl) = ffn.places.get(iid).and_then(|x| x.clone()) {
                     let x = self.load_place(f, allocas, &pl)?;
                     记(迹, Some(x));
                 }
             }
-            //nt: 链中步走收口
+            
             Tag::GetFieldAddr | Tag::GetIndexAddr => {}
             Tag::Ref => {
                 let pl = ffn
@@ -882,20 +882,20 @@ impl<'ctx> Lower<'ctx> {
                     .ok_or_else(|| "赋值收口没有位置".to_string())?;
                 let vi = inst.a;
                 let mut v = 迹.取(vi)?;
-                //nt: 串赋值即堆副本
+                
                 if self.place_ty(f, &lhs).0 == "str" && inst.c != 0 {
                     v = self.call_rt("prion_str_copy", &[self.pty()], Some(self.pty()), &[v])?;
                 }
                 self.store_place(f, allocas, &lhs, v)?;
                 self.容器移交flat(f, allocas, &lhs, ffn, iid, 迹)?;
                 if lhs.proj.is_empty() {
-                    //nt: 回填值迹
+                    
                     let cur = self.load_place(f, allocas, &Place::local(lhs.base))?;
                     迹.存(vi, cur);
                     记(迹, Some(cur));
                     迹.记(lhs.base, vi);
                 } else if let Some(dv) = 迹.定义(lhs.base) {
-                    //nt: 改写后同步值迹
+                    
                     let cur = self.load_place(f, allocas, &Place::local(lhs.base))?;
                     迹.存(dv, cur);
                 }
@@ -919,7 +919,7 @@ impl<'ctx> Lower<'ctx> {
                 let iraw = self.value(f, allocas, &iv)?;
                 let vraw = self.value(f, allocas, &vv)?;
                 if let Some(st) = self.structs.get(&et).copied() {
-                    //nt: 聚合按地址
+                    
                     let a = self.alloca(st, "as").map_err(|e| e.to_string())?;
                     self.builder.build_store(a, vraw).map_err(|e| e.to_string())?;
                     self.call_rt(
@@ -988,7 +988,7 @@ impl<'ctx> Lower<'ctx> {
                     self.释放局部(f, allocas, lid)?;
                 }
             }
-            //nt: 释放局部当前值
+            
             Tag::DropVar => {
                 self.释放局部(f, allocas, inst.a as usize)?;
             }
@@ -1027,10 +1027,10 @@ impl<'ctx> Lower<'ctx> {
                     self.builder.position_at_end(ok);
                 }
             }
-            //nt: 对象三件套本步空臂
+            
             Tag::Alloc | Tag::Bind | Tag::Kill => {}
             Tag::AccessBegin | Tag::AccessEnd => {}
-            //nt: 转换器只出语句式写
+            
             Tag::ListSet | Tag::MapSet => return Err("扁平载体不出现表达式式容器写".into()),
             Tag::Asm => {
                 let blob = ffn
@@ -1045,15 +1045,15 @@ impl<'ctx> Lower<'ctx> {
         Ok(())
     }
 
-    //nt: 指令转值迹前置
+    
     fn flat值2(&self, 迹: &迹<'ctx>, ffn: &FlatFn, id: u32) -> Option<Value> {
         self.flat值(ffn, id, 迹)
     }
 
-    //nt: 指令转值
+    
     fn flat值(&self, ffn: &FlatFn, id: u32, 迹: &迹<'ctx>) -> Option<Value> {
         let inst = ffn.insts.get(id as usize).copied()?;
-        //nt: 定义指令按局部取型
+        
         if let Some(lid) = 迹.反查(id) {
             return Some(Value::Local(lid));
         }
@@ -1064,12 +1064,12 @@ impl<'ctx> Lower<'ctx> {
             Tag::ConstBool => Some(Value::Bool(inst.a != 0)),
             Tag::ConstNull => Some(Value::Null),
             Tag::ReadLocal => Some(Value::Local(inst.b as usize)),
-            //nt: 定义指令反查所属局部
+            
             _ => 迹.反查(id).map(Value::Local),
         }
     }
 
-    //nt: 容器赋值移交
+    
     fn 容器移交flat(
         &mut self,
         f: &Function,
@@ -1083,7 +1083,7 @@ impl<'ctx> Lower<'ctx> {
         if !prion_ir::is_container_ty(&ty) {
             return Ok(());
         }
-        //nt: 收口b记移交源
+        
         let nb = ffn.insts[iid].b;
         if nb == 0 {
             return Ok(());
@@ -1108,7 +1108,7 @@ impl<'ctx> Lower<'ctx> {
         Ok(())
     }
 
-    //nt: 列表字面量
+    
     fn list_lit(
         &mut self,
         f: &Function,
@@ -1128,7 +1128,7 @@ impl<'ctx> Lower<'ctx> {
             );
         }
         if let Some(宽) = 宽 {
-            //nt: 聚合字面量
+            
             let pt = self.ctx.ptr_type(AddressSpace::default());
             let at = pt.array_type(elems.len() as u32);
             let a = self.alloca(at, "aarr").map_err(|e| e.to_string())?;
@@ -1181,7 +1181,7 @@ impl<'ctx> Lower<'ctx> {
         )
     }
 
-    //nt: 列表取元素
+    
     fn list_get(
         &mut self,
         f: &Function,
@@ -1194,7 +1194,7 @@ impl<'ctx> Lower<'ctx> {
         let lv = self.value(f, allocas, list)?;
         let iv = self.value(f, allocas, index)?;
         if let Some(st) = self.structs.get(&et).copied() {
-            //nt: 聚合整块拷
+            
             let a = self.alloca(st, "ae").map_err(|e| e.to_string())?;
             self.call_rt(
                 "prion_list_copy_at",
@@ -1204,7 +1204,7 @@ impl<'ctx> Lower<'ctx> {
             )?;
             return self.builder.build_load(st, a, "av").map_err(|e| e.to_string());
         }
-        //nt: 调试态走检查函数
+        
         if self.dbg.is_some() {
             let c = self.call_rt(
                 "prion_list_at",
@@ -1214,7 +1214,7 @@ impl<'ctx> Lower<'ctx> {
             )?;
             return self.from_slot(c, &et);
         }
-        //nt: 八字节元素直读
+        
         let 位 = self
             .builder
             .build_int_sub(iv.into_int_value(), self.ity().into_int_type().const_int(1, false), "idx")
@@ -1235,7 +1235,7 @@ impl<'ctx> Lower<'ctx> {
         self.from_slot(raw, &et)
     }
 
-    //nt: 映射字面量
+    
     fn map_lit(
         &mut self,
         f: &Function,
@@ -1244,7 +1244,7 @@ impl<'ctx> Lower<'ctx> {
     ) -> Result<BasicValueEnum<'ctx>, String> {
         let wty = self.want.clone().map(|t| t.0).unwrap_or_default();
         let vt = map_value_ty(&wty).unwrap_or_else(|| "int".into());
-        //nt: 键型按声明
+        
         let kty = if wty
             .strip_prefix("map(")
             .map(|r| r.split(',').next().unwrap_or("").trim() == "int")
@@ -1293,7 +1293,7 @@ impl<'ctx> Lower<'ctx> {
         )
     }
 
-    //nt: 变体字面量
+    
     fn variant_lit(
         &mut self,
         f: &Function,
@@ -1349,7 +1349,7 @@ impl<'ctx> Lower<'ctx> {
     }
 }
 
-//nt: 解析函数签名
+
 fn fn_sig(s: &str) -> Option<(Vec<Ty>, Option<Ty>)> {
     let rest = s.strip_prefix("fn(")?;
     let mut depth = 1i32;

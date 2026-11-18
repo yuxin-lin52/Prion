@@ -1,12 +1,12 @@
-//! 内联 asm 三段式的隔离区解析
-//!
-//! `asm(模板 : 输出 : 输入 : 破坏)` 括号内是隔离区：约束词不按 Prion 词法，
-//! 由本模块按 asm 自己的微语法解析。check 与 IR 构建共用这一个解析函数——
-//! 同一份内容只准有一套判定。
+
+
+
+
+
 
 use crate::Token;
 
-//nt: 判定 asm 词位
+
 pub fn 是asm词(t: &Token) -> bool {
     match t {
         Token::Ident(n) => n == "asm",
@@ -15,7 +15,7 @@ pub fn 是asm词(t: &Token) -> bool {
     }
 }
 
-//nt: 寄存器转约束
+
 pub fn 寄存器约束(名: &str) -> Option<&'static str> {
     let 小写 = 名.to_ascii_lowercase();
     let s = 小写.as_str();
@@ -38,20 +38,20 @@ pub fn 寄存器约束(名: &str) -> Option<&'static str> {
     })
 }
 
-//nt: 四段解析结果
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct AsmSections {
-    //nt: 模板段
+    
     pub tmpl: String,
-    //nt: 输出段
+    
     pub outs: Vec<(String, String, bool)>,
-    //nt: 输入段
+    
     pub ins: Vec<(String, Vec<Token>)>,
-    //nt: 破坏段
+    
     pub clobbers: Vec<String>,
 }
 
-//nt: 按顶层切分
+
 fn 切(inner: &[Token], 是分界: impl Fn(&Token) -> bool) -> Vec<Vec<Token>> {
     let mut 出 = Vec::new();
     let mut 当前 = Vec::new();
@@ -89,7 +89,7 @@ fn 顶层冒号(inner: &[Token]) -> Vec<usize> {
     出
 }
 
-//nt: 箭头定方向
+
 fn 箭头(t: &[Token], i: usize) -> Option<(&'static str, usize)> {
     match (t.get(i), t.get(i + 1), t.get(i + 2)) {
         (Some(Token::Sym("-")), Some(Token::Sym(">")), _) => Some(("->", 2)),
@@ -99,9 +99,9 @@ fn 箭头(t: &[Token], i: usize) -> Option<(&'static str, usize)> {
     }
 }
 
-//nt: 解析隔离区
+
 pub fn 解析隔离区(inner: &[Token]) -> Result<AsmSections, String> {
-    //nt: 隔离区限 ASCII
+    
     for t in inner {
         let 文本 = match t {
             Token::Str(s) | Token::RawStr(s) | Token::Ident(s) => &**s,
@@ -115,7 +115,7 @@ pub fn 解析隔离区(inner: &[Token]) -> Result<AsmSections, String> {
         }
     }
     let 冒号 = 顶层冒号(inner);
-    //nt: 切出第 k 段
+    
     let mut 段: Vec<&[Token]> = Vec::new();
     let mut 起 = 0usize;
     for k in 0..=冒号.len() {
@@ -129,7 +129,7 @@ pub fn 解析隔离区(inner: &[Token]) -> Result<AsmSections, String> {
         return Err("asm 最多四段（模板 : 输出 : 输入 : 破坏）".into());
     }
 
-    //nt: 拼模板字面量
+    
     let mut 模板 = String::new();
     for t in 段[0] {
         match t {
@@ -162,7 +162,7 @@ pub fn 解析隔离区(inner: &[Token]) -> Result<AsmSections, String> {
     }
     if 段.len() >= 3 {
         for 项 in 切(段[2], |t| *t == Token::Sym(",")) {
-            //nt: 输入项
+            
             let 寄 = match 项.first() {
                 Some(Token::Ident(n)) => n.clone(),
                 _ => return Err("输入段要写 `寄存器 <- 表达式`".into()),
@@ -195,7 +195,7 @@ pub fn 解析隔离区(inner: &[Token]) -> Result<AsmSections, String> {
     })
 }
 
-//nt: 解析输出项
+
 fn 读绑定(项: &[Token]) -> Result<(String, String, bool, usize), String> {
     let 寄 = match 项.first() {
         Some(Token::Ident(n)) => n.clone(),
@@ -213,7 +213,7 @@ fn 读绑定(项: &[Token]) -> Result<(String, String, bool, usize), String> {
     Ok((约束.to_string(), 名.to_string(), 形 == "<->", 步))
 }
 
-//nt: 取括号内记号
+
 pub fn 括号内(toks: &[Token], 左括号: usize) -> Option<&[Token]> {
     let mut 层 = 0i32;
     for (k, t) in toks.iter().enumerate().skip(左括号) {
@@ -231,7 +231,7 @@ pub fn 括号内(toks: &[Token], 左括号: usize) -> Option<&[Token]> {
     None
 }
 
-//nt: 报错用映射表
+
 pub fn 映射表说明() -> &'static str {
     "寄存器映射：al/ax/eax/rax → a；bl/bx/ebx/rbx → b；cl/cx/ecx/rcx → c；dl/dx/edx/rdx → d；si/esi/rsi → S；di/edi/rdi → D；r8–r15 → r8…r15"
 }

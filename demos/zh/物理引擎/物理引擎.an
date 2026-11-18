@@ -3,20 +3,20 @@ add type "粒子" = (x float, y float, vx float, vy float)
 add val "表" list("粒子"*) = []
 add val "碰次" int = 0
 
-//nt: 场地半宽
+
 add val "场" float = 50.0
-//nt: 粒子半径
+
 add val "半" float = 0.5
 
-//nt: 造粒入库
+
 add fn "造粒"(x float, y float, vx float, vy float) "粒子"*:
     add val "gp" "粒子"* = "粒子"(call val "x", call val "y", call val "vx", call val "vy")
     push(call val "表", call val "gp")
     give call val "gp"
 ;
 
-//nt: 积分一步
-//nt: 墙反弹取负速度
+
+
 add fn "步进"(步 float) int:
     add val "spp" "粒子"* = "粒子"(0.0, 0.0, 0.0, 0.0)
     add val "spi" int = 1
@@ -45,8 +45,8 @@ add fn "步进"(步 float) int:
     give 0
 ;
 
-//nt: 全对 AABB 检查
-//nt: 逼近才交换（等质量弹性）
+
+
 add fn "碰撞"() int:
     add val "ci" int = 1
     add val "cj" int = 1
@@ -93,7 +93,7 @@ add fn "碰撞"() int:
     give 0
 ;
 
-//nt: 求总 vx 动量
+
 add fn "总vx"() float:
     add val "vh" float = 0.0
     add val "vi" int = 1
@@ -106,8 +106,8 @@ add fn "总vx"() float:
     give call val "vh"
 ;
 
-//nt: 界内全查
-//nt: 越界返假
+
+
 add fn "界内"() bool:
     add val "wi" int = 1
     add val "wp" "粒子"* = "粒子"(0.0, 0.0, 0.0, 0.0)
@@ -130,8 +130,8 @@ add fn "界内"() bool:
     give re
 ;
 
-//nt: 判据一 对撞交换
-//nt: 等质量弹性换速度
+
+
 add fn "判对撞"() bool:
     val "表" = []
     add val "dp1" "粒子"* = call fn "造粒"(10.0, 0.0, 1.0, 0.0)
@@ -150,7 +150,7 @@ add fn "判对撞"() bool:
     give fa
 ;
 
-//nt: 判据二 动量守恒
+
 add fn "判动量"() float:
     val "表" = []
     add val "mk" int = 0
@@ -173,7 +173,7 @@ add fn "判动量"() float:
     give call val "mh" - call val "mq"
 ;
 
-//nt: 判据三 墙反弹
+
 add fn "判墙"() bool:
     val "表" = []
     add val "kp" "粒子"* = call fn "造粒"(0.0, 0.0, 50.0, 0.0)
@@ -188,7 +188,7 @@ add fn "判墙"() bool:
     give fa
 ;
 
-//nt: 基准 400 粒 400 步
+
 add fn "基准"() int:
     val "表" = []
     val "碰次" = 0
@@ -215,7 +215,7 @@ add fn "基准"() int:
     give 0
 ;
 
-//nt: 主流程
+
 add val "判1" bool = call fn "判对撞"()
 add val "判2" float = call fn "判动量"()
 add val "判3" bool = call fn "判墙"()

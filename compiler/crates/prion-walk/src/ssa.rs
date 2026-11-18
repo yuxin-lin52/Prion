@@ -1,15 +1,15 @@
-//! SSA 分析
-//!
-//! - 支配树与支配判定
-//! - 可提升为 SSA 值的局部集合
-//!
-//! 判据：单定义 + 定义点支配全部使用点 + 未被取地址 + 无投影写读。
-//! 满足者不再需要内存槽，后端可直接用 SSA 值。
+
+
+
+
+
+
+
 
 use prion_ir::{BlockId, Exit, Function, LocalId, Place, Rvalue, Stmt, Value};
 use std::collections::BTreeSet;
 
-//nt: 后继块
+
 fn 后继(f: &Function, b: usize) -> Vec<BlockId> {
     match &f.blocks[b].exit {
         Exit::Branch { targets, .. } => targets.iter().map(|s| s.target).collect(),
@@ -17,7 +17,7 @@ fn 后继(f: &Function, b: usize) -> Vec<BlockId> {
     }
 }
 
-//nt: 前驱表
+
 pub fn 前驱表(f: &Function) -> Vec<Vec<BlockId>> {
     let mut ps: Vec<Vec<BlockId>> = vec![Vec::new(); f.blocks.len()];
     for i in 0..f.blocks.len() {
@@ -30,7 +30,7 @@ pub fn 前驱表(f: &Function) -> Vec<Vec<BlockId>> {
     ps
 }
 
-//nt: 链深
+
 fn 链深(idom: &[Option<BlockId>], mut b: BlockId) -> usize {
     let mut d = 0usize;
     let mut 圈 = 0;
@@ -45,7 +45,7 @@ fn 链深(idom: &[Option<BlockId>], mut b: BlockId) -> usize {
     d
 }
 
-//nt: 支配链求交
+
 fn 求交(idom: &[Option<BlockId>], mut a: BlockId, mut b: BlockId) -> BlockId {
     let mut 圈 = 0;
     while a != b {
@@ -68,7 +68,7 @@ fn 求交(idom: &[Option<BlockId>], mut a: BlockId, mut b: BlockId) -> BlockId {
     a
 }
 
-//nt: 立即支配者
+
 pub fn 支配树(f: &Function) -> Vec<Option<BlockId>> {
     let n = f.blocks.len();
     let mut idom: Vec<Option<BlockId>> = vec![None; n];
@@ -84,7 +84,7 @@ pub fn 支配树(f: &Function) -> Vec<Option<BlockId>> {
         for b in 1..n {
             let mut 新: Option<BlockId> = None;
             for &p in &ps[b] {
-                //nt: 入口视作已入场
+                
                 if idom[p as usize].is_none() && p != 0 {
                     continue;
                 }
@@ -102,7 +102,7 @@ pub fn 支配树(f: &Function) -> Vec<Option<BlockId>> {
     idom
 }
 
-//nt: 是否支配
+
 pub fn 支配(idom: &[Option<BlockId>], a: BlockId, b: BlockId) -> bool {
     if a == b {
         return true;
@@ -122,36 +122,36 @@ pub fn 支配(idom: &[Option<BlockId>], a: BlockId, b: BlockId) -> bool {
     false
 }
 
-//nt: 标量判定
+
 fn 是标量(t: &str) -> bool {
     matches!(t, "int" | "float" | "bool") || t.ends_with('*')
 }
 
-//nt: 位置带投影
+
 fn 带投影(p: &Place) -> bool {
     !p.proj.is_empty()
 }
 
-//nt: 读值收集
+
 fn 读值(v: &Value, out: &mut Vec<(LocalId, usize, usize)>) {
     if let Value::Local(id) = v {
         out.push((*id, 0, 0));
     }
 }
 
-//nt: 右值里的读
+
 fn 读右值(r: &Rvalue, out: &mut Vec<(LocalId, usize, usize)>) {
     match r {
         Rvalue::Use(p) => {
             if 带投影(p) {
-                //nt: 带投影读要地址
+                
                 out.push((p.base, 1, 0));
             } else {
                 out.push((p.base, 0, 0));
             }
         }
         Rvalue::Ref(p) => {
-            //nt: 取地址要地址
+            
             out.push((p.base, 1, 0));
         }
         Rvalue::Const(v) => 读值(v, out),
@@ -193,7 +193,7 @@ fn 读右值(r: &Rvalue, out: &mut Vec<(LocalId, usize, usize)>) {
     }
 }
 
-//nt: 语句里的读
+
 fn 读语句(s: &Stmt, out: &mut Vec<(LocalId, usize, usize)>) {
     match s {
         Stmt::Assign { lhs, rhs } => {
@@ -225,7 +225,7 @@ fn 读语句(s: &Stmt, out: &mut Vec<(LocalId, usize, usize)>) {
         }
         Stmt::Alloc { .. } | Stmt::Bind { .. } | Stmt::Drop { .. } | Stmt::DropVar { .. } | Stmt::Kill { .. } => {}
         Stmt::Asm(form) => {
-            //nt: 输出要地址
+            
             for (_, v, _) in &form.outs {
                 out.push((*v, 1, 0));
             }
@@ -236,15 +236,15 @@ fn 读语句(s: &Stmt, out: &mut Vec<(LocalId, usize, usize)>) {
     }
 }
 
-//nt: 可提升的 SSA 值局部
+
 pub fn ssa值局部(f: &Function) -> BTreeSet<LocalId> {
     let n = f.locals.len();
-    //nt: 定义点
+    
     let mut 定义数 = vec![0usize; n];
     let mut 定义处: Vec<Option<(usize, usize)>> = vec![None; n];
-    //nt: 使用点
+    
     let mut 使用: Vec<Vec<(usize, usize, u8)>> = vec![Vec::new(); n];
-    //nt: 被取地址
+    
     let mut 取址: BTreeSet<LocalId> = BTreeSet::new();
     for (bi, b) in f.blocks.iter().enumerate() {
         for (si, s) in b.stmts.iter().enumerate() {
@@ -265,13 +265,13 @@ pub fn ssa值局部(f: &Function) -> BTreeSet<LocalId> {
                 }
             }
         }
-        //nt: 出口读
+        
         let mut 读 = Vec::new();
         match &b.exit {
             Exit::Return(Some(v)) => 读值(v, &mut 读),
             Exit::Branch { cond, targets } => {
                 读值(cond, &mut 读);
-                //nt: 边实参也算读
+                
                 for s in targets {
                     for a in &s.args {
                         读值(a, &mut 读);
@@ -287,7 +287,7 @@ pub fn ssa值局部(f: &Function) -> BTreeSet<LocalId> {
         }
     }
     let idom = 支配树(f);
-    //nt: 块参数不是局部定义
+    
     let mut 块参: BTreeSet<LocalId> = BTreeSet::new();
     for b in &f.blocks {
         for (pid, _) in &b.params {
@@ -318,11 +318,11 @@ pub fn ssa值局部(f: &Function) -> BTreeSet<LocalId> {
         let Some((db, ds)) = 定义处[i] else {
             continue;
         };
-        //nt: 定义点支配全部使用点
+        
         let mut 好 = true;
         for &(ub, us, 标) in &使用[i] {
             if 标 == 1 {
-                //nt: 带投影读写要地址
+                
                 好 = false;
                 break;
             }

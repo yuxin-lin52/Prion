@@ -1,13 +1,13 @@
-//! AST → 中间表示的构建器
-//!
-//! 层级语法：结构行 `:` 开体、独占行 `;` 收体、`else:` 紧跟 `;`。
-//!
-//! 处理：块 → 函数；`add val` 声明 / `val "名" =` 改值 / `print(...)`；
-//! `if`（含 `else`）/ `while` / `for … in …` / `match` + `case`；
-//! 表达式优先级：算术（`* / %` 与 `+ -`）→ 比较 → `and` → `or`；
-//! 结构体字段读写；跨模块可见性门禁（`pub` / `hide`）。
-//!
-//! 容器字面量与 `pop` / `sort` 遇到即报错。
+
+
+
+
+
+
+
+
+
+
 
 use prion_error::Span;
 use prion_lexer::Token;
@@ -20,54 +20,54 @@ use prion_ir::{
     Program, Rvalue, Stmt, StructType, Succ, Ty, Value, Variant,
 };
 
-//nt: 构建错误
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct BuildError {
     pub message: String,
     pub code: prion_error::Code,
-    //nt: 源行号
+    
     pub line: usize,
-    //nt: 错误所在的**源文件
-    //nt: 渲染时据此取该文件的
+    
+    
     pub file: String,
 }
 
 thread_local! {
-    //nt: 当前处理的源行号
+    
     static CUR_LINE: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
-    //nt: 泛型类型声明表
+    
     static GENERICS: std::cell::RefCell<BTreeMap<String, Vec<String>>> =
         std::cell::RefCell::new(BTreeMap::new());
-    //nt: 泛型实例待建清单
+    
     static INST_TODO: std::cell::RefCell<Vec<(String, Vec<String>)>> =
         std::cell::RefCell::new(Vec::new());
-    //nt: 常量 fn 表
+    
     #[allow(non_upper_case_globals)]
     static 常量fn表: std::cell::RefCell<BTreeMap<String, (Vec<String>, Vec<Token>)>> =
         std::cell::RefCell::new(BTreeMap::new());
-    //nt: 泛型 fn 模板
+    
     #[allow(non_upper_case_globals)]
     static 泛型fn表: std::cell::RefCell<
         BTreeMap<String, (Vec<(String, Vec<String>)>, Vec<(String, Ty)>, Ty, Vec<Token>, String, String)>,
     > =
         std::cell::RefCell::new(BTreeMap::new());
-    //nt: 泛型语句模板
+    
     #[allow(non_upper_case_globals)]
     static 泛型语句体fn表: std::cell::RefCell<
         BTreeMap<String, (Vec<(String, Vec<String>)>, Vec<(String, Ty)>, Ty, Vec<AstStmt>, String, String)>,
     > =
         std::cell::RefCell::new(BTreeMap::new());
-    //nt: fn引用的本块val
+    
     #[allow(non_upper_case_globals)]
     static fn_used表: std::cell::RefCell<BTreeMap<String, BTreeMap<String, Ty>>> =
         std::cell::RefCell::new(BTreeMap::new());
-    //nt: 类型参数代换
+    
     #[allow(non_upper_case_globals)]
     static 类型代换表: std::cell::RefCell<Option<(Vec<String>, Vec<String>)>> =
         const { std::cell::RefCell::new(None) };
 }
 
-//nt: add fix "名
+
 fn 常量名显示(段: &[Token]) -> String {
     match 段.get(2) {
         Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
@@ -75,7 +75,7 @@ fn 常量名显示(段: &[Token]) -> String {
     }
 }
 
-//nt: 某具体类型支持某能力
+
 fn 类型能力(型: &str, op: &str) -> bool {
     let 算术 = ["+", "-", "*", "/", "%"];
     let 比较 = ["<", "<=", ">", ">="];
@@ -87,19 +87,19 @@ fn 类型能力(型: &str, op: &str) -> bool {
         }
         "str" => 比较.contains(&op) || 相等.contains(&op),
         "bool" => 相等.contains(&op),
-        //nt: 自定义类型
+        
         _ => 相等.contains(&op),
     }
 }
 
-//nt: 逃逸复印分类
+
 enum 复印 {
     无需,
     拷贝(String, i64),
     无法,
 }
 
-//nt: 该型是否沾区域
+
 fn 区域单(t: &str, 区域: &BTreeSet<String>) -> bool {
     if t.ends_with('*') || t == "str" {
         return true;
@@ -111,7 +111,7 @@ fn 区域单(t: &str, 区域: &BTreeSet<String>) -> bool {
     区域.contains(t)
 }
 
-//nt: 收语句里的写
+
 fn 语句写(s: &Stmt, out: &mut BTreeSet<LocalId>) {
     match s {
         Stmt::Assign { lhs, .. } => {
@@ -124,7 +124,7 @@ fn 语句写(s: &Stmt, out: &mut BTreeSet<LocalId>) {
     }
 }
 
-//nt: 跨圈逃逸判定
+
 fn 跨圈(f: &Function, dst: LocalId, h: usize, c: usize) -> bool {
     for b in f.blocks.iter() {
         if b.id >= h && b.id <= c {
@@ -158,7 +158,7 @@ fn 跨圈(f: &Function, dst: LocalId, h: usize, c: usize) -> bool {
     false
 }
 
-//nt: 沾区域的积/和类型
+
 fn 区型表(types: &[StructType]) -> BTreeSet<String> {
     let mut 集: BTreeSet<String> = BTreeSet::new();
     loop {
@@ -180,7 +180,7 @@ fn 区型表(types: &[StructType]) -> BTreeSet<String> {
     }
 }
 
-//nt: 该型可深拷
+
 fn 可深拷(型: &str, types: &[StructType]) -> bool {
     let 标 = |t: &str| {
         matches!(
@@ -193,10 +193,10 @@ fn 可深拷(型: &str, types: &[StructType]) -> bool {
         return true;
     }
     if 型.ends_with('*') {
-        return false; // 裸指针：无从知道指向何物，不深拷
+        return false; 
     }
     let 内 = |p: &str| 型.strip_prefix(p).and_then(|r| r.strip_suffix(')')).map(|x| x.trim().to_string());
-    //nt: 容器元素仍限标量与串
+    
     let 叶 = |t: &str| 标(t) || t == "str";
     for 前 in ["list(", "que(", "stack("] {
         if let Some(e) = 内(前) {
@@ -213,7 +213,7 @@ fn 可深拷(型: &str, types: &[StructType]) -> bool {
     st.variants.is_empty() && st.fields.iter().all(|(_, ty)| 可深拷(&ty.0, types))
 }
 
-//nt: 逃逸值复印
+
 fn 复印方式(型: &str, 区域: &BTreeSet<String>, types: &[StructType]) -> 复印 {
     let 标量 = |t: &str| {
         matches!(
@@ -252,26 +252,26 @@ fn 复印方式(型: &str, 区域: &BTreeSet<String>, types: &[StructType]) -> �
         }
         return 复印::无法;
     }
-    //nt: 结构体按字段深拷
+    
     if 可深拷(型, types) {
         return 复印::拷贝(format!("#dcdeep_{}", 型), 0);
     }
     复印::无法
 }
 
-//nt: 收值里的局部
+
 fn 值用(v: &Value, out: &mut BTreeSet<LocalId>) {
     if let Value::Local(id) = v {
         out.insert(*id);
     }
 }
 
-//nt: 收位置里的局部
+
 fn 位用(p: &Place, out: &mut BTreeSet<LocalId>) {
     out.insert(p.base);
 }
 
-//nt: 收右值里的局部
+
 fn 右用(r: &Rvalue, out: &mut BTreeSet<LocalId>) {
     match r {
         Rvalue::Use(p) | Rvalue::Ref(p) => 位用(p, out),
@@ -302,7 +302,7 @@ fn 右用(r: &Rvalue, out: &mut BTreeSet<LocalId>) {
     }
 }
 
-//nt: 收语句里的读
+
 fn 语句读(s: &Stmt, out: &mut BTreeSet<LocalId>) {
     match s {
         Stmt::Assign { rhs, .. } => 右用(rhs, out),
@@ -326,7 +326,7 @@ fn 语句读(s: &Stmt, out: &mut BTreeSet<LocalId>) {
     }
 }
 
-//nt: 实例化点核对
+
 fn 核能力(
     名: &str,
     带能力: &[(String, Vec<String>)],
@@ -350,7 +350,7 @@ fn 核能力(
     Ok(())
 }
 
-//nt: 编译期执行一个 fn
+
 fn 编译期执行(
     名: &str,
     实参: &[crate::consts::Const],
@@ -358,7 +358,7 @@ fn 编译期执行(
     深: usize,
 ) -> Option<crate::consts::Const> {
     if !crate::quota::可入(深) {
-        return None; //nt: 深度或步数超限
+        return None; 
     }
     let (形参, 体) = 常量fn表.with(|t| t.borrow().get(名).cloned())?;
     if 形参.len() != 实参.len() {
@@ -375,12 +375,12 @@ fn 编译期执行(
     )
 }
 
-//nt: 读类型参数表
+
 fn 读类型参数表(段: &[Token], 开: usize) -> Option<Vec<(String, Vec<String>)>> {
     let 止 = 括号止(段, 开)?;
     let mut 出 = Vec::new();
     for 段 in 段[开 + 1..止].split(|t| *t == Token::Sym(",")) {
-        //nt: 按段解析
+        
         match 段 {
             [Token::Ident(n)] => 出.push((n.to_string(), Vec::new())),
             [Token::Ident(n), Token::Sym(op)] => 出.push((n.to_string(), vec![(*op).to_string()])),
@@ -394,7 +394,7 @@ fn 读类型参数表(段: &[Token], 开: usize) -> Option<Vec<(String, Vec<Stri
     }
 }
 
-//nt: 从 `开` 处的
+
 fn 括号止(段: &[Token], 开: usize) -> Option<usize> {
     let mut 深 = 0i32;
     for (k, t) in 段.iter().enumerate().skip(开) {
@@ -412,12 +412,12 @@ fn 括号止(段: &[Token], 开: usize) -> Option<usize> {
     None
 }
 
-//nt: 这个名字是不是泛型类
+
 fn 泛型判别(名: &str) -> bool {
     GENERICS.with(|g| g.borrow().contains_key(名))
 }
 
-//nt: 取调用实参段
+
 fn 取实参段(t: &[Token], 左: usize) -> Vec<Vec<Token>> {
     let mut 深 = 0i32;
     let mut 内 = Vec::new();
@@ -442,7 +442,7 @@ fn 取实参段(t: &[Token], 左: usize) -> Vec<Vec<Token>> {
     split_args(&内)
 }
 
-//nt: 类型串 → toke
+
 fn 类型串转token(s: &str) -> Vec<Token> {
     let 基 = s.trim_end_matches('*');
     let mut 出 = vec![Token::Ident(基.to_string().into())];
@@ -452,7 +452,7 @@ fn 类型串转token(s: &str) -> Vec<Token> {
     出
 }
 
-//nt: 把类型参数名整词换成
+
 fn 替换类型参数token(段: &[Token], 参数: &[String], 实参: &[String]) -> Vec<Token> {
     段.iter()
         .map(|t| match t {
@@ -461,7 +461,7 @@ fn 替换类型参数token(段: &[Token], 参数: &[String], 实参: &[String]) 
                 None => Token::Ident(n.clone()),
             },
             other => {
-                //nt: 原样保留
+                
                 let _ = other;
                 t.clone()
             }
@@ -469,7 +469,7 @@ fn 替换类型参数token(段: &[Token], 参数: &[String], 实参: &[String]) 
         .collect()
 }
 
-//nt: 单态化一份泛型 fn
+
 fn 建fn实例(
     bx: &mut Builder,
     实例名: &str,
@@ -504,7 +504,7 @@ fn 建fn实例(
     bx.line(&行种, &行, &[])
 }
 
-//nt: 类型串拆成
+
 fn 拆类型(s: &str) -> (String, Vec<String>) {
     let s = s.trim();
     if let Some(rest) = s.strip_prefix("fn(") {
@@ -543,7 +543,7 @@ fn 拆类型(s: &str) -> (String, Vec<String>) {
     }
 }
 
-//nt: 按顶层逗号切类型
+
 fn 切类型实参(s: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut cur = String::new();
@@ -575,7 +575,7 @@ fn 切类型实参(s: &str) -> Vec<String> {
     out
 }
 
-//nt: 类型模式统一
+
 fn 统一类型(pat: &str, got: &str, 参数: &[String], 绑定: &mut [Option<String>]) -> bool {
     let (p, g) = (pat.trim(), got.trim());
     if p.ends_with('*') && g.ends_with('*') {
@@ -600,7 +600,7 @@ fn 统一类型(pat: &str, got: &str, 参数: &[String], 绑定: &mut [Option<St
     pa.iter().zip(ga.iter()).all(|(a, b)| 统一类型(a, b, 参数, 绑定))
 }
 
-//nt: 把类型串里的类型参数
+
 fn 替换参数(s: &str, 参数: &[String], 实参: &[String]) -> String {
     let mut 出 = String::new();
     let 字 = |c: char| c.is_alphanumeric() || c == '_';
@@ -625,9 +625,9 @@ fn 替换参数(s: &str, 参数: &[String], 实参: &[String]) -> String {
     出
 }
 
-//nt: 构建错误
-//nt: 递归收集所有语句行的
-//nt: 供跨块引用登记等"全
+
+
+
 fn collect_ast_lines<'a>(stmts: &'a [AstStmt], out: &mut Vec<&'a TokStream>) {
     for s in stmts {
         match s {
@@ -640,7 +640,7 @@ fn collect_ast_lines<'a>(stmts: &'a [AstStmt], out: &mut Vec<&'a TokStream>) {
     }
 }
 
-//nt: 同上，带行号
+
 fn collect_ast_lines_ln<'a>(stmts: &'a [AstStmt], out: &mut Vec<(usize, &'a TokStream)>) {
     for s in stmts {
         match s {
@@ -662,7 +662,7 @@ fn err<T>(m: impl Into<String>) -> Result<T, BuildError> {
     })
 }
 
-//nt: 结构行的种类
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Kind {
     If,
@@ -672,25 +672,25 @@ enum Kind {
     For,
 }
 
-//nt: 构建器
 
-//nt: 内置/转换调用的返回
+
+
 fn builtin_ret_ty(name: &str) -> Ty {
     match name {
         "concat" | "sub_str" | "nth_char" | "char" | "str" | "read_file" => Ty("str".into()),
         "float" => Ty("float".into()),
-        //nt: 类型转换 `bool
+        
         "bool" => Ty("bool".into()),
-//nt: 运行子程序
+
         "run" => Ty("int".into()),
         "has" | "empty" => Ty("bool".into()),
-        //nt: 容器构造
+        
         "que" => Ty("que".into()),
         "stack" => Ty("stack".into()),
-        //nt: 取环境 / 表内容
+        
         "args" | "keys" => Ty("list(str)".into()),
         "vals" => Ty("list(int)".into()),
-        //nt: 定长族转换 `int
+        
         "int_8" | "int_16" | "int_32" | "int_64" | "uint_8" | "uint_16" | "uint_32" | "uint_64" => {
             Ty(name.to_string())
         }
@@ -699,7 +699,7 @@ fn builtin_ret_ty(name: &str) -> Ty {
     }
 }
 
-//nt: 判断 `##
+
 fn hh_is_fn_form(t: &[Token], start: usize) -> bool {
     let mut j = start;
     loop {
@@ -722,7 +722,7 @@ fn hh_is_fn_form(t: &[Token], start: usize) -> bool {
         && matches!(t.get(j + 2), Some(Token::Kw("fn")))
 }
 
-//nt: 字段类型查表
+
 fn field_ty_in(
     types: &[StructType],
     idx: &std::collections::HashMap<String, usize>,
@@ -735,7 +735,7 @@ fn field_ty_in(
         .unwrap_or_else(|| "int".into())
 }
 
-//nt: list
+
 fn elem_ty_of(ty: &str) -> Option<String> {
     for pre in ["list(", "que(", "stack("] {
         if let Some(inner) = ty.strip_prefix(pre).and_then(|s| s.strip_suffix(')')) {
@@ -743,7 +743,7 @@ fn elem_ty_of(ty: &str) -> Option<String> {
         }
     }
     if let Some(inner) = ty.strip_prefix("map(").and_then(|s| s.strip_suffix(')')) {
-        //nt: map
+        
         let mut depth = 0i32;
         for (i, c) in inner.char_indices() {
             match c {
@@ -757,18 +757,18 @@ fn elem_ty_of(ty: &str) -> Option<String> {
     None
 }
 
-//nt: 容器字面量 RHS
+
 fn lit_hint(decl: &Ty, after: &[Token]) -> Option<Ty> {
     match after.first() {
         Some(Token::Sym("[")) | Some(Token::Sym("{")) => Some(decl.clone()),
-        //nt: 传元素类型
+        
         Some(Token::Kw("que")) | Some(Token::Kw("stack")) => Some(decl.clone()),
         Some(Token::Ident(n)) if n == "que" || n == "stack" => Some(decl.clone()),
         _ => None,
     }
 }
 
-///nt: 取序列元素类型
+
 fn 序列元素类型(t: &str) -> Option<String> {
     let (head, inner) = t.split_once('(')?;
     let tail = inner.strip_suffix(')')?;
@@ -778,7 +778,7 @@ fn 序列元素类型(t: &str) -> Option<String> {
     }
 }
 
-//nt: 容器类型位
+
 fn container_ty_at(段: &[Token], i: usize) -> Option<String> {
     container_ty_at_raw(段, i).map(|s| 代换类型(&s))
 }
@@ -792,7 +792,7 @@ fn container_ty_at_raw(段: &[Token], i: usize) -> Option<String> {
         return None;
     }
     if !matches!(段.get(i + 1), Some(Token::Sym("("))) {
-        return Some(name); // 裸容器名
+        return Some(name); 
     }
     let mut depth = 0i32;
     let mut end = None;
@@ -839,20 +839,20 @@ fn container_ty_at_raw(段: &[Token], i: usize) -> Option<String> {
     Some(format!("{}({})", name, e))
 }
 
-//nt: 块内公式函数的签名
-//nt: params` /
+
+
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 struct FnSig {
     params: Vec<Ty>,
     ret: Ty,
-    //nt: 外部函数声明
+    
     is_outs: bool,
-    //nt: fn用的val槽参数
+    
     hidden: Vec<(String, Ty)>,
 }
 
-//nt: 取函数返回类型
+
 fn fn_ret_of(s: &str) -> Option<String> {
     let rest = s.strip_prefix("fn(")?;
     let mut 深 = 1i32;
@@ -874,60 +874,60 @@ fn fn_ret_of(s: &str) -> Option<String> {
 
 struct Builder {
     f: Function,
-    //nt: 本 Builder
+    
     block: String,
-    //nt: 本 Builder
+    
     module: String,
     names: BTreeMap<String, LocalId>,
-    //nt: 本块内已登记的公式函
+    
     fns: BTreeMap<String, FnSig>,
-    //nt: 全程序的公式函数
+    
     global_fns: std::rc::Rc<BTreeMap<String, FnSig>>,
-    //nt: 全程序里「被 `ca
-    //nt: 这些 val 的存储
+    
+    
     cross_vals: std::rc::Rc<BTreeMap<String, BTreeMap<String, Ty>>>,
-    //nt: 本块里作**指针参数
+    
     exposed: BTreeMap<String, LocalId>,
-    //nt: 容器字面量在 IR
+    
     lit_ty: Option<Ty>,
-    //nt: 当前处理的源码行号
+    
     cur_line: usize,
     cur_col: usize,
     cur_len: usize,
-    //nt: 循环体嵌套层
+    
     循环深: usize,
-    //nt: 全程序的和类型变体
-    //nt: 下接
-//nt: 标了 `pub` 的
+    
+    
+
     pub_blocks: std::rc::Rc<BTreeSet<String>>,
-    //nt: 被 `add hid
+    
     hidden_items: std::rc::Rc<BTreeSet<String>>,
-    //nt: 每块 `add ty
+    
     block_types: std::rc::Rc<BTreeMap<String, BTreeSet<String>>>,
     sum_variants: std::rc::Rc<BTreeMap<String, (String, usize, Vec<Ty>)>>,
-    //nt: 当前右值的期望类型
-    //nt: 变体构造据此选中实例
+    
+    
     期望类型: Option<String>,
-    //nt: 已折叠的常量值
+    
     常量值: std::rc::Rc<RefCell<BTreeMap<String, crate::consts::Const>>>,
-    //nt: fn内可中途give
+    
     语句体返回: bool,
-    //nt: 全程序的积类型定义
+    
     types: std::rc::Rc<Vec<StructType>>,
-    //nt: 类型名 → type
+    
     type_idx: std::rc::Rc<std::collections::HashMap<String, usize>>,
-    //nt: 模块尾名 → 全路径
+    
     mod_by_tail: std::rc::Rc<BTreeMap<String, Vec<String>>>,
-    //nt: 函数定义生成的独立
+    
     extra: Vec<Function>,
-    //nt: 外部函数声明
+    
     externs: Vec<ExternFn>,
     blocks: Vec<Block>,
     cur: usize,
     next_id: BlockId,
 }
 
-//nt: 解析泛型语句头
+
 fn 解析泛型语句头(
     head: &[Token],
 ) -> Option<(String, Vec<(String, Vec<String>)>, Vec<(String, Ty)>, Ty)> {
@@ -952,13 +952,13 @@ fn 解析泛型语句头(
 }
 
 impl Builder {
-    //nt: 给定名是否是某个模块
+    
     fn mod_has(&self, given: &str) -> bool {
         self.mod_by_tail.values().any(|v| v.iter().any(|m| m == given))
     }
 
-//nt: 模块路径尾名退回：
-    //nt: 解析模块路径
+
+    
     fn resolve_module(&self, given: &str) -> Result<Option<String>, BuildError> {
         if self.mod_by_tail.values().any(|v| v.iter().any(|m| m == given)) {
             return Ok(Some(given.to_string()));
@@ -983,7 +983,7 @@ impl Builder {
         })
     }
 
-//nt: 跨模块引用的可见性门
+
     fn check_pub(&self, blk_mod: &str, blk: &str) -> Result<(), BuildError> {
         if blk_mod == self.module {
             return Ok(());
@@ -1002,7 +1002,7 @@ impl Builder {
         })
     }
 
-    #[allow(clippy::too_many_arguments)] // 构造器参数多是历史形态；收结构体留待重构专项
+    #[allow(clippy::too_many_arguments)] 
     fn new(
         name: String,
         file: String,
@@ -1078,7 +1078,7 @@ impl Builder {
         }
     }
 
-    //nt: 开一个新基本块，返回
+    
     fn nb(&mut self) -> BlockId {
         let id = self.next_id;
         self.next_id += 1;
@@ -1108,7 +1108,7 @@ impl Builder {
         self.blocks[self.cur].exit = e;
     }
 
-    //nt: 无条件跳转
+    
     fn goto(&mut self, target: BlockId) {
         self.set_exit(Exit::Branch { cond: Value::Int(1), targets: vec![Succ::new(target)] });
     }
@@ -1120,13 +1120,13 @@ impl Builder {
         self.f.locals.len() - 1
     }
 
-    //nt: 字段类型查表
+    
     fn field_ty_of(&self, owner: &str, field: &str) -> String {
         field_ty_in(&self.types, &self.type_idx, owner, field)
     }
 
-    //nt: 槽自动就位
-    //nt: 存储全局化后随时可取
+    
+    
     fn 槽或建(&mut self, slot_key: &str) -> Option<LocalId> {
         if let Some(&id) = self.names.get(slot_key) {
             return Some(id);
@@ -1142,7 +1142,7 @@ impl Builder {
         self.new_local(None, ty, false, false)
     }
 
-    //nt: 值的类型
+    
     fn ty_of_value(&self, v: Value) -> Ty {
         match v {
             Value::Local(id) => {
@@ -1156,7 +1156,7 @@ impl Builder {
         }
     }
 
-    //nt: 值是不是 str
+    
     fn is_str_value(&self, v: &Value) -> bool {
         match v {
             Value::Str(_) => true,
@@ -1165,9 +1165,9 @@ impl Builder {
         }
     }
 
-    //nt: 落一条二元运算到临时
-    //nt: 字段链
-    //nt: 供「名字后」与「下标
+    
+    
+    
     fn field_chain(
         &mut self,
         mut cur: usize,
@@ -1181,7 +1181,7 @@ impl Builder {
                 _ => return err("字段访问后应是字段名"),
             };
             *i += 2;
-            //nt: 字段访问只对**积类
+            
             let owner0 = cur_ty.trim_end_matches('*').to_string();
             if !self.type_idx.contains_key(&owner0) {
                 return Err(BuildError {
@@ -1215,7 +1215,7 @@ impl Builder {
         Ok(Value::Local(cur))
     }
 
-    //nt: 值是否是 float
+    
     fn is_float_value(&self, v: &Value) -> bool {
         match v {
             Value::Float(_) => true,
@@ -1224,8 +1224,8 @@ impl Builder {
         }
     }
 
-    //nt: 被调fn的槽实参
-    //nt: 同块传槽指针
+    
+    
     fn 槽实参(
         &mut self,
         sig: &FnSig,
@@ -1238,7 +1238,7 @@ impl Builder {
             let _m = it.next().unwrap_or("");
             let blk = it.next().unwrap_or("");
             if blk == self.block {
-                //nt: 传槽指针或地址
+                
                 match self.exposed.get(vn) {
                     Some(&pid) => out.push(Value::Local(pid)),
                     None => match self.names.get(vn) {
@@ -1293,12 +1293,12 @@ impl Builder {
         Ok(out)
     }
 
-    //nt: 类型串是否是容器
+    
     fn is_container_ty(t: &str) -> bool {
         matches!(t.split('(').next().unwrap_or("").trim(), "list" | "que" | "stack" | "map")
     }
 
-    //nt: map
+    
     fn map_val_ty(ty: &str) -> Option<String> {
         let inner = ty.strip_prefix("map(")?.strip_suffix(')')?;
         let mut depth = 0i32;
@@ -1313,7 +1313,7 @@ impl Builder {
         None
     }
 
-    //nt: 值是否是容器
+    
     fn is_container_value(&self, v: &Value) -> bool {
         match v {
             Value::Local(id) => self
@@ -1326,7 +1326,7 @@ impl Builder {
         }
     }
 
-    //nt: 值是否是 bool
+    
     fn is_bool_value(&self, v: &Value) -> bool {
         match v {
             Value::Bool(_) => true,
@@ -1335,7 +1335,7 @@ impl Builder {
         }
     }
 
-    //nt: 容器实参按值拷贝
+    
     fn 容器实参深拷(&mut self, vals: &mut Vec<Value>, sig: &FnSig) -> Vec<usize> {
         let mut dc_tmps: Vec<usize> = Vec::new();
         if sig.is_outs {
@@ -1366,7 +1366,7 @@ impl Builder {
     }
 
     fn bin(&mut self, op: BinOp, lhs: Value, rhs: Value) -> Value {
-        //nt: 容器加零即深拷贝
+        
         if op == BinOp::Add && matches!(rhs, Value::Int(0)) {
             let t0 = self.ty_of_value(lhs.clone());
             let n = t0.0.as_str();
@@ -1389,9 +1389,9 @@ impl Builder {
         let ty = match op {
             BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::And
             | BinOp::Or => Ty("bool".into()),
-            //nt: 字符串拼接
+            
             BinOp::Add if self.is_str_value(&lhs) || self.is_str_value(&rhs) => Ty("str".into()),
-            //nt: float 参与 +
+            
             BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div
                 if self.is_float_value(&lhs) || self.is_float_value(&rhs) =>
             {
@@ -1405,7 +1405,7 @@ impl Builder {
     }
 
     fn finish(mut self) -> Result<Function, BuildError> {
-        //nt: 只在当前块**还没有
+        
         if matches!(self.blocks[self.cur].exit, Exit::Unreachable) {
             self.set_exit(Exit::Return(None));
         }
@@ -1414,7 +1414,7 @@ impl Builder {
     }
 
 
-    //nt: if` 头折成布尔常
+    
     fn 条件常量(&self, head: &[Token]) -> Option<bool> {
         let 体: Vec<Token> = head.iter().filter(|t| **t != Token::Sym(":")).cloned().collect();
         let 条 = match 体.first() {
@@ -1439,7 +1439,7 @@ impl Builder {
         crate::consts::折叠条件(&换)
     }
 
-    //nt: 泛型构造
+    
     fn 反解实例(&self, 名: &str, args: &[Vec<Token>]) -> Result<String, BuildError> {
         let 模板 = self
             .types
@@ -1496,7 +1496,7 @@ impl Builder {
         Ok(实例名)
     }
 
-    //nt: 按 token 形状
+    
     fn 推断类型(&self, 段: &[Token]) -> Option<String> {
         match 段 {
             [Token::Int(_)] => Some("int".to_string()),
@@ -1524,7 +1524,7 @@ impl Builder {
                 let ps: Vec<String> = sig.params.iter().map(|t| t.0.clone()).collect();
                 Some(format!("fn({}) {}", ps.join(", "), sig.ret.0))
             }
-            //nt: val "名".字段
+            
             [Token::Kw("val"), Token::Str(n), Token::Sym("."), Token::Ident(f)]
             | [Token::Kw("val"), Token::Ident(n), Token::Sym("."), Token::Ident(f)]
             | [Token::Kw("call"), Token::Kw("val"), Token::Str(n), Token::Sym("."), Token::Ident(f)]
@@ -1533,7 +1533,7 @@ impl Builder {
                 let 主 = self.f.locals.get(id)?.ty.0.clone();
                 Some(self.field_ty_of(&主, f))
             }
-            //nt: 名.字段
+            
             [Token::Ident(n), Token::Sym("."), Token::Ident(f)] => {
                 let id = *self.names.get(n.as_ref())?;
                 let 主 = self.f.locals.get(id)?.ty.0.clone();
@@ -1547,7 +1547,7 @@ impl Builder {
         }
     }
 
-    //nt: 内联 asm
+    
     fn 建asm(&mut self, 内区: &[Token]) -> Result<AsmForm, BuildError> {
         let 段 = prion_lexer::asm::解析隔离区(内区).map_err(|e| BuildError {
             message: e,
@@ -1578,8 +1578,8 @@ impl Builder {
         })
     }
 
-    //nt: 表达式树求值
-    //nt: 吃树不走token
+    
+    
     fn expr_tree(&mut self, e: &Expr) -> Result<Value, BuildError> {
         use prion_parser::expr::{ExprKind, Target, Verb, UnOp};
         match &e.kind {
@@ -1607,7 +1607,7 @@ impl Builder {
                     Target::Fn => self.expr_tree_call_fn(name, block.as_deref(), vals),
                     Target::Val => {
                         if let Some(tb) = block {
-                            //nt: 槽局部当值用
+                            
                             let slot_key = format!("{}|{}#{}", self.module, tb, name);
                             match self.槽或建(&slot_key) {
                                 Some(id) => Ok(Value::Local(id)),
@@ -1619,7 +1619,7 @@ impl Builder {
                             self.expr_tree_indirect(name, vals)
                         }
                     }
-                    //nt: 裸名调用分派
+                    
                     Target::Builtin if self.sum_variants.contains_key(name) => self.expr_tree_variant(name, &vals, e.id()),
                     Target::Builtin if self.type_idx.contains_key(name) => self.expr_tree_construct(name, &vals, e.id()),
                     Target::Builtin => self.expr_tree_builtin(name, &vals),
@@ -1785,7 +1785,7 @@ impl Builder {
         }
     }
 
-    //nt: val读局部或暴露槽
+    
     fn expr_tree_val(&mut self, name: &str) -> Result<Value, BuildError> {
         if let Some(&id) = self.names.get(name) {
             return Ok(Value::Local(id));
@@ -1808,10 +1808,10 @@ impl Builder {
         err(format!("val「{}」没建过", name))
     }
 
-    //nt: fn调用转发
+    
     fn expr_tree_call_fn(&mut self, name: &str, blk: Option<&str>, args: Vec<Value>) -> Result<Value, BuildError> {
         if let Some(tb) = blk {
-            //nt: 跨块调 fn
+            
             self.check_pub(&self.module, tb)?;
             let key = format!("{}|{}|{}", self.module, tb, name);
             let sig = self.fns.get(&key).or_else(|| self.global_fns.get(&key)).cloned().ok_or_else(|| BuildError {
@@ -1832,7 +1832,7 @@ impl Builder {
         }
         let key = format!("{}|{}|{}", self.module, self.block, name);
         if !self.fns.contains_key(&key) && !self.global_fns.contains_key(&key) {
-            //nt: 泛型实例化
+            
             let 模板 = 泛型fn表.with(|g| g.borrow().get(name).cloned());
             if let Some((带能力, 形参, 返回, 体, _模, _块)) = 模板 {
                 let 类型参数: Vec<String> = 带能力.iter().map(|(n, _)| n.clone()).collect();
@@ -1861,7 +1861,7 @@ impl Builder {
                 }
                 return self.expr_tree_call_fn(&实例名, None, args);
             }
-            //nt: 语句体泛型 fn
+            
             let 语句模板 = 泛型语句体fn表.with(|g| g.borrow().get(name).cloned());
             if let Some((带能力, 形参, 返回, 体, _模, _块)) = 语句模板 {
                 let 类型参数: Vec<String> = 带能力.iter().map(|(n, _)| n.clone()).collect();
@@ -1907,7 +1907,7 @@ impl Builder {
         Ok(Value::Local(tmp))
     }
 
-    //nt: 间接调fn val
+    
     fn expr_tree_indirect(&mut self, name: &str, args: Vec<Value>) -> Result<Value, BuildError> {
         let id = *self.names.get(name).ok_or_else(|| BuildError {
             message: format!("val「{}」没建过", name),
@@ -1927,7 +1927,7 @@ impl Builder {
         Ok(Value::Local(tmp))
     }
 
-    //nt: 内置表达式调用
+    
     fn expr_tree_builtin(&mut self, name: &str, vals: &[Value]) -> Result<Value, BuildError> {
         let vals = vals.to_vec();
         let mut name = name.to_string();
@@ -1952,8 +1952,8 @@ impl Builder {
         Ok(Value::Local(tmp))
     }
 
-    //nt: 构造器
-    //nt: 变体构造
+    
+    
     fn expr_tree_variant(&mut self, name: &str, vals: &[Value], root_id: u32) -> Result<Value, BuildError> {
         let (模板型, tag0, 模板载荷) = self.sum_variants.get(name).cloned().ok_or_else(|| BuildError {
             message: format!("变体「{}」没登记", name),
@@ -1964,7 +1964,7 @@ impl Builder {
         let 期望 = match self.期望类型.clone() {
             Some(t) if t != 模板型 => Some(t),
             _ => {
-                //nt: 问检查侧位表
+                
                 let 位表型 = TYPECK.with(|m| m.borrow().get(&root_id).cloned());
                 match 位表型 {
                     Some(t) if t != 模板型 => Some(t),
@@ -2000,19 +2000,19 @@ impl Builder {
     }
 
     fn expr_tree_construct(&mut self, name: &str, vals: &[Value], root_id: u32) -> Result<Value, BuildError> {
-        //nt: 模板名落实例
+        
         let 键 = if 泛型判别(name) {
             match self.期望类型.clone() {
                 Some(t) if self.type_idx.contains_key(&t) => t,
                 _ => {
-                    //nt: 问检查侧位表
+                    
                     let 位表型 = TYPECK.with(|m| m.borrow().get(&root_id).cloned());
                     if let Some(t) = 位表型 {
                         if self.type_idx.contains_key(&t) {
                             return self.construct命名(&t, name, vals);
                         }
                     }
-                    //nt: 按实参类型反解实例名
+                    
                     let 实参: Vec<String> = vals.iter().map(|v| self.value_ty(v)).collect();
                     let 实例名 = format!("{}({})", name, 实参.join(", "));
                     if !self.type_idx.contains_key(&实例名) {
@@ -2030,7 +2030,7 @@ impl Builder {
         self.construct命名(&键, name, vals)
     }
 
-    //nt: 按实例名构造
+    
     fn construct命名(&mut self, 实例: &str, name: &str, vals: &[Value]) -> Result<Value, BuildError> {
         let idx = *self.type_idx.get(实例).ok_or_else(|| BuildError {
             message: format!("类型「{}」没登记", 实例),
@@ -2052,7 +2052,7 @@ impl Builder {
         Ok(Value::Local(sid))
     }
 
-    //nt: 值的类型查问
+    
     fn value_ty(&self, v: &Value) -> String {
         match v {
             Value::Local(id) => self.f.locals.get(*id).map(|l| l.ty.0.clone()).unwrap_or_default(),
@@ -2068,7 +2068,7 @@ impl Builder {
         if 段.is_empty() {
             return err("表达式是空的");
         }
-        //nt: 常量要 call fix
+        
         if matches!(段.first(), Some(Token::Kw("call")))
             && matches!(段.get(1), Some(Token::Kw("val")))
         {
@@ -2087,7 +2087,7 @@ impl Builder {
                 }
             }
         }
-        //nt: 常量换成字面量
+        
         if matches!(段.first(), Some(Token::Kw("call"))) {
             let mut 定位: Option<usize> = None;
             let mut 跨模块目标: Option<(String, String)> = None;
@@ -2164,14 +2164,14 @@ impl Builder {
                 return self.expr(&新);
             }
         }
-        //nt: call前缀读
+        
         if matches!(段.first(), Some(Token::Kw("call")))
             && matches!(段.get(1), Some(Token::Kw("val")))
             && !matches!(段.get(3), Some(Token::Sym("(")))
         {
             return self.expr(&段[1..]);
         }
-        //nt: 内联汇编
+        
         if 段.first().map(prion_lexer::asm::是asm词).unwrap_or(false)
             && matches!(段.get(1), Some(Token::Sym("(")))
         {
@@ -2193,7 +2193,7 @@ impl Builder {
         }
         let mut i = 0usize;
         let v = self.parse_or(段, &mut i)?;
-        //nt: 三元表达式
+        
         if matches!(段.get(i), Some(Token::Sym("?"))) {
             let colon = 段
                 .iter()
@@ -2218,7 +2218,7 @@ impl Builder {
             self.emit(Stmt::Assign { lhs: Place::local(tmp), rhs: Rvalue::Const(ev) });
             self.goto(bb_done);
             self.switch_to(bb_done);
-            //nt: 用真值分支的实际类型
+            
             let real_ty = match &tv {
                 Value::Local(id) => self.f.locals.get(*id).map(|l| l.ty.clone()),
                 Value::Int(_) => Some(Ty("int".into())),
@@ -2273,7 +2273,7 @@ impl Builder {
         } {
             *i += 1;
             let r = self.parse_bitor(t, i)?;
-//nt: 链式比较不做
+
             if self.is_bool_value(&l) != self.is_bool_value(&r) {
                 return err("链式比较（如 `1 < x < 5`）v0 不做——拆成两个比较，用 `and` 连（如 `1 < x and x < 5`）");
             }
@@ -2282,7 +2282,7 @@ impl Builder {
         Ok(l)
     }
 
-//nt: 位运算层
+
     fn parse_bitor(&mut self, t: &[Token], i: &mut usize) -> Result<Value, BuildError> {
         let mut l = self.parse_bitxor(t, i)?;
         while matches!(t.get(*i), Some(Token::Sym("|"))) {
@@ -2356,7 +2356,7 @@ impl Builder {
         Ok(l)
     }
 
-    //nt: 下标读与切片
+    
     fn index_read(
         &mut self,
         id: LocalId,
@@ -2428,9 +2428,9 @@ impl Builder {
 
     fn operand(&mut self, t: &[Token], i: &mut usize) -> Result<Value, BuildError> {
         match t.get(*i) {
-            //nt: 一元负号
+            
             Some(Token::Sym("-")) => {
-                //nt: 整数与浮点字面量都收
+                
                 if let Some(Token::Int(n)) = t.get(*i + 1) {
                     *i += 2;
                     Ok(Value::Int(-n))
@@ -2450,7 +2450,7 @@ impl Builder {
                 Ok(Value::Float(*x))
             }
             Some(Token::Str(s)) => {
-                //nt: 带引号构造名
+                
                 if matches!(t.get(*i + 1), Some(Token::Sym("(")))
                     && (self.type_idx.contains_key(s.as_ref())
                         || self.sum_variants.contains_key(s.as_ref())
@@ -2463,13 +2463,13 @@ impl Builder {
                 *i += 1;
                 Ok(Value::Str(s.to_string()))
             }
-//nt: 原样串 `@"…"
+
             Some(Token::RawStr(s)) => {
                 *i += 1;
                 Ok(Value::Str(s.to_string()))
             }
-//nt: 逻辑非 `not x
-            //nt: 最简实现
+
+            
             Some(Token::Kw("not")) => {
                 *i += 1;
                 let v = self.operand(t, i)?;
@@ -2492,7 +2492,7 @@ impl Builder {
                 *i += 1;
                 Ok(Value::Null)
             }
-            //nt: 括号表达式
+            
             Some(Token::Sym("(")) => {
                 let mut d = 0i32;
                 let mut end = None;
@@ -2514,7 +2514,7 @@ impl Builder {
                 *i = end + 1;
                 self.expr(&inner)
             }
-            //nt: 同块取常量
+            
             Some(Token::Kw("call")) if matches!(t.get(*i + 1), Some(Token::Kw("fix"))) => {
                 let vname = match t.get(*i + 2) {
                     Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
@@ -2531,8 +2531,8 @@ impl Builder {
                 *i += 3;
                 return Ok(c.转值());
             }
-            //nt: 跨块取 val
-//nt: 同块取 val
+            
+
             Some(Token::Kw("call")) if matches!(t.get(*i + 1), Some(Token::Kw("val"))) => {
                 let vname = match t.get(*i + 2) {
                     Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
@@ -2549,7 +2549,7 @@ impl Builder {
                         file: String::new(),
                     });
                 }
-                //nt: 槽load读
+                
                 if let Some(&pid) = self.exposed.get(&vname) {
                     if !matches!(t.get(*i + 3), Some(Token::Sym("("))) {
                         let pty = self
@@ -2591,7 +2591,7 @@ impl Builder {
                     line: CUR_LINE.with(|c| c.get()),
                     file: String::new(),
                 })?;
-                //nt: 间接调用
+                
                 if matches!(t.get(*i + 3), Some(Token::Sym("("))) {
                     let fty = self
                         .f
@@ -2652,17 +2652,17 @@ impl Builder {
                 }
                 return Ok(Value::Local(id));
             }
-            //nt: call #
-            //nt: 合成一支
-            //nt: 只接 **val 取
-            //nt: fn 取用交给后面的
+            
+            
+            
+            
             Some(Token::Kw("call"))
                 if (matches!(t.get(*i + 1), Some(Token::HashColon))
                     && matches!(t.get(*i + 3), Some(Token::Kw("val"))))
                     || (matches!(t.get(*i + 1), Some(Token::HashHashColon))
                         && take_kind(t) == Some("val")) =>
             {
-                let mut colon_at: Option<usize> = None; // `#:` 的位置（跨模块取用用；模块名长度可变）
+                let mut colon_at: Option<usize> = None; 
                 let (blk_mod, blk) = if matches!(t.get(*i + 1), Some(Token::HashColon)) {
                     let blk = match t.get(*i + 2) {
                         Some(Token::Ident(n)) => n.to_string(),
@@ -2671,7 +2671,7 @@ impl Builder {
                     };
                     (self.module.clone(), blk)
                 } else {
-                    //nt: 模块名拼接
+                    
                     let mut m = String::new();
                     let mut j = 2usize;
                     while let Some(tok) = t.get(j) {
@@ -2700,7 +2700,7 @@ impl Builder {
                         _ => return err("`##:模块 #:` 后应接块名"),
                     };
                     colon_at = Some(j);
-                    //nt: 尾名退回
+                    
                     let full = if self.mod_has(&m) {
                         m.clone()
                     } else {
@@ -2711,7 +2711,7 @@ impl Builder {
                     };
                     (full, blk)
                 };
-                //nt: val 名
+                
                 let (vname, adv) = match colon_at {
                     None => (
                         match t.get(*i + 4) {
@@ -2728,7 +2728,7 @@ impl Builder {
                         j + 4,
                     ),
                 };
-//nt: 跨模块取 val ⇒
+
                 self.check_pub(&blk_mod, &blk)?;
                 let slot_key = format!("{}|{}#{}", blk_mod, blk, vname);
                 let sid = match self.槽或建(&slot_key) {
@@ -2748,7 +2748,7 @@ impl Builder {
                 *i += adv;
                 Ok(Value::Local(sid))
             }
-            //nt: fn 调用
+            
             Some(Token::Kw("call")) if matches!(t.get(*i + 1), Some(Token::Kw("fn"))) => {
                 let fname = match t.get(*i + 2) {
                     Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
@@ -2758,7 +2758,7 @@ impl Builder {
                     return err("调用要写实参表 `(…)`");
                 }
                 let key = format!("{}|{}|{}", self.module, self.block, fname);
-                //nt: 泛型 fn
+                
                 if !self.fns.contains_key(&key) && !self.global_fns.contains_key(&key) {
                     let 模板 = 泛型fn表.with(|g| g.borrow().get(&fname).cloned());
                     if let Some((带能力, 形参, 返回, 体, _模, _块)) = 模板 {
@@ -2798,7 +2798,7 @@ impl Builder {
                             .cloned()
                         {
                             let _ = s;
-                            //nt: 直接把这次调用改写成
+                            
                             let mut 新: Vec<Token> = t.to_vec();
                             if let Some(slot) = 新.get_mut(*i + 2) {
                                 *slot = Token::Ident(实例名.into());
@@ -2806,7 +2806,7 @@ impl Builder {
                             return self.operand(&新, i);
                         }
                     }
-                    //nt: 泛型实例化
+                    
                     let 语句模板 = 泛型语句体fn表.with(|g| g.borrow().get(&fname).cloned());
                     if let Some((带能力, 形参, 返回, 体, _模, _块)) = 语句模板 {
                         let 类型参数: Vec<String> = 带能力.iter().map(|(n, _)| n.clone()).collect();
@@ -2850,7 +2850,7 @@ impl Builder {
                         }
                     }
                 }
-                //nt: 本块表 → 全局表退
+                
                 let sig = self
                     .fns
                     .get(&key)
@@ -2888,19 +2888,19 @@ impl Builder {
                     vals.push(self.expr(&a)?);
                 }
                 let dc_tmps = self.容器实参深拷(&mut vals, &sig);
-                //nt: fn的槽实参
+                
                 if !sig.hidden.is_empty() {
                     let caller_is_fn = self.f.name.contains('#');
                     vals.extend(self.槽实参(&sig, &key, caller_is_fn)?);
                 }
                 let tmp = self.temp(sig.ret.clone());
-                //nt: 外部函数 ⇒ C 符
+                
                 let call_name = if sig.is_outs { fname.to_string() } else { key };
                 self.emit(Stmt::Assign {
                     lhs: Place::local(tmp),
                     rhs: Rvalue::Call { name: call_name, args: vals },
                 });
-                //nt: 传参即移交
+                
                 for t in dc_tmps {
                     self.emit(Stmt::Assign {
                         lhs: Place::local(t),
@@ -2909,9 +2909,9 @@ impl Builder {
                 }
                 Ok(Value::Local(tmp))
             }
-            //nt: 跨块取用
+            
             Some(Token::Kw("call")) if matches!(t.get(*i + 1), Some(Token::HashColon)) => {
-                *i += 1; // 跳过 call，落在 `#:`
+                *i += 1; 
                 let blk = match t.get(*i + 1) {
                     Some(Token::Ident(n)) => n.to_string(),
                     Some(Token::Kw(k)) => (*k).to_string().into(),
@@ -2959,7 +2959,7 @@ impl Builder {
                 for a in split_args(&inner) {
                     vals.push(self.expr(&a)?);
                 }
-                //nt: 跨块槽实参
+                
                 if !sig.hidden.is_empty() {
                     vals.extend(self.槽实参(&sig, &key, true)?);
                 }
@@ -2971,15 +2971,15 @@ impl Builder {
                 });
                 Ok(Value::Local(tmp))
             }
-            //nt: 跨模块取用
-//nt: 跨模块引用直接写来源
-            //nt: 走点分模块
+            
+
+            
             Some(Token::Kw("call"))
                 if matches!(t.get(*i + 1), Some(Token::HashHashColon))
                     && hh_is_fn_form(t, *i + 2) =>
             {
-                *i += 1; // 跳过 call，落在 `##:`
-                //nt: 模块名 = 点分链
+                *i += 1; 
+                
                 let mut module = String::new();
                 let mut j = *i + 1;
                 while let Some(tok) = t.get(j) {
@@ -3018,19 +3018,19 @@ impl Builder {
                     return err("跨模块取用要写实参表 `(…)`");
                 }
                 let key = format!("{}|{}|{}", module, blk, fname);
-//nt: 模块路径尾名退回
+
                 let key = if self.global_fns.contains_key(&key) {
                     key
                 } else if let Some(full) = self.resolve_module(&module)? {
                     format!("{}|{}|{}", full, blk, fname)
                 } else {
-                    //nt: 模块压根没装载
+                    
                     return err(format!(
                         "模块「{}」找不到——单文件编译不装载模块；请按目录工程编（入口放 main.an），或检查模块文件在不在",
                         module
                     ));
                 };
-//nt: 跨模块 ⇒ pub
+
                 let full_mod = key.split('|').next().unwrap_or(&module).to_string();
                 self.check_pub(&full_mod, &blk)?;
                 if self
@@ -3130,9 +3130,9 @@ impl Builder {
                 for a in split_args(&inner) {
                     vals.push(self.expr(&a)?);
                 }
-                //nt: 跨模块也要拷
+                
                 let dc_tmps = self.容器实参深拷(&mut vals, &sig);
-                //nt: 跨模块槽实参
+                
                 if !sig.hidden.is_empty() {
                     vals.extend(self.槽实参(&sig, &调用键, true)?);
                 }
@@ -3142,7 +3142,7 @@ impl Builder {
                     lhs: Place::local(tmp),
                     rhs: Rvalue::Call { name: call_name, args: vals },
                 });
-                //nt: 传参即移交
+                
                 for t in dc_tmps {
                     self.emit(Stmt::Assign {
                         lhs: Place::local(t),
@@ -3151,11 +3151,11 @@ impl Builder {
                 }
                 Ok(Value::Local(tmp))
             }
-            //nt: 跨块须写 call
+            
             Some(Token::HashColon) => {
                 err("跨块取用要写 `call`——形如 `call #:块 fn \"名\"(…)`")
             }
-//nt: 类型名当函数
+
             Some(Token::Kw(k)) if matches!(t.get(*i + 1), Some(Token::Sym("("))) => {
                 let name = (*k).to_string();
                 *i += 2;
@@ -3180,7 +3180,7 @@ impl Builder {
                     return err("调用括号没闭合");
                 }
                 let mut vals = Vec::new();
-                //nt: 传元素类型
+                
                 let pending = if name == "que" || name == "stack" {
                     self.lit_ty.take()
                 } else {
@@ -3202,7 +3202,7 @@ impl Builder {
                 self.emit(Stmt::Assign { lhs: Place::local(tmp), rhs: Rvalue::Call { name, args: vals } });
                 Ok(Value::Local(tmp))
             }
-            //nt: map 字面量 `{
+            
             Some(Token::Sym("{")) => {
                 let mut depth = 0i32;
                 let mut end = None;
@@ -3224,7 +3224,7 @@ impl Builder {
                 *i = end + 1;
                 let mut pairs: Vec<(MapKey, Value)> = Vec::new();
                 for seg in split_args(&inner) {
-                    //nt: 键收str与int
+                    
                     let k = match seg.first() {
                         Some(Token::Str(k)) => MapKey::Str(k.to_string()),
                         Some(Token::Int(n)) => MapKey::Int(*n),
@@ -3243,7 +3243,7 @@ impl Builder {
                 });
                 Ok(Value::Local(tmp))
             }
-            //nt: 列表字面量 `[a
+            
             Some(Token::Sym("[")) => {
                 let start = *i;
                 let mut depth = 0i32;
@@ -3267,7 +3267,7 @@ impl Builder {
                 let mut elems = Vec::new();
                 for a in split_args(&inner) {
                     let v = self.expr(&a)?;
-//nt: 第②道关卡
+
                     if self.is_container_value(&v) {
                         return err("列表里不能直接装容器（`[[1], [2]]` 不行）——要分组请用键值表（如 map(str, list(int))）或结构体字段装列表");
                     }
@@ -3278,8 +3278,8 @@ impl Builder {
                 self.emit(Stmt::Assign { lhs: Place::local(tmp), rhs: Rvalue::ListLit { elems } });
                 Ok(Value::Local(tmp))
             }
-//nt: 显式取 val 当前
-            //nt: 取值必须带类别标签
+
+            
             Some(Token::Kw("val")) => {
                 let name = match t.get(*i + 1) {
                     Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
@@ -3297,8 +3297,8 @@ impl Builder {
                     });
                 }
                 *i += 2;
-                //nt: 本块直取或槽load
-                //nt: 槽load 后同走投影
+                
+                
                 let id = match self.names.get(&name) {
                     Some(id) => *id,
                     None => {
@@ -3316,7 +3316,7 @@ impl Builder {
                         }
                     }
                 };
-                //nt: .字段` 投影
+                
                 let vty = self
                     .f
                     .locals
@@ -3324,14 +3324,14 @@ impl Builder {
                     .map(|l| l.ty.0.clone())
                     .unwrap_or_default();
                 if matches!(t.get(*i), Some(Token::Sym("."))) {
-                    //nt: field_chai
+                    
                     return self.field_chain(id, vty, t, i);
                 }
-                //nt: 下标投影
+                
                 if matches!(t.get(*i), Some(Token::Sym("["))) {
                     return self.index_read(id, vty, t, i);
                 }
-                //nt: delta 后缀
+                
                 if matches!(t.get(*i), Some(Token::Sym("("))) {
                     let mut depth = 0i32;
                     let mut close = None;
@@ -3392,7 +3392,7 @@ impl Builder {
                 Ok(Value::Local(tmp))
             }
             Some(Token::Ident(n)) => {
-                //nt: fn 参数 / fo
+                
                 if let Some(bid) = self.names.get(n.as_ref()) {
                     if !self.f.locals.get(*bid).map(|l| l.bare_ok).unwrap_or(false) {
                         return err(format!(
@@ -3401,7 +3401,7 @@ impl Builder {
                         ));
                     }
                 }
-                //nt: 下标读
+                
                 if matches!(t.get(*i + 1), Some(Token::Sym("["))) {
                     let base = *self
                         .names
@@ -3426,7 +3426,7 @@ impl Builder {
                     let close = close.ok_or_else(|| BuildError { message: "下标缺 ]".into() , code: prion_error::Code::E302 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
                     let idx_toks = t[open + 1..close].to_vec();
                     *i = close + 1;
-                    //nt: map 键读
+                    
                     let base_is_map = self
                         .f
                         .locals
@@ -3435,8 +3435,8 @@ impl Builder {
                         .unwrap_or(false);
                     if base_is_map {
                         let key = self.expr(&idx_toks)?;
-                        //nt: map 下标读的结果
-//nt: 类型按实际表达式推断
+                        
+
                         let vty = self
                             .f
                             .locals
@@ -3450,7 +3450,7 @@ impl Builder {
                         });
                         return Ok(Value::Local(tmp));
                     }
-                    //nt: 字符串下标 / 切片
+                    
                     let base_is_str = self
                         .f
                         .locals
@@ -3483,8 +3483,8 @@ impl Builder {
                         });
                         return Ok(Value::Local(st));
                     }
-                    //nt: 切片 `名[a~b]
-                    //nt: 队列/栈只进只出
+                    
+                    
                     let slice_base_filo = self
                         .f
                         .locals
@@ -3498,8 +3498,8 @@ impl Builder {
                         let pos = idx_toks.iter().position(|tk| *tk == Token::Sym("~")).unwrap();
                         let a = self.expr(&idx_toks[..pos])?;
                         let b = self.expr(&idx_toks[pos + 1..])?;
-                        //nt: 切片结果类型 =
-//nt: 类型按实际表达式推断
+                        
+
                         let base_ty = self
                             .f
                             .locals
@@ -3529,14 +3529,14 @@ impl Builder {
                         lhs: Place::local(tmp),
                         rhs: Rvalue::ListGet { list: Value::Local(base), index: idx },
                     });
-                    //nt: 下标读之后若接 `.
+                    
                     if matches!(t.get(*i), Some(Token::Sym("."))) {
                         return self.field_chain(tmp, ety, t, i);
                     }
                     return Ok(Value::Local(tmp));
                 }
-//nt: 字段读
-                //nt: 每级经把手先判空
+
+                
                 if matches!(t.get(*i + 1), Some(Token::Sym("."))) {
                     let cur = *self
                         .names
@@ -3548,14 +3548,14 @@ impl Builder {
                         .get(cur)
                         .map(|l| l.ty.0.clone())
                         .unwrap_or_default();
-                    *i += 1; // 指向 "."
+                    *i += 1; 
                     return self.field_chain(cur, cur_ty, t, i);
                 }
-                //nt: 积类型构造
+                
                 if matches!(t.get(*i + 1), Some(Token::Sym("(")))
                     && (self.type_idx.contains_key(n.as_ref()) || 泛型判别(n))
                 {
-                    *i += 2; // 跳过 类型名 与 (
+                    *i += 2; 
                     let mut depth = 1i32;
                     let mut inner: Vec<Token> = Vec::new();
                     while *i < t.len() {
@@ -3577,7 +3577,7 @@ impl Builder {
                         return err("构造括号没闭合");
                     }
                     let args = split_args(&inner);
-                    //nt: 泛型名 ⇒ 按实参类
+                    
                     let 键 = if 泛型判别(n) {
                         self.反解实例(n, &args)?
                     } else {
@@ -3602,12 +3602,12 @@ impl Builder {
                     }
                     return Ok(Value::Local(sid));
                 }
-                //nt: 内置表达式调用
+                
                 const BUILTIN_EXPRS: &[&str] = &[
                     "len", "len_utf8", "empty", "has", "index", "concat",
                     "code", "char", "que", "stack", "args", "read_file", "keys", "vals", "slice",
                     "read_8", "read_16", "read_32", "read_64",
-                    //nt: 时间与随机 / FF
+                    
                     "rnd", "str_to_c", "str_from_c", "save_file",
                 ];
                 if matches!(t.get(*i + 1), Some(Token::Sym("(")))
@@ -3639,7 +3639,7 @@ impl Builder {
                     for a in split_args(&inner) {
                         vals.push(self.expr(&a)?);
                     }
-                    //nt: 串首参改写
+                    
                     let mut name = name.clone();
                     if name == "index" {
                         let 首参串 = match vals.first() {
@@ -3656,7 +3656,7 @@ impl Builder {
                             name = "str_index".into();
                         }
                     }
-                    //nt: slice返回同型
+                    
                     let 返型 = if name == "slice" {
                         match vals.first() {
                             Some(Value::Local(id)) => self
@@ -3674,7 +3674,7 @@ impl Builder {
                     self.emit(Stmt::Assign { lhs: Place::local(tmp), rhs: Rvalue::Call { name: name.to_string(), args: vals } });
                     return Ok(Value::Local(tmp));
                 }
-                //nt: 裸名调用已废止
+                
                 if matches!(t.get(*i + 1), Some(Token::Sym("("))) && !self.sum_variants.contains_key(n.as_ref()) {
                     let key = format!("{}|{}", self.block, n);
                     let outs_sig = self
@@ -3709,7 +3709,7 @@ impl Builder {
                         for a in split_args(&inner) {
                             vals.push(self.expr(&a)?);
                         }
-                        //nt: C 符号名 = 声明
+                        
                         let tmp = self.temp(sig.ret.clone());
                         self.emit(Stmt::Assign {
                             lhs: Place::local(tmp),
@@ -3717,8 +3717,8 @@ impl Builder {
                         });
                         return Ok(Value::Local(tmp));
                     }
-                    //nt: 内置函数调用
-                    //nt: 内置名不经 `cal
+                    
+                    
                     if matches!(t.get(*i + 1), Some(Token::Sym("("))) {
                         *i += 2;
                         let mut depth = 1i32;
@@ -3745,18 +3745,18 @@ impl Builder {
                         for a in split_args(&inner) {
                             vals.push(self.expr(&a)?);
                         }
-                        //nt: 有值的内置 ⇒ 只出
-                        //nt: 此处若先无条件 em
-                        //nt: 于是 pop/rem
-                        //nt: 语句层的调用由 0e
+                        
+                        
+                        
+                        
                         const BUILTIN_VALUE_NAMES: &[&str] = &[
                             "len", "len_utf8", "index", "empty", "has", "pop", "run", "remove",
-                            //nt: 取串内容的函数
+                            
                             "code", "char", "concat", "read_file", "str",
                         ];
                         if BUILTIN_VALUE_NAMES.iter().any(|u| *u == n.as_ref()) {
                             let mut n = n.clone();
-                            //nt: 串首参改写
+                            
                             if n == "index" {
                                 let 首参串 = match vals.first() {
                                     Some(Value::Local(id)) => self
@@ -3773,7 +3773,7 @@ impl Builder {
                                 }
                             }
                             let mut rt = builtin_ret_ty(&n);
-                            //nt: pop 的结果类型
+                            
                             if n == "pop" {
                                 if let Some(Value::Local(bid)) = vals.first() {
                                     if let Some(l) = self.f.locals.get(*bid) {
@@ -3794,10 +3794,10 @@ impl Builder {
                         n
                     ));
                 }
-                //nt: 和类型构造
+                
                 if matches!(t.get(*i + 1), Some(Token::Sym("("))) {
                     if let Some((模板型, tag0, 模板载荷)) = self.sum_variants.get(n.as_ref()).cloned() {
-                        //nt: 期望类型若是该和类型
+                        
                         let (tyname, tag, ftypes) = match self.期望类型.clone() {
                             Some(t) if t != 模板型 => {
                                 let 实例载荷 = self
@@ -3850,7 +3850,7 @@ impl Builder {
                         return Ok(Value::Local(tmp));
                     }
                 }
-                //nt: 暴露 val
+                
                 if let Some(&pid) = self.exposed.get(n.as_ref()) {
                     let pty = self.f.locals.get(pid).map(|l| l.ty.0.clone()).unwrap_or_default();
                     let inner = pty.strip_suffix('*').unwrap_or("int").to_string();
@@ -3867,17 +3867,17 @@ impl Builder {
                     None => err(format!("还没建过「{}」——先用 add val 建 (fn={})", n, self.f.name)),
                 }
             }
-            //nt: 表达式形态 matc
+            
             Some(Token::Kw("match")) => self.match_expr(t, i),
             other => err(format!("表达式里不认识的 token：{:?}", other)),
         }
     }
 
 
-    //nt: 行右值——树优先
+    
     fn 行右值(&mut self, exprs: &[Expr], 段: &[Token], eq: usize) -> Result<Value, BuildError> {
         match exprs.first() {
-            //nt: delta 不走树
+            
             Some(e) => match &e.kind {
                 prion_parser::expr::ExprKind::Call { verb: prion_parser::expr::Verb::Delta, .. } => {
                     self.expr(&段[eq + 1..])
@@ -3888,7 +3888,7 @@ impl Builder {
         }
     }
 
-    //nt: 行实参——树优先
+    
     fn 行实参(&mut self, exprs: &[Expr], inner: &[Token]) -> Result<Vec<Value>, BuildError> {
         if let Some(prion_parser::expr::ExprKind::Call { args, .. }) = exprs.first().map(|e| &e.kind) {
             let mut vals = Vec::new();
@@ -3909,7 +3909,7 @@ impl Builder {
             return Ok(());
         }
 
-        //nt: 中途give返回
+        
         if self.语句体返回 && matches!(kind, prion_parser::LineKind::Give(_)) {
             let v = match exprs.first() {
                 Some(e) => self.expr_tree(e)?,
@@ -3922,8 +3922,8 @@ impl Builder {
             return Ok(());
         }
 
-        //nt: 泛型构造落名
-        //nt: 声明类型给出实例 ⇒
+        
+        
         if matches!(kind, prion_parser::LineKind::AddVal(_))
         {
             if let (Some(Token::Ident(名)), Some(eq)) =
@@ -3958,21 +3958,21 @@ impl Builder {
             }
         }
 
-        //nt: add type
+        
         if matches!(kind, prion_parser::LineKind::AddType(_)) {
             return Ok(());
         }
 
-        //nt: add hide t
-        //nt: add hide f
+        
+        
         if matches!(kind, prion_parser::LineKind::AddHide(_))
         {
             return Ok(());
         }
 
-        //nt: 分支零 add fn
-        //nt: add fn「…」与
-//nt: 重绑定行 = 无 a
+        
+        
+
         let is_rebind = matches!(段.first(), Some(Token::Kw("fn")));
         let is_hide_fn = matches!(段.first(), Some(Token::Kw("add")))
             && matches!(段.get(1), Some(Token::Kw("hide")))
@@ -3989,7 +3989,7 @@ impl Builder {
                 Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
                 _ => return err(format!("fn 后应是名字：{:?}", 段)),
             };
-            //nt: 泛型 fn
+            
             if matches!(段.get(name_at + 1), Some(Token::Sym("("))) {
                 if let Some(类型参数) = 读类型参数表(段, name_at + 1) {
                     let 类型参数表止 = 括号止(段, name_at + 1)
@@ -4016,7 +4016,7 @@ impl Builder {
                 }
             }
             let (params, after) = parse_params(段)?;
-            //nt: 登记常量 fn
+            
             if let Some(eq) = 段.iter().position(|t| *t == Token::Sym("=")) {
                 let 体 = 段[eq + 1..].to_vec();
                 let 形参名: Vec<String> = params.iter().map(|(n, _)| n.clone()).collect();
@@ -4024,7 +4024,7 @@ impl Builder {
                     t.borrow_mut().insert(name.to_string(), (形参名, 体));
                 });
             }
-            //nt: 返回类型
+            
             let (ret, _限定, _) = parse_type_ref(段, after)
                 .map_err(|_| BuildError {
                     message: "add fn 缺返回类型（函数边界类型必写）".into(),
@@ -4032,22 +4032,22 @@ impl Builder {
                     line: CUR_LINE.with(|c| c.get()),
                     file: String::new(),
                 })?;
-            //nt: add 不带 = ⇒
-            //nt: 不登记不编译
+            
+            
             let Some(eq) = 段.iter().position(|t| *t == Token::Sym("=")) else {
                 return Ok(());
             };
 
-            //nt: 先登记签名，再编译体
+            
             let mut fb = Builder::new(
                 format!("{}|{}|{}", self.module, self.block, name),
                 self.f.file.clone(),
-                false, // fn 生成的函数——不是块，不参与链式执行
+                false, 
                 false,
                 false,
                 false,
-                false, // is_kill
-                false, // is_naked（fn 函数不是 naked）
+                false, 
+                false, 
                 Vec::new(),
                 self.block.clone(),
                 self.module.clone(),
@@ -4068,7 +4068,7 @@ impl Builder {
                 let id = fb.new_local(Some(pname.clone()), pty.clone(), true, true);
                 fb.names.insert(pname.clone(), id);
             }
-            //nt: fn的槽隐藏参数
+            
             let hidden = 注入槽参数_prep(&mut fb, &format!("{}|{}|{}", self.module, self.block, name));
             let sig = FnSig {
                 params: params.iter().map(|(_, t)| t.clone()).collect(),
@@ -4081,7 +4081,7 @@ impl Builder {
                 sig,
             );
             let v = fb.expr(&段[eq + 1..])?;
-            //nt: 出口设在**当前块
+            
             fb.set_exit(Exit::Return(Some(v)));
             let mut f = fb.finish()?;
             f.ret = Some(ret.clone());
@@ -4090,8 +4090,8 @@ impl Builder {
             return Ok(());
         }
 
-//nt: 分支甲 add ou
-        //nt: 无等号无体
+
+        
         if matches!(kind, prion_parser::LineKind::AddOutsFn(_))
         {
             let name = match 段.get(3) {
@@ -4115,7 +4115,7 @@ impl Builder {
             return Ok(());
         }
 
-        //nt: 分支乙 call f
+        
         if matches!(kind, prion_parser::LineKind::CallFn(_)) {
             let name = match 段.get(2) {
                 Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
@@ -4135,7 +4135,7 @@ impl Builder {
                 })?;
             let inner = between_parens(段)?;
             let mut vals = self.行实参(exprs, &inner)?;
-            //nt: fn的槽实参
+            
             if !sig.hidden.is_empty() {
                 let caller_is_fn = self.f.name.contains('#');
                 vals.extend(self.槽实参(&sig, &key, caller_is_fn)?);
@@ -4146,10 +4146,10 @@ impl Builder {
             return Ok(());
         }
 
-        //nt: 分支丙 call #
-        //nt: 分支丙乙 call
-        //nt: IR 调用名用**模
-        //nt: 限定口径，codeg
+        
+        
+        
+        
         let (blk, blk_mod) = if matches!(kind, prion_parser::LineKind::CallBlock(_))
             && matches!(段.get(1), Some(Token::HashColon))
             && 段.get(3).is_none()
@@ -4162,7 +4162,7 @@ impl Builder {
             (blk, self.module.clone())
         } else if matches!(kind, prion_parser::LineKind::CallBlock(_))
             && matches!(段.get(1), Some(Token::HashHashColon))
-            && !is_take_form(段) // 取用形态（`val` / `fn`）⇒ 让给 0c2 / 调用分支，不在此跑块
+            && !is_take_form(段) 
         {
             let mut m = String::new();
             let mut j = 2usize;
@@ -4191,7 +4191,7 @@ impl Builder {
                 Some(Token::Kw(k)) => (*k).to_string().into(),
                 _ => return err("`##:模块 #:` 后应接块名"),
             };
-            //nt: 块名后仍有别的 to
+            
             if 段.get(j + 2).is_some() {
                 return err("跨模块跑整块写 `call ##:模块 #:块`；取 fn / val 用各自形态");
             }
@@ -4207,7 +4207,7 @@ impl Builder {
             (String::new(), String::new())
         };
         if !blk.is_empty() {
-//nt: 跨模块跑块 ⇒ 目标
+
             self.check_pub(&blk_mod, &blk)?;
             let mut args: Vec<Value> = Vec::new();
             if let Some(vals) = self.cross_vals.get(&format!("{}|{}", blk_mod, blk)).cloned() {
@@ -4236,14 +4236,14 @@ impl Builder {
             return Ok(());
         }
 
-//nt: callfn语句
+
         if matches!(kind, prion_parser::LineKind::CallFn(_))
         {
             self.expr(段)?;
             return Ok(());
         }
 
-//nt: 分支丙乙次 cal
+
         if matches!(kind, prion_parser::LineKind::CallBlock(_))
         {
             let vname = match 段.get(2) {
@@ -4266,12 +4266,12 @@ impl Builder {
             return Ok(());
         }
 
-        //nt: 分支丙丁 call
+        
         if matches!(kind, prion_parser::LineKind::CallBlock(_))
             && (matches!(段.get(1), Some(Token::HashColon))
                 || matches!(段.get(1), Some(Token::HashHashColon)))
         {
-            //nt: 块所属模块
+            
             let (blk_mod, blk_idx) = if matches!(段.get(1), Some(Token::HashHashColon)) {
                 let mut m = String::new();
                 let mut j = 2usize;
@@ -4307,7 +4307,7 @@ impl Builder {
             } else {
                 (self.module.clone(), 2usize)
             };
-            //nt: 跨块fn裸语句
+            
             if matches!(段.get(blk_idx + 1), Some(Token::Kw("fn"))) {
                 self.expr(段)?;
                 return Ok(());
@@ -4324,7 +4324,7 @@ impl Builder {
                 Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
                 _ => return err("`#:块 val` 后应接 val 名"),
             };
-//nt: 跨模块写 val ⇒
+
             self.check_pub(&blk_mod, &blk)?;
             let slot_key = format!("{}|{}#{}", blk_mod, blk, vname);
             let sid = match self.槽或建(&slot_key) {
@@ -4348,8 +4348,8 @@ impl Builder {
             return Ok(());
         }
 
-        //nt: 分支丁 下标写
-        //nt: 写位置要显式
+        
+        
         if matches!(kind, prion_parser::LineKind::Other(_))
             && matches!(段.first(), Some(Token::Ident(_)))
             && matches!(段.get(1), Some(Token::Sym("[")))
@@ -4369,7 +4369,7 @@ impl Builder {
                     Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
                     _ => unreachable!(),
                 };
-                (n, 2usize) // `[` 的下标（val "名" [ ⇒ 偏移 2）
+                (n, 2usize) 
             };
             let base = *self
                 .names
@@ -4396,7 +4396,7 @@ impl Builder {
                 .position(|t| *t == Token::Sym("="))
                 .ok_or_else(|| BuildError { message: "下标写缺 = 表达式".into() , code: prion_error::Code::E301 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
             let idx = self.expr(&段[open + 1..close])?;
-            //nt: 穿透写
+            
             if matches!(段.get(close + 1), Some(Token::Sym("."))) {
                 let field = match 段.get(close + 2) {
                     Some(Token::Ident(f)) | Some(Token::Str(f)) => f.to_string(),
@@ -4415,7 +4415,7 @@ impl Builder {
                     lhs: Place::local(h),
                     rhs: Rvalue::ListGet { list: Value::Local(base), index: idx },
                 });
-                //nt: 经把手写 ⇒ 先判空
+                
                 if ety.ends_with('*') {
                     let c = self.bin(BinOp::Ne, Value::Local(h), Value::Null);
                     self.emit(Stmt::Assert {
@@ -4431,7 +4431,7 @@ impl Builder {
                 return Ok(());
             }
             let v = self.行右值(exprs, 段, eq)?;
-            //nt: base 是 map
+            
             let base_is_map = self
                 .f
                 .locals
@@ -4446,7 +4446,7 @@ impl Builder {
                 });
                 return Ok(());
             }
-//nt: 队列/栈只进只出
+
             let base_is_filo = self
                 .f
                 .locals
@@ -4464,8 +4464,8 @@ impl Builder {
             return Ok(());
         }
 
-        //nt: 分支丙回 字段写
-        //nt: 写位置要显式
+        
+        
         if matches!(kind, prion_parser::LineKind::Other(_))
             && matches!(段.first(), Some(Token::Ident(_)))
             && matches!(段.get(1), Some(Token::Sym(".")))
@@ -4494,7 +4494,7 @@ impl Builder {
                 Some(Token::Ident(f)) | Some(Token::Str(f)) => f.to_string(),
                 _ => return err("字段访问后应是字段名"),
             };
-            //nt: 字段写同样只对**积
+            
             let w_ty = self
                 .f
                 .locals
@@ -4524,8 +4524,8 @@ impl Builder {
             return Ok(());
         }
 
-        //nt: val delta
-//nt: 表达式、写回。无当前
+        
+
         if matches!(kind, prion_parser::LineKind::Assign(_))
             && matches!(段.get(2), Some(Token::Sym("(")))
         {
@@ -4541,7 +4541,7 @@ impl Builder {
                 file: String::new(),
             }
             })?;
-            //nt: 找配对右括号
+            
             let mut depth = 0i32;
             let mut close = None;
             for (k, tk) in 段.iter().enumerate().skip(2) {
@@ -4575,9 +4575,9 @@ impl Builder {
             return Ok(());
         }
 
-        //nt: kill 语句
+        
         if matches!(kind, prion_parser::LineKind::Kill(_)) {
-            //nt: 取 kill 目标
+            
             let name = 段
                 .iter()
                 .skip(1)
@@ -4596,8 +4596,8 @@ impl Builder {
             return Ok(());
         }
 
-        //nt: 分支戊零 内联汇编
-        //nt: 括号内是隔离区，按
+        
+        
         if 段.first().map(prion_lexer::asm::是asm词).unwrap_or(false)
             && matches!(段.get(1), Some(Token::Sym("(")))
         {
@@ -4614,7 +4614,7 @@ impl Builder {
             return Ok(());
         }
 
-        //nt: 分支戊 调用语句
+        
         if matches!(kind, prion_parser::LineKind::BareCall(_)) {
             let name = match 段.first() {
                 Some(Token::Ident(n)) => n.to_string(),
@@ -4622,7 +4622,7 @@ impl Builder {
             };
             let inner = between_parens(段)?;
             let vals = self.行实参(exprs, &inner)?;
-//nt: 第③道关卡
+
             if (name == "push" && vals.len() >= 2 && self.is_container_value(&vals[1]))
                 || (name == "insert" && vals.len() >= 3 && self.is_container_value(&vals[2]))
             {
@@ -4632,7 +4632,7 @@ impl Builder {
             return Ok(());
         }
 
-        //nt: 分支一 print
+        
         if matches!(kind, prion_parser::LineKind::BareCall(_))
             && matches!(段.first(), Some(Token::Ident(n)) if n == "print")
         {
@@ -4642,7 +4642,7 @@ impl Builder {
             return Ok(());
         }
 
-        //nt: 分支二 add val
+        
         if matches!(kind, prion_parser::LineKind::AddVal(_))
         {
             let name = match 段.get(2) {
@@ -4662,8 +4662,8 @@ impl Builder {
                             Some(Ty((*t).to_string()))
                         }
                     }
-                    //nt: 自定义类型名是 Id
-                    //nt: 带类型参数
+                    
+                    
                     Some(Token::Ident(n)) | Some(Token::Str(n)) => {
                         if matches!(段.get(4), Some(Token::Sym("("))) {
                             match parse_type_ref(段, 3) {
@@ -4678,11 +4678,11 @@ impl Builder {
                             }))
                         }
                     }
-//nt: 跨块 / 跨模块取类
-                    //nt: 跨块前缀
+
+                    
                     Some(Token::HashColon) | Some(Token::HashHashColon) => {
                         let cross_mod = matches!(段.get(3), Some(Token::HashHashColon));
-                        //nt: 跨模块前缀
+                        
                         let (blk_mod, colon_at) = if cross_mod {
                             let mut m = String::new();
                             let mut j = 4usize;
@@ -4722,7 +4722,7 @@ impl Builder {
                             Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
                             _ => return err("`#:块 type` 后应接类型名"),
                         };
-                        //nt: 跨模块 ⇒ pub
+                        
                         if cross_mod {
                             self.check_pub(&blk_mod, &blk)?;
                             if self.hidden_items.contains(&format!("{}|{}|type|{}", blk_mod, blk, tname)) {
@@ -4742,10 +4742,10 @@ impl Builder {
                         if !has {
                             return err(format!("块「{}」里没有 type「{}」", blk, tname));
                         }
-                        //nt: 身份用类型名本身
+                        
                         Some(Ty(tname.to_string()))
                     }
-                    //nt: 没有类型标注 ⇒ 按
+                    
                     _ => None,
                 },
             }
@@ -4759,19 +4759,19 @@ impl Builder {
                 Some(t) => t,
                 None => self.ty_of_value(pre.clone().expect("缺类型必有值")),
             };
-        //nt: 字面量 RHS ⇒
+        
         let lit = 段
             .iter()
             .position(|t| *t == Token::Sym("="))
             .and_then(|eq| lit_hint(&ty, &段[eq + 1..]));
-        //nt: 被跨块取用的 val
+        
         let is_exposed = self
             .cross_vals
             .get(&format!("{}|{}", self.module, self.block))
             .map(|m| m.contains_key(&name))
             .unwrap_or(false);
-        //nt: 定长族
-        //nt: 定长溢出在安全层报错
+        
+        
         if let Some(eq) = 段.iter().position(|t| *t == Token::Sym("=")) {
             let after = &段[eq + 1..];
             if let Some(v) = int_literal_val(after) {
@@ -4785,8 +4785,8 @@ impl Builder {
                 }
             }
         }
-        //nt: fn内构造标记
-        //nt: 供边界复印
+        
+        
         let ty0 = ty.0.clone();
         let fn自有 = !self.f.is_block
             && {
@@ -4828,12 +4828,12 @@ impl Builder {
             }
             if let Some(eq) = 段.iter().position(|t| *t == Token::Sym("=")) {
                 self.lit_ty = lit;
-                //nt: 缺类型时上面已求过一
-                //nt: 期望类型 = 这个
+                
+                
                 let 期望 = self.f.locals.get(id).map(|l| l.ty.0.clone());
-                //nt: fix 常量
+                
                 let 是fix = matches!(段.get(1), Some(Token::Kw("fix")));
-                //nt: 普通右值也吃到尽
+                
                 let 折叠常 = 段.iter().position(|t| *t == Token::Sym("=")).and_then(|e| {
                     let 右 = &段[e + 1..];
                     crate::consts::折叠(右).or_else(|| {
@@ -4856,9 +4856,9 @@ impl Builder {
                         }
                     }
                 }
-                //nt: fix 是编译期常量
+                
                 if matches!(段.get(1), Some(Token::Kw("fix"))) && 折叠常.is_none() {
-                    //nt: 超限单独报
+                    
                     if let Some((项, 限)) = crate::quota::超限() {
                         return Err(BuildError {
                             message: format!(
@@ -4889,7 +4889,7 @@ impl Builder {
                         None => {
                             let 旧 = self.期望类型.take();
                             self.期望类型 = 期望;
-                            //nt: 树优先
+                            
                             let r = match exprs.first() {
                                 Some(e) => self.expr_tree(e),
                                 None => self.expr(&段[eq + 1..]),
@@ -4900,7 +4900,7 @@ impl Builder {
                     },
                 };
                 self.lit_ty = None;
-                //nt: 暴露 val ⇒ 初
+                
                 let lhs = if is_exposed {
                     Place { base: id, proj: vec![Proj::Deref] }
                 } else {
@@ -4911,20 +4911,20 @@ impl Builder {
             return Ok(());
         }
 
-        //nt: 分支三 val 名
+        
         if matches!(kind, prion_parser::LineKind::Assign(_)) {
             let name = match 段.get(1) {
                 Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
                 _ => return err(format!("val 后应是名字：{:?}", 段)),
             };
-            //nt: 暴露 val
+            
             if let Some(&pid) = self.exposed.get(&name) {
                 if let Some(eq) = 段.iter().position(|t| *t == Token::Sym("=")) {
                     let v = self.行右值(exprs, 段, eq)?;
                     let 写回 = match v {
                         Value::Local(id) => Place::local(id),
                         other => {
-                            //nt: 字面量写回
+                            
                             let rv = match other {
                                 Value::Int(i) => Rvalue::Const(Value::Int(i)),
                                 Value::Float(f) => Rvalue::Const(Value::Float(f)),
@@ -4969,30 +4969,30 @@ impl Builder {
         ))
     }
 
-    //nt: for 变量 in
+    
     fn for_list_stmt(&mut self, head: &[Token], body: &[AstStmt]) -> Result<(), BuildError> {
         let var = match head.get(1) {
             Some(Token::Ident(n)) | Some(Token::Str(n)) => n.to_string(),
             _ => return err("for 后应是循环变量"),
         };
-        //nt: 列表表达式 = `i
+        
         let lst_toks: Vec<Token> = head[3..head.len() - 1].to_vec();
         let lst = self.expr(&lst_toks)?;
         let lid = match lst {
             Value::Local(id) => id,
             other => {
-//nt: 字面量等 ⇒ 物化到
-                //nt: for c in "
+
+                
                 let ty = self.ty_of_value(other.clone());
                 let t = self.temp(ty);
                 self.emit(Stmt::Assign { lhs: Place::local(t), rhs: Rvalue::Const(other) });
                 t
             }
         };
-        //nt: 元素类型
+        
         let lst_ty = self.f.locals.get(lid).map(|l| l.ty.0.clone()).unwrap_or_default();
         let elem = if lst_ty == "str" {
-//nt: for c in 字
+
             "str".to_string()
         } else if matches!(lst_toks.first(), Some(Token::Ident(n)) if n == "keys") {
             "str".to_string()
@@ -5007,14 +5007,14 @@ impl Builder {
         self.names.insert(var.to_string(), vid);
         let idx = self.temp(Ty("int".into()));
         self.emit(Stmt::Assign { lhs: Place::local(idx), rhs: Rvalue::Const(Value::Int(1)) });
-        //nt: 串遍历重置游标
+        
         if lst_ty == "str" {
             self.emit(Stmt::Call {
                 name: "#str_iter_start".into(),
                 args: vec![Value::Local(lid)],
             });
         }
-        //nt: 长度只算一次
+        
         let len_t = self.temp(Ty("int".into()));
         self.emit(Stmt::Assign {
             lhs: Place::local(len_t),
@@ -5031,7 +5031,7 @@ impl Builder {
         self.set_exit(Exit::Branch { cond: c, targets: vec![Succ::new(body_id), Succ::new(exit_id)] });
 
         self.switch_to(body_id);
-//nt: 循环变量 = 容器[
+
         if lst_ty == "str" {
             self.emit(Stmt::Assign {
                 lhs: Place::local(vid),
@@ -5057,10 +5057,10 @@ impl Builder {
         Ok(())
     }
 
-    //nt: 范围循环
+    
     fn for_range_stmt(&mut self, head: &[Token], body: &[AstStmt]) -> Result<(), BuildError> {
-        //nt: head = [fo
-        //nt: in 是语法部件
+        
+        
         if head.len() < 5 || !matches!(head.get(2), Some(Token::Ident(w)) if w == "in") {
             return err("for 目前只支持 `for 变量 in 甲~乙:`（范围循环）；遍历容器要等容器接入");
         }
@@ -5068,7 +5068,7 @@ impl Builder {
             Some(Token::Ident(n)) | Some(Token::Str(n)) => n.to_string(),
             _ => return err("for 后应是循环变量"),
         };
-        //nt: 顶层波浪
+        
         let mut 深 = 0i32;
         let mut 波浪 = None;
         for (i, t) in head.iter().enumerate().skip(3) {
@@ -5097,7 +5097,7 @@ impl Builder {
         let lo = self.expr(&head[3..波浪])?;
         let hi = self.expr(&head[波浪 + 1..止])?;
 
-        //nt: 循环变量 = 块内普
+        
         let id = self.new_local(Some(var.to_string()), Ty("int".into()), false, true);
         self.names.insert(var.to_string(), id);
         self.emit(Stmt::Assign { lhs: Place::local(id), rhs: Rvalue::Const(lo) });
@@ -5123,7 +5123,7 @@ impl Builder {
         Ok(())
     }
 
-    //nt: 结构行主体
+    
     fn head_expr_tokens(head: &[Token]) -> &[Token] {
         if head.len() >= 2 {
             &head[1..head.len() - 1]
@@ -5160,14 +5160,14 @@ impl Builder {
     }
 
     fn while_stmt(&mut self, head: &[Token], body: &[AstStmt]) -> Result<(), BuildError> {
-        //nt: while <con
+        
         let head_toks = Self::head_expr_tokens(head);
-        //nt: max 是语法部件
+        
         let (cond_toks, max_toks) = match head_toks.iter().position(|t| matches!(t, Token::Ident(w) if w == "max")) {
             Some(p) => (&head_toks[..p], Some(&head_toks[p + 1..])),
             None => (head_toks, None),
         };
-        //nt: max 计数器
+        
         let cnt = match max_toks {
             Some(_) => {
                 let c = self.new_local(None, Ty("int".into()), false, false);
@@ -5187,11 +5187,11 @@ impl Builder {
         self.set_exit(Exit::Branch { cond: c, targets: vec![Succ::new(body_id), Succ::new(exit_id)] });
 
         self.switch_to(body_id);
-        //nt: max 护栏
+        
         if let (Some(cnt), Some(mx)) = (cnt, max_toks) {
-            //nt: max 上限必须是整
+            
             let mv = self.expr(mx)?;
-            //nt: 上限 0 报错
+            
             if matches!(mv, Value::Int(0)) {
                 return err("max 上限不能是 0——不限制就别写 max");
             }
@@ -5210,7 +5210,7 @@ impl Builder {
                 msg: "循环超过 max 上限——疑似死循环".into(),
                 fix: "检查循环的退出条件是否能达成，或把 max 上限调大".into(),
             });
-            //nt: 字面上限记在循环头
+            
             if let Value::Int(n) = mv {
                 if n > 0 {
                     if let Some(b) = self.blocks.get_mut(head_id) {
@@ -5228,7 +5228,7 @@ impl Builder {
         Ok(())
     }
 
-    //nt: match
+    
     fn match_stmt(&mut self, head: &[Token], body: &[AstStmt]) -> Result<(), BuildError> {
         let v = self.expr(Self::head_expr_tokens(head))?;
         let exit_id = self.nb();
@@ -5249,7 +5249,7 @@ impl Builder {
 
         for (h, cb) in &cases {
             let ht = Self::head_expr_tokens(h).to_vec();
-            //nt: case 变体名
+            
             if let Some(Token::Ident(vname)) | Some(Token::Str(vname)) = ht.first() {
                 if let Some((_, tag, ftypes)) = self.sum_variants.get(vname.as_ref()).cloned() {
                     let tagv = self.temp(Ty("int".into()));
@@ -5262,7 +5262,7 @@ impl Builder {
                     let next_check = self.nb();
                     self.set_exit(Exit::Branch { cond: t, targets: vec![Succ::new(body_id), Succ::new(next_check)] });
                     self.switch_to(body_id);
-                    //nt: 解构绑定
+                    
                     if matches!(ht.get(1), Some(Token::Sym("("))) {
                         let mut d = 0i32;
                         let mut end = None;
@@ -5301,7 +5301,7 @@ impl Builder {
                     continue;
                 }
             }
-            //nt: case _
+            
             if ht.len() == 1 && matches!(ht[0], Token::Ident(ref n) if n == "_") {
                 self.body(cb)?;
                 self.goto(exit_id);
@@ -5319,17 +5319,17 @@ impl Builder {
 
             self.switch_to(next_check);
         }
-        //nt: 都没命中⇒跳出口
+        
         self.goto(exit_id);
         self.switch_to(exit_id);
         Ok(())
     }
 
-    //nt: 表达式形态 matc
-    //nt: 语句形态走 `mat
+    
+    
     fn match_expr(&mut self, t: &[Token], i: &mut usize) -> Result<Value, BuildError> {
-        *i += 1; // 跳过 `match`
-        //nt: 对象字面量
+        *i += 1; 
+        
         let mut depth = 0i32;
         let mut brace = None;
         let mut j = *i;
@@ -5355,7 +5355,7 @@ impl Builder {
         if obj_toks.is_empty() {
             return err("match 后要跟对象");
         }
-        //nt: 解析 case 列表
+        
         let mut arms: Vec<(Vec<Token>, Vec<Token>)> = Vec::new();
         j = brace + 1;
         loop {
@@ -5370,7 +5370,7 @@ impl Builder {
                 return err("表达式形态 match 的体里只能是 case 分支（形如 `case 得(v): 得(v*2)`）");
             }
             j += 1;
-            //nt: 模式：到顶层`:`
+            
             let pat_start = j;
             let mut d2 = 0i32;
             while j < t.len() {
@@ -5386,8 +5386,8 @@ impl Builder {
                 return err("表达式形态 match 的 case 缺 `:`");
             }
             let pat: Vec<Token> = t[pat_start..j].to_vec();
-            j += 1; // 跳过 `:`
-            //nt: 分支表达式
+            j += 1; 
+            
             let ex_start = j;
             let mut d3 = 0i32;
             while j < t.len() {
@@ -5413,11 +5413,11 @@ impl Builder {
             return err("表达式形态 match 至少要有一个 case");
         }
         let v = self.expr(&obj_toks)?;
-        let tmp = self.temp(Ty("int".into())); // 占位，随后按首条分支实际类型修正
+        let tmp = self.temp(Ty("int".into())); 
         let exit_id = self.nb();
         let mut first_ty: Option<Ty> = None;
         for (pat, ex) in &arms {
-            //nt: case _
+            
             if pat.len() == 1 && matches!(&pat[0], Token::Ident(n) if n == "_") {
                 let av = self.expr(ex)?;
                 if first_ty.is_none() {
@@ -5442,7 +5442,7 @@ impl Builder {
             let next_id = self.nb();
             self.set_exit(Exit::Branch { cond: cmp, targets: vec![Succ::new(body_id), Succ::new(next_id)] });
             self.switch_to(body_id);
-            //nt: 解构绑定
+            
             if matches!(pat.get(1), Some(Token::Sym("("))) {
                 let mut d = 0i32;
                 let mut end = None;
@@ -5483,7 +5483,7 @@ impl Builder {
             self.goto(exit_id);
             self.switch_to(next_id);
         }
-        //nt: 一个分支都没命中 ⇒
+        
         self.emit(Stmt::Assert {
             cond: Value::Bool(false),
             msg: "match 没有命中任何分支——穷尽性检查被绕过".into(),
@@ -5499,7 +5499,7 @@ impl Builder {
         Ok(Value::Local(tmp))
     }
 
-    //nt: 语句体 fn
+    
     fn stmt_fn(&mut self, head: &[Token], body: &[AstStmt]) -> Result<Function, BuildError> {
         let h: Vec<Token> = head.iter().cloned().filter(|t| *t != Token::Sym(":")).collect();
         let is_rebind = matches!(h.first(), Some(Token::Kw("fn")));
@@ -5521,7 +5521,7 @@ impl Builder {
         self.stmt_fn_body(&name, params, ret, body)
     }
 
-    //nt: 编泛型实例
+    
     fn 建语句体实例(
         &mut self,
         实例名: &str,
@@ -5558,7 +5558,7 @@ impl Builder {
         Ok(())
     }
 
-    //nt: 编语句体函数体
+    
     fn stmt_fn_body(
         &mut self,
         name: &str,
@@ -5566,7 +5566,7 @@ impl Builder {
         ret: Ty,
         body: &[AstStmt],
     ) -> Result<Function, BuildError> {
-        //nt: 末尾必须是 `giv
+        
         let (last, init) = body.split_last().ok_or_else(|| BuildError {
             message: "语句体 fn 是空的——最后要写 `give 表达式`".into(),
             code: prion_error::Code::E301,
@@ -5612,13 +5612,13 @@ impl Builder {
         );
         fb.cur_col = self.cur_col;
         fb.cur_len = self.cur_len;
-        //nt: 形参先建，槽参后补
-        //nt: 与调用点同序
+        
+        
         for (pname, pty) in &params {
             let id = fb.new_local(Some(pname.clone()), pty.clone(), true, true);
             fb.names.insert(pname.clone(), id);
         }
-        //nt: fn的槽隐藏参数
+        
         let hidden = 注入槽参数_prep(&mut fb, &key);
         self.fns.insert(
             key.clone(),
@@ -5638,7 +5638,7 @@ impl Builder {
         Ok(f)
     }
 
-    //nt: 走一段语句序列
+    
     fn body(&mut self, stmts: &[AstStmt]) -> Result<(), BuildError> {
         let mut j = 0usize;
         while j < stmts.len() {
@@ -5678,7 +5678,7 @@ impl Builder {
                     };
                     match kind {
                         Kind::For => {
-                            //nt: for i in 甲
+                            
                             let is_range = head.contains(&Token::Sym("~"));
                             let h = head.clone();
                             let ib = body.clone();
@@ -5697,7 +5697,7 @@ impl Builder {
                             };
                             let h = head.clone();
                             let ib = body.clone();
-                            //nt: 编译期分支裁剪
+                            
                             match self.条件常量(&h) {
                                 Some(true) => self.body(&ib)?,
                                 Some(false) => {
@@ -5731,7 +5731,7 @@ impl Builder {
 
 
 
-//nt: 代换类型参数
+
 fn 代换类型(s: &str) -> String {
     let m = 类型代换表.with(|c| c.borrow().clone());
     match m {
@@ -5740,7 +5740,7 @@ fn 代换类型(s: &str) -> String {
     }
 }
 
-//nt: 解析类型引用
+
 fn parse_type_ref(
     段: &[Token],
     at: usize,
@@ -5820,7 +5820,7 @@ fn parse_type_ref_raw(
             }
         }
         Some(Token::Ident(n)) | Some(Token::Str(n)) => {
-            //nt: 泛型类型用法
+            
             let 参数 = GENERICS.with(|g| g.borrow().get(n.as_ref()).cloned());
             if let Some(ps) = 参数 {
                 if !matches!(段.get(at + 1), Some(Token::Sym("("))) {
@@ -5943,7 +5943,7 @@ fn parse_type_ref_raw(
     }
 }
 
-//nt: 解析参数表
+
 fn parse_params(段: &[Token]) -> Result<(Vec<(String, Ty)>, usize), BuildError> {
     let open = 段
         .iter()
@@ -6016,7 +6016,7 @@ fn split_args(inner: &[Token]) -> Vec<Vec<Token>> {
         match t {
             Token::Sym("(") => depth += 1,
             Token::Sym(")") => depth -= 1,
-            //nt: 方括号/花括号同样是
+            
             Token::Sym("[") | Token::Sym("{") => depth += 1,
             Token::Sym("]") | Token::Sym("}") => depth -= 1,
             Token::Sym(",") if depth == 0 => {
@@ -6033,19 +6033,19 @@ fn split_args(inner: &[Token]) -> Vec<Vec<Token>> {
     out.into_iter().filter(|a| !a.is_empty()).collect()
 }
 
-//nt: 判addtype行
+
 
 fn is_add_type(段: &[Token]) -> bool {
     matches!(段.first(), Some(Token::Kw("add"))) && matches!(段.get(1), Some(Token::Kw("type")))
 }
 
-//nt: add type "
+
 fn parse_type_def(段: &[Token]) -> Result<StructType, BuildError> {
     let name = match 段.get(2) {
         Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
         _ => return err("add type 后应是类型名"),
     };
-    //nt: 泛型参数表
+    
     let mut params: Vec<String> = Vec::new();
     let mut 名后 = 3usize;
     if matches!(段.get(3), Some(Token::Sym("("))) {
@@ -6101,12 +6101,12 @@ fn parse_type_def(段: &[Token]) -> Result<StructType, BuildError> {
             )
         }
     };
-    //nt: 积类型
+    
     if matches!(段.get(eq + 1), Some(Token::Sym("("))) {
         let fields = parse_field_list(&段[eq + 2..])?;
         return Ok(StructType { name: name.to_string(), params, fields, variants: Vec::new() });
     }
-    //nt: 和类型
+    
     let mut variants = Vec::new();
     for seg in split_top(&段[eq + 1..]) {
         if seg.is_empty() {
@@ -6129,7 +6129,7 @@ fn parse_type_def(段: &[Token]) -> Result<StructType, BuildError> {
     Ok(StructType { name: name.to_string(), params, fields: Vec::new(), variants })
 }
 
-//nt: 解析积类型字段
+
 fn parse_field_list(段: &[Token]) -> Result<Vec<(String, Ty)>, BuildError> {
     let end = matching_close(段)?;
     let mut fields = Vec::new();
@@ -6138,7 +6138,7 @@ fn parse_field_list(段: &[Token]) -> Result<Vec<(String, Ty)>, BuildError> {
             Some(Token::Ident(n)) | Some(Token::Str(n)) => n.to_string(),
             _ => return err("字段缺名字"),
         };
-        //nt: 类型带泛型实参
+        
         let 尾 = &a[1..];
         if 尾.is_empty() {
             return err(format!("字段「{}」缺类型", fname));
@@ -6178,13 +6178,13 @@ fn parse_field_list(段: &[Token]) -> Result<Vec<(String, Ty)>, BuildError> {
     Ok(fields)
 }
 
-//nt: 解析变体字段
-//nt: 无名者按序号记 `#
+
+
 fn parse_variant_fields(段: &[Token]) -> Result<Vec<(String, Ty)>, BuildError> {
     let end = matching_close(段)?;
     let mut fields = Vec::new();
     for (idx, a) in split_args(&段[..end]).into_iter().enumerate() {
-        //nt: 具名字段 `名 类型
+        
         let (fname, fty_tok) = if a.len() >= 2 && !matches!(a.get(1), Some(Token::Sym("*"))) {
             match a.first() {
                 Some(Token::Ident(n)) | Some(Token::Str(n)) => (n.to_string(), a.get(1)),
@@ -6198,7 +6198,7 @@ fn parse_variant_fields(段: &[Token]) -> Result<Vec<(String, Ty)>, BuildError> 
             Some(Token::Ident(n)) => n.to_string(),
             _ => return err(format!("变体字段「{}」缺类型", fname)),
         };
-        //nt: 把手 `*` 可落在
+        
         let fty = if a.iter().any(|t| matches!(t, Token::Sym("*"))) {
             format!("{}*", fty)
         } else {
@@ -6209,7 +6209,7 @@ fn parse_variant_fields(段: &[Token]) -> Result<Vec<(String, Ty)>, BuildError> 
     Ok(fields)
 }
 
-//nt: 取整数字面量
+
 fn int_literal_val(段: &[Token]) -> Option<i64> {
     match 段 {
         [Token::Int(v)] => Some(*v),
@@ -6218,7 +6218,7 @@ fn int_literal_val(段: &[Token]) -> Option<i64> {
     }
 }
 
-//nt: 定长族的可表示范围
+
 fn width_range(ty: &str) -> Option<(i64, i64)> {
     match ty {
         "int_8" => Some((-128, 127)),
@@ -6248,7 +6248,7 @@ fn matching_close(段: &[Token]) -> Result<usize, BuildError> {
     Err(BuildError { message: "字段表没闭合".into() , code: prion_error::Code::E301 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })
 }
 
-//nt: 按 `|` 做**顶
+
 fn split_top(段: &[Token]) -> Vec<Vec<Token>> {
     let mut out = Vec::new();
     let mut cur: Vec<Token> = Vec::new();
@@ -6273,9 +6273,9 @@ fn split_top(段: &[Token]) -> Vec<Vec<Token>> {
     out
 }
 
-//nt: call ##
-//nt: 0c'
-//nt: call ##
+
+
+
 fn take_kind(段: &[Token]) -> Option<&'static str> {
     let mut j = 2usize;
     while let Some(tok) = 段.get(j) {
@@ -6321,8 +6321,8 @@ fn is_take_form(段: &[Token]) -> bool {
             || matches!(段.get(j + 2), Some(Token::Kw("fn"))))
 }
 
-//nt: 预扫全程序常量
-//nt: 预扫表达式 fn 入表
+
+
 fn 预扫常量fn(stmts: &[AstStmt]) {
     for s in stmts {
         match s {
@@ -6404,7 +6404,7 @@ fn build_block(
     let mut bx = Builder::new(
         b.name.clone(),
         b.file.clone(),
-        true, // 代码块函数——链式执行的候选链根
+        true, 
         b.attrs.iter().any(|a| a == "pub"),
         b.attrs.iter().any(|a| a == "sle"),
         b.attrs.iter().any(|a| a == "kill"),
@@ -6430,7 +6430,7 @@ fn build_block(
     Ok((bx.finish()?, extra, externs))
 }
 
-//nt: 预扫泛型语句模板
+
 fn 预扫泛型语句体(stmts: &[AstStmt], module: &str, block: &str) {
     for s in stmts {
         match s {
@@ -6451,7 +6451,7 @@ fn 预扫泛型语句体(stmts: &[AstStmt], module: &str, block: &str) {
     }
 }
 
-//nt: 收引用返槽参数
+
 fn 注入槽参数_prep(fb: &mut Builder, key: &str) -> Vec<(String, Ty)> {
     let used = fn_used表.with(|g| g.borrow().get(key).cloned()).unwrap_or_default();
     for (vn, vty) in &used {
@@ -6461,7 +6461,7 @@ fn 注入槽参数_prep(fb: &mut Builder, key: &str) -> Vec<(String, Ty)> {
     used.into_iter().collect()
 }
 
-//nt: fn头里的名
+
 fn head_tokens_name(head: &TokStream) -> Option<String> {
     let mut i = 0usize;
     while let Some(tk) = head.get(i) {
@@ -6476,7 +6476,7 @@ fn head_tokens_name(head: &TokStream) -> Option<String> {
     None
 }
 
-//nt: 扫一行引用
+
 fn 扫行引用(
     段: &TokStream,
     module: &str,
@@ -6491,7 +6491,7 @@ fn 扫行引用(
     let mut i = 0usize;
     while let Some(tk) = 段.get(i) {
         match tk {
-            //nt: val读写
+            
             Token::Kw("val") => {
                 let 前是建 = i > 0
                     && (matches!(段.get(i - 1), Some(Token::Kw("add")))
@@ -6510,7 +6510,7 @@ fn 扫行引用(
                 }
                 i += 2;
             }
-            //nt: call val读
+            
             Token::Kw("call") if matches!(段.get(i + 1), Some(Token::Kw("val"))) => {
                 if let Some(Token::Str(v)) | Some(Token::Ident(v)) = 段.get(i + 2) {
                     if !fn局部.contains(v.as_ref()) {
@@ -6524,7 +6524,7 @@ fn 扫行引用(
                 }
                 i += 3;
             }
-            //nt: 同块调用边
+            
             Token::Kw("call") if matches!(段.get(i + 1), Some(Token::Kw("fn"))) => {
                 if let Some(Token::Str(c)) | Some(Token::Ident(c)) = 段.get(i + 2) {
                     fn_calls
@@ -6534,7 +6534,7 @@ fn 扫行引用(
                 }
                 i += 3;
             }
-            //nt: 跨块调用边
+            
             Token::Kw("call") if matches!(段.get(i + 1), Some(Token::HashColon)) => {
                 if matches!(段.get(i + 3), Some(Token::Kw("fn"))) {
                     let blk = match 段.get(i + 2) {
@@ -6553,7 +6553,7 @@ fn 扫行引用(
                 }
                 i += 3;
             }
-            //nt: 公式体裸名
+            
             Token::Ident(v) => {
                 let 前是建 = i > 0
                     && (matches!(段.get(i - 1), Some(Token::Kw("add")))
@@ -6574,7 +6574,7 @@ fn 扫行引用(
     }
 }
 
-//nt: 扫fn体引用
+
 #[allow(clippy::too_many_arguments)]
 fn 扫fn引用(
     stmts: &[AstStmt],
@@ -6587,10 +6587,10 @@ fn 扫fn引用(
     fn_used: &mut BTreeMap<String, BTreeMap<String, Ty>>,
     fn_calls: &mut BTreeMap<String, BTreeSet<String>>,
 ) {
-    //nt: 一遍收fn局部名
+    
     let mut fn局部: BTreeSet<String> = 参数名.clone();
     收局部名(stmts, &mut fn局部);
-    //nt: 二遍记引用
+    
     扫行引用(head, module, block, fname, &fn局部, val_tys, fn_used, fn_calls);
     for s in stmts {
         match s {
@@ -6598,7 +6598,7 @@ fn 扫fn引用(
                 扫行引用(kind.tokens(), module, block, fname, &fn局部, val_tys, fn_used, fn_calls);
             }
             AstStmt::Struct { head, body, .. } => {
-                //nt: 条件头也要扫
+                
                 扫行引用(head, module, block, fname, &fn局部, val_tys, fn_used, fn_calls);
                 扫fn引用(body, head, module, block, fname, &fn局部, val_tys, fn_used, fn_calls);
             }
@@ -6607,7 +6607,7 @@ fn 扫fn引用(
     }
 }
 
-//nt: 收fn局部名
+
 fn 收局部名(stmts: &[AstStmt], out: &mut BTreeSet<String>) {
     for s in stmts {
         match s {
@@ -6636,8 +6636,8 @@ fn 收局部名(stmts: &[AstStmt], out: &mut BTreeSet<String>) {
     }
 }
 
-//nt: 语法层语句树 → 中
-//nt: 检查侧的类型位表
+
+
 thread_local! {
     static TYPECK: std::cell::RefCell<std::collections::BTreeMap<u32, String>> =
         std::cell::RefCell::new(std::collections::BTreeMap::new());
@@ -6645,13 +6645,13 @@ thread_local! {
 
 pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>) -> Result<Program, BuildError> {
     TYPECK.with(|m| *m.borrow_mut() = typeck.clone());
-    //nt: 预扫类型名
-    //nt: Prion 删了 us
-    //nt: 必须唯一才能指称
-    //nt: 和类型变体名同一规则
+    
+    
+    
+    
     let mut types: Vec<StructType> = Vec::new();
-    let mut type_first: BTreeMap<String, (String, usize)> = BTreeMap::new(); // 名 → (文件, 行号) 首次定义
-    //nt: 首次定义位置
+    let mut type_first: BTreeMap<String, (String, usize)> = BTreeMap::new(); 
+    
     let base_of = |f: &str| -> String { if f.is_empty() { "本文件".to_string() } else { f.to_string() } };
     for b in &ast.blocks {
         let mut flat_ln: Vec<(usize, &TokStream)> = Vec::new();
@@ -6692,16 +6692,16 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
                     }
     }
 
-    //nt: 预扫泛型语句模板
+    
     for b in &ast.blocks {
         预扫泛型语句体(&b.stmts, &b.module, &b.name);
     }
 
-    //nt: 预扫函数签名
+    
     let mut global_fns: BTreeMap<String, FnSig> = BTreeMap::new();
     for b in &ast.blocks {
-        //nt: 递归展开
-        //nt: 只扫顺序语句会漏体内
+        
+        
         let mut flat_lines: Vec<&TokStream> = Vec::new();
         collect_ast_lines(&b.stmts, &mut flat_lines);
         for 段 in flat_lines {
@@ -6713,8 +6713,8 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
                     _ => continue,
                 };
                 if let Ok((params, after)) = parse_params(段) {
-//nt: 返回类型
-                    //nt: 返回自定义类型的 f
+
+                    
                     if let Ok((ret, _限, _)) = parse_type_ref(段, after) {
                         global_fns.insert(
                             format!("{}|{}|{}", b.module, b.name, name),
@@ -6728,7 +6728,7 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
                     }
                 }
             }
-            //nt: 外部函数声明同样进全
+            
             if matches!(段.first(), Some(Token::Kw("add")))
                 && matches!(段.get(1), Some(Token::Kw("outs")))
                 && matches!(段.get(2), Some(Token::Kw("fn")))
@@ -6754,8 +6754,8 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
                 }
     }
 
-    //nt: 预扫值类型
-    //nt: 先收全程序 `add
+    
+    
     let mut val_tys: BTreeMap<String, Ty> = BTreeMap::new();
     for b in &ast.blocks {
         let mut flat_lines: Vec<&TokStream> = Vec::new();
@@ -6786,10 +6786,10 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
                 }
                     }
     }
-    //nt: fn引用与调用边
+    
     let mut fn_used: BTreeMap<String, BTreeMap<String, Ty>> = BTreeMap::new();
     let mut fn_calls: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-    //nt: perfn扫描
+    
     for b in &ast.blocks {
         for s in &b.stmts {
             if let AstStmt::Fn { body, head, .. } = s {
@@ -6820,7 +6820,7 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
                 }
             } else if let AstStmt::Line { kind, .. } = s {
                 let 段 = kind.tokens();
-                //nt: 公式体fn也要扫
+                
                 if matches!(段.first(), Some(Token::Kw("add")))
                     && matches!(段.get(1), Some(Token::Kw("fn")))
                     && 段.iter().any(|t| matches!(t, Token::Sym("=")))
@@ -6864,7 +6864,7 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
             }
         }
     }
-    //nt: 调用图闭包
+    
     let mut changed = true;
     while changed {
         changed = false;
@@ -6884,7 +6884,7 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
             }
         }
     }
-    //nt: 补填global
+    
     for (k, sig) in global_fns.iter_mut() {
         if sig.hidden.is_empty() {
             if let Some(used) = fn_used.get(k) {
@@ -6894,7 +6894,7 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
     }
     fn_used表.with(|g| *g.borrow_mut() = fn_used.clone());
     let mut cross_vals: BTreeMap<String, BTreeMap<String, Ty>> = BTreeMap::new();
-    //nt: 被引块的val暴露
+    
     let mut 被引块: BTreeSet<String> = BTreeSet::new();
     for (k, _) in &fn_calls {
         let mut it = k.splitn(3, '|');
@@ -6902,7 +6902,7 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
         let blk = it.next().unwrap_or("");
         被引块.insert(format!("{}|{}", m, blk));
     }
-    //nt: fn引用的val暴露
+    
     for (k, used) in &fn_used {
         let mut it = k.splitn(3, '|');
         let m = it.next().unwrap_or("");
@@ -6918,7 +6918,7 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
         }
     }
     fn_used表.with(|g| *g.borrow_mut() = fn_used.clone());
-//nt: 模块尾名 → 全路径
+
     let mut mod_by_tail: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for b in &ast.blocks {
         let m = &b.module;
@@ -6955,7 +6955,7 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
                             }
                         }
                     }
-                    //nt: 跨模块取 val
+                    
                     if matches!(段.get(i), Some(Token::Kw("call")))
                         && matches!(段.get(i + 1), Some(Token::HashHashColon))
                     {
@@ -6988,7 +6988,7 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
                                 _ => { i += 1; continue; }
                             };
                             if let Some(Token::Str(v) | Token::Ident(v)) = 段.get(j + 3) {
-                                //nt: 尾名退回
+                                
                                 let known = mod_by_tail.values().flatten().any(|x| x == &m);
                                 let full = if known {
                                     m.clone()
@@ -7010,8 +7010,8 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
                             }
                         }
                     }
-//nt: take #
-                    //nt: take 是跨块通道
+
+                    
                     if matches!(段.get(i), Some(Token::Kw("take")))
                         && matches!(段.get(i + 1), Some(Token::HashColon))
                         && matches!(段.get(i + 3), Some(Token::Kw("val")))
@@ -7036,7 +7036,7 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
                     }
     }
 
-    //nt: 预扫和类型
+    
     let mut sum_variants: BTreeMap<String, (String, usize, Vec<Ty>)> = BTreeMap::new();
     for st in &types {
         for (tag, v) in st.variants.iter().enumerate() {
@@ -7047,7 +7047,7 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
         }
     }
 
-    //nt: 预扫块类型
+    
     let mut block_types: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for b in &ast.blocks {
         let key = format!("{}|{}", b.module, b.name);
@@ -7062,7 +7062,7 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
                     }
     }
 
-//nt: 预扫公开块
+
     let pub_blocks: BTreeSet<String> = ast
         .blocks
         .iter()
@@ -7070,7 +7070,7 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
         .map(|b| format!("{}|{}", b.module, b.name))
         .collect();
 
-    //nt: 预扫隐藏项
+    
     let mut hidden_items: BTreeSet<String> = BTreeSet::new();
     for b in &ast.blocks {
         let is_pub = pub_blocks.contains(&format!("{}|{}", b.module, b.name));
@@ -7123,7 +7123,7 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
         }
     }
 
-    //nt: 泛型声明表就位
+    
     GENERICS.with(|g| {
         let mut g = g.borrow_mut();
         g.clear();
@@ -7135,7 +7135,7 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
     });
     INST_TODO.with(|q| q.borrow_mut().clear());
 
-    //nt: 类型标注预扫
+    
     {
         let mut 线: Vec<(usize, &TokStream)> = Vec::new();
         for b in &ast.blocks {
@@ -7154,7 +7154,7 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
     }
     let 预 = INST_TODO.with(|q| std::mem::take(&mut *q.borrow_mut()));
     展开实例(&mut types, 预);
-    //nt: 实例进表后重建索引
+    
     let type_idx: std::rc::Rc<std::collections::HashMap<String, usize>> = std::rc::Rc::new(
         types.iter().enumerate().map(|(i, t)| (t.name.clone(), i)).collect(),
     );
@@ -7170,18 +7170,18 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
     for b in &ast.blocks {
         let (mut main, extra, ex) =
             build_block(b, &types, &type_idx, &global_fns, &cross_vals, &sum_variants, &mod_by_tail, &pub_blocks, &hidden_items, &block_types, std::rc::Rc::clone(&共享常量))?;
-        //nt: 块函数 IR 名用
-        //nt: 与 `call #
+        
+        
         main.name = format!("{}|{}", b.module, b.name);
         functions.push(main);
         functions.extend(extra);
         externs.extend(ex);
     }
-    //nt: 泛型实例展开
+    
     let 待实例 = INST_TODO.with(|q| std::mem::take(&mut *q.borrow_mut()));
     展开实例(&mut types, 待实例);
 
-    //nt: 逃逸调用值复印
+    
     let mut 名集: BTreeSet<String> = BTreeSet::new();
     for f in functions.iter() {
         名集.insert(f.name.clone());
@@ -7191,7 +7191,7 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
     }
     let 区域 = 区型表(&types);
     for f in functions.iter_mut() {
-        //nt: 回边圈范围
+        
         let mut 圈: Vec<(usize, usize)> = Vec::new();
         for b in f.blocks.iter() {
             if let Exit::Branch { targets, .. } = &b.exit {
@@ -7206,7 +7206,7 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
         let mut 护标: BTreeSet<LocalId> = BTreeSet::new();
         for b in f.blocks.iter() {
             let mut 表 = vec![None; b.stmts.len()];
-            //nt: 最内层圈
+            
             let mut 本圈: Option<(usize, usize)> = None;
             for (h, c) in 圈.iter() {
                 if *h <= b.id && b.id <= *c {
@@ -7221,7 +7221,7 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
             }
             if let Some((h, c)) = 本圈 {
                 for i in 0..b.stmts.len() {
-                    //nt: 赋值两形态都算
+                    
                     let (tmp, 调名, 是调用) = match &b.stmts[i] {
                         Stmt::Assign { lhs, rhs: Rvalue::Call { name, .. } } => {
                             (lhs.base, name.as_str(), true)
@@ -7301,17 +7301,17 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
             b.spans = 新宽;
         }
     }
-    //nt: 同块容器裸传禁止
+    
     禁裸传校验(&functions, &types)?;
     Ok(Program { functions, types, externs, objects: Vec::new(), owned_elem: Default::default(), 值入列: Default::default(), 平铺: Default::default() })
 }
 
-//nt: 裸传校验
+
 fn 禁裸传校验(functions: &[Function], _types: &[StructType]) -> Result<(), BuildError> {
-    //nt: 堆类型判定
-    //nt: str 已堆副本
-    //nt: 把手显式共享
-    //nt: 聚合走深拷
+    
+    
+    
+    
     let 堆 = |ty: &Ty, f: &Function| -> bool {
         let _ = f;
         let n = ty.0.as_str();
@@ -7330,23 +7330,23 @@ fn 禁裸传校验(functions: &[Function], _types: &[StructType]) -> Result<(), 
                     _ => continue,
                 };
                 if did == sid {
-                    continue; //nt: 自增放行
+                    continue; 
                 }
                 let Some(d) = f.locals.get(*did) else { continue };
-                //nt: 只拦具名目标
+                
                 if d.name.is_none() || !堆(&d.ty, f) {
                     continue;
                 }
                 let Some(l) = f.locals.get(*sid) else { continue };
-                //nt: 未具名源放行
+                
                 if l.name.is_none() {
                     continue;
                 }
-                //nt: 槽源放行
+                
                 if l.name.as_deref().map(|n| n.contains('#')).unwrap_or(false) {
                     continue;
                 }
-                //nt: 参数已在调用点深拷
+                
                 if l.is_param {
                     continue;
                 }
@@ -7369,7 +7369,7 @@ fn 禁裸传校验(functions: &[Function], _types: &[StructType]) -> Result<(), 
     Ok(())
 }
 
-//nt: 把待实例清单落成具体
+
 fn 展开实例(types: &mut Vec<StructType>, 待实例: Vec<(String, Vec<String>)>) {
     for (名, 实参) in 待实例 {
         let 实例名 = format!("{}({})", 名, 实参.join(", "));

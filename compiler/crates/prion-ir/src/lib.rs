@@ -1,19 +1,19 @@
-//! prion-ir —— 中间表示
-//!
-//! 结构：程序 = 若干函数；函数 = 局部变量表（带类型）+ 若干基本块；
-//! 基本块 = 块参数（可 0 个）+ 一串语句 + 恰一条出口指令。
-//!
-//! - 汇合用块参数，不用 φ 节点
-//! - 位置（Place）= 局部变量 + 投影链（`.字段` / `[下标]` / 解引用），读写以位置为单位
-//! - 控制流已摊平：if / while / match 全部坍缩为分支指令 + 基本块跳转
-//! - 指令集：
-//!   赋值 / 存活开始·存活结束 / 分支 / 调用·返回·断言·不可达 / 释放；
-//!   进入访问期·结束访问期 / 拷贝值·销毁值；
-//!   分配（存储类）—— tmp / keep / unsafe 标在分配上
-//!
-//! 不含：SSA / φ、借用检查指令、协程指令、独立文本格式（IR 活在内存，文本仅供 dump）。
-//! dump 规范：英文指令名、源名保留 + 临时 `%tN`、块 `bbN`（出现序）、类型用源名、
-//! 块参数显式、2 空格缩进、行号默认不带、顺序不排序。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 pub mod disposition;
 pub mod flat;
@@ -22,33 +22,33 @@ pub use disposition::形参观感;
 use prion_error::Span;
 use std::fmt;
 
-//nt: AST
 
-//nt: SSA分析
 
-//nt: 编译期求值
+
+
+
 
 
 pub type LocalId = usize;
 pub type BlockId = usize;
 
-//nt: 对象身份
+
 pub type ObjId = u32;
 
 pub use prion_types::StorageClass;
 
-//nt: 对象表项
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ObjEnt {
     pub class: StorageClass,
     pub ty: Ty,
 }
 
-//nt: 类型名
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ty(pub String);
 
-//nt: 位置上的投影
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Proj {
     Field(String),
@@ -56,7 +56,7 @@ pub enum Proj {
     Deref,
 }
 
-//nt: 可寻址位置
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Place {
     pub base: LocalId,
@@ -69,64 +69,64 @@ impl Place {
     }
 }
 
-//nt: 可取值
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Local(LocalId),
     Int(i64),
     Float(f64),
     Str(String),
-    //nt: 真假值
+    
     Bool(bool),
     Null,
 }
 
-//nt: map 字面量的键
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum MapKey {
     Str(String),
     Int(i64),
 }
 
-//nt: 右值表达式
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Rvalue {
     Use(Place),
     Const(Value),
     BinOp { op: BinOp, lhs: Value, rhs: Value },
     Call { name: String, args: Vec<Value> },
-    //nt: 函数值
+    
     FnRef { name: String },
-    //nt: 间接调用
+    
     CallIndirect { callee: Value, args: Vec<Value> },
-    //nt: 列表字面量 `[1
+    
     ListLit { elems: Vec<Value> },
-    //nt: 下标读 `列表[i]
+    
     ListGet { list: Value, index: Value },
-    //nt: map 字面量 `{
-    //nt: 键收str与int
+    
+    
     MapLit { pairs: Vec<(MapKey, Value)> },
-    //nt: map 按键读
+    
     MapGet { map: Value, key: Value },
-    //nt: 和类型构造
+    
     VariantLit { ty: String, tag: usize, args: Vec<Value>, tys: Vec<Ty> },
-    //nt: 和类型判别：取tag
+    
     VariantTag(Value),
-    //nt: 和类型解构
+    
     VariantGet { value: Value, idx: usize, ty: Ty },
-    //nt: 取地址 `&位置
+    
     Ref(Place),
 }
 
-//nt: 内联 asm 三段式
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct AsmForm {
     pub tmpl: String,
-    //nt: 输出
+    
     pub outs: Vec<(String, LocalId, bool)>,
-    //nt: 输入
+    
     pub ins: Vec<(String, Value)>,
-    //nt: 破坏段
+    
     pub clobbers: Vec<String>,
 }
 
@@ -145,11 +145,11 @@ pub enum BinOp {
     Ge,
     And,
     Or,
-    //nt: 按位与 / 或 /
+    
     BitAnd,
     BitOr,
     BitXor,
-    //nt: 左移 / 右移
+    
     Shl,
     Shr,
 }
@@ -179,184 +179,184 @@ impl BinOp {
     }
 }
 
-//nt: 语句串
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
     Assign { lhs: Place, rhs: Rvalue },
-    //nt: 无返回值的调用语句
+    
     Call { name: String, args: Vec<Value> },
-    //nt: 对象分配
+    
     Alloc { obj: ObjId, class: StorageClass, ty: Ty },
-    //nt: 变量绑定对象
+    
     Bind { var: LocalId, obj: ObjId },
-    //nt: 对象回收
+    
     Drop { obj: ObjId },
-    //nt: 释放局部当前堆值
+    
     DropVar { lid: LocalId },
-    //nt: kill 展开标记
+    
     Kill { block: String },
-    //nt: 下标写 `列表[i]
+    
     ListSet { list: Value, index: Value, value: Value },
-    //nt: map 按键写
+    
     MapSet { map: Value, key: Value, value: Value },
     AccessBegin(Place),
     AccessEnd(Place),
-    //nt: 护栏
+    
     Assert { cond: Value, msg: String, fix: String },
-    //nt: 内联 asm
+    
     Asm(AsmForm),
 }
 
-//nt: 边：目标块 + 实参
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Succ {
     pub target: BlockId,
-    //nt: 目标块参数实参
+    
     pub args: Vec<Value>,
 }
 
 impl Succ {
-    //nt: 无参边
+    
     pub fn new(target: BlockId) -> Self {
         Self { target, args: Vec::new() }
     }
-    //nt: 带参边
+    
     pub fn with_args(target: BlockId, args: Vec<Value>) -> Self {
         Self { target, args }
     }
 }
 
-//nt: 出口指令
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Exit {
-    //nt: 统一条件跳转
+    
     Branch { cond: Value, targets: Vec<Succ> },
     Return(Option<Value>),
     Unreachable,
 }
 
-//nt: 基本块
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Block {
     pub id: BlockId,
-    //nt: 块参数
+    
     pub params: Vec<(LocalId, Ty)>,
     pub stmts: Vec<Stmt>,
-    //nt: 与 `stmts
+    
     pub spans: Vec<Span>,
     pub exit: Exit,
-    //nt: 循环回边安全上限
+    
     pub max: Option<u64>,
 }
 
-//nt: 局部变量
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Local {
-    //nt: 源名
+    
     pub name: Option<String>,
     pub ty: Ty,
     pub is_param: bool,
     pub bare_ok: bool,
-    //nt: 声明行列
+    
     pub line: usize,
     pub col: usize,
-    //nt: 循环体内声明
+    
     pub loop_local: bool,
-    //nt: fn内构造的聚合对象
+    
     pub fn_owned: bool,
-    //nt: 绑定的堆对象
+    
     pub obj: Option<ObjId>,
 }
 
-//nt: 函数
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Function {
     pub name: String,
-    //nt: 源文件
+    
     pub file: String,
     pub ret: Option<Ty>,
     pub locals: Vec<Local>,
     pub blocks: Vec<Block>,
-    //nt: 是否**代码块**函
+    
     pub is_block: bool,
-    //nt: 块行属性 `pub
+    
     pub is_pub: bool,
-    //nt: 块行属性 `sle
+    
     pub is_sle: bool,
-    //nt: 关块自清后缀
+    
     pub is_kill: bool,
-    //nt: 块行属性 `ABI
+    
     pub is_abi: bool,
-    //nt: 块行属性 `asm
+    
     pub is_naked: bool,
-    //nt: naked 函数的汇
+    
     pub asm_lines: Vec<String>,
 }
 
-//nt: 积类型
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StructType {
     pub name: String,
-    //nt: 泛型类型参数名
+    
     pub params: Vec<String>,
     pub fields: Vec<(String, Ty)>,
-    //nt: 和类型变体
+    
     pub variants: Vec<Variant>,
 }
 
-//nt: 和类型的一个变体
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Variant {
     pub name: String,
     pub fields: Vec<(String, Ty)>,
 }
 
-//nt: 外部函数声明
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExternFn {
-    //nt: C 侧符号名 = 声
+    
     pub name: String,
     pub params: Vec<Ty>,
     pub ret: Ty,
 }
 
-//nt: 程序
+
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Program {
     pub functions: Vec<Function>,
-    //nt: 全程序的积类型定义
+    
     pub types: Vec<StructType>,
-    //nt: 外部函数声明
+    
     pub externs: Vec<ExternFn>,
-    //nt: 全程序对象表
+    
     pub objects: Vec<ObjEnt>,
-    //nt: 容器拥有元素
+    
     pub owned_elem: std::collections::BTreeMap<ObjId, Vec<ObjId>>,
-    //nt: 元素全为装箱值的容器
+    
     pub 值入列: std::collections::BTreeSet<ObjId>,
-    //nt: 判定平铺的列表
+    
     pub 平铺: std::collections::BTreeMap<String, std::collections::BTreeSet<LocalId>>,
 }
 
-///nt: 类型是否容器
+
 pub fn is_container_ty(t: &str) -> bool {
     let n = t.trim_end_matches('*');
     n.starts_with("list(") || n.starts_with("map(") || n.starts_with("que(") || n.starts_with("stack(")
 }
 
-//nt: 类型是否堆对象
-
-//nt: 收语句里读到的局部
 
 
-//nt: dump
 
-//nt: 局部名显示
+
+
+
+
+
 fn local_name(f: &Function, id: LocalId) -> String {
     match f.locals.get(id).and_then(|l| l.name.clone()) {
         Some(n) => n,
         None => {
-            //nt: 临时编号 = 该局部
+            
             let mut k = 0usize;
             for (i, l) in f.locals.iter().enumerate() {
                 if l.name.is_none() {
@@ -383,7 +383,7 @@ fn place_str(f: &Function, p: &Place) -> String {
     s
 }
 
-//nt: map 键显示
+
 fn map_key_str(k: &MapKey) -> String {
     match k {
         MapKey::Str(s) => format!("\"{}\"", s),
@@ -500,7 +500,7 @@ fn stmt_str(f: &Function, s: &Stmt) -> String {
 
 fn exit_str(f: &Function, e: &Exit) -> String {
     match e {
-        //nt: 单目标 = 无条件跳
+        
         Exit::Branch { targets, .. } if targets.len() == 1 => {
             let s = &targets[0];
             if s.args.is_empty() {
@@ -539,7 +539,7 @@ fn exit_str(f: &Function, e: &Exit) -> String {
 }
 
 impl fmt::Display for Program {
-    //nt: 归一化 dump
+    
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for t in &self.types {
             let fs: Vec<String> = t
@@ -605,7 +605,7 @@ impl fmt::Display for Program {
 }
 
 impl Program {
-    //nt: 归一化 dump 文
+    
     pub fn dump(&self) -> String {
         format!("{}", self)
     }

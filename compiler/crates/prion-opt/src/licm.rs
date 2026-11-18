@@ -1,12 +1,12 @@
-//! 循环不变量外提
-//!
-//! 自然循环内、操作数都在循环外定义的纯表达式，提到循环前置块。
-//! 只处理无副作用的右值；抛错与写内存的一律不动。
+
+
+
+
 
 use prion_ir::{BinOp, BlockId, Exit, LocalId, Program, Rvalue, Stmt, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
-//nt: 后继块
+
 fn 后继(f: &prion_ir::Function, b: usize) -> Vec<BlockId> {
     match &f.blocks[b].exit {
         Exit::Branch { targets, .. } => targets.iter().map(|s| s.target).collect(),
@@ -14,7 +14,7 @@ fn 后继(f: &prion_ir::Function, b: usize) -> Vec<BlockId> {
     }
 }
 
-//nt: 前驱表
+
 fn 前驱表(f: &prion_ir::Function) -> Vec<Vec<BlockId>> {
     let mut ps: Vec<Vec<BlockId>> = vec![Vec::new(); f.blocks.len()];
     for i in 0..f.blocks.len() {
@@ -27,7 +27,7 @@ fn 前驱表(f: &prion_ir::Function) -> Vec<Vec<BlockId>> {
     ps
 }
 
-//nt: 链深
+
 fn 链深(idom: &[Option<BlockId>], mut b: BlockId) -> usize {
     let mut d = 0;
     while let Some(p) = idom[b as usize] {
@@ -40,7 +40,7 @@ fn 链深(idom: &[Option<BlockId>], mut b: BlockId) -> usize {
     d
 }
 
-//nt: 支配链求交
+
 fn 求交(idom: &[Option<BlockId>], mut a: BlockId, mut b: BlockId) -> BlockId {
     let mut 圈 = 0;
     while a != b {
@@ -65,7 +65,7 @@ fn 求交(idom: &[Option<BlockId>], mut a: BlockId, mut b: BlockId) -> BlockId {
     a
 }
 
-//nt: 立即支配者
+
 fn 支配树(f: &prion_ir::Function) -> Vec<Option<BlockId>> {
     let n = f.blocks.len();
     let mut idom: Vec<Option<BlockId>> = vec![None; n];
@@ -81,7 +81,7 @@ fn 支配树(f: &prion_ir::Function) -> Vec<Option<BlockId>> {
         for b in 1..n {
             let mut 新: Option<BlockId> = None;
             for &p in &ps[b] {
-                //nt: 入口视作已入场
+                
                 if idom[p as usize].is_none() && p != 0 {
                     continue;
                 }
@@ -99,7 +99,7 @@ fn 支配树(f: &prion_ir::Function) -> Vec<Option<BlockId>> {
     idom
 }
 
-//nt: 是否支配
+
 fn 支配(idom: &[Option<BlockId>], a: BlockId, b: BlockId) -> bool {
     if a == b {
         return true;
@@ -119,7 +119,7 @@ fn 支配(idom: &[Option<BlockId>], a: BlockId, b: BlockId) -> bool {
     false
 }
 
-//nt: 右值里的局部
+
 fn 操作数(r: &Rvalue, out: &mut Vec<LocalId>) {
     match r {
         Rvalue::Use(p) => out.push(p.base),
@@ -143,26 +143,26 @@ fn 操作数(r: &Rvalue, out: &mut Vec<LocalId>) {
     }
 }
 
-//nt: 无副作用判定
+
 fn 纯(r: &Rvalue) -> bool {
     match r {
         Rvalue::Const(_) => true,
         Rvalue::Use(p) => p.proj.is_empty(),
         Rvalue::BinOp { op, .. } => !matches!(op, BinOp::Div | BinOp::Mod),
-        //nt: 只认不改不抛的内置
+        
         Rvalue::Call { name, .. } => name == "len" || name == "len_utf8",
         _ => false,
     }
 }
 
-//nt: 单函数外提
+
 fn 外提(f: &mut prion_ir::Function) {
     if f.blocks.len() < 2 {
         return;
     }
     let idom = 支配树(f);
     let ps = 前驱表(f);
-    //nt: 自然循环
+    
     let mut 圈集: BTreeMap<BlockId, BTreeSet<BlockId>> = BTreeMap::new();
     for u in 0..f.blocks.len() {
         for v in 后继(f, u) {
@@ -185,7 +185,7 @@ fn 外提(f: &mut prion_ir::Function) {
         if 节点.len() < 2 {
             continue;
         }
-        //nt: 前置块要唯一
+        
         let mut 外: Vec<BlockId> = Vec::new();
         for &p in &ps[头 as usize] {
             if !节点.contains(&p) {
@@ -196,7 +196,7 @@ fn 外提(f: &mut prion_ir::Function) {
             continue;
         }
         let 前 = 外[0];
-        //nt: 有释放或重绑就不动
+        
         let mut 有生命周期 = false;
         for &b in &节点 {
             for s in &f.blocks[b as usize].stmts {
@@ -208,21 +208,21 @@ fn 外提(f: &mut prion_ir::Function) {
         if 有生命周期 {
             continue;
         }
-        //nt: 定义块表
+        
         let mut 定义: BTreeMap<LocalId, BlockId> = BTreeMap::new();
         for (bi, b) in f.blocks.iter().enumerate() {
-            //nt: 块参数算本块定义
+            
             for (pid, _) in &b.params {
                 定义.insert(*pid, bi as BlockId);
             }
             for s in &b.stmts {
                 if let Stmt::Assign { lhs, .. } = s {
-                    //nt: 投影写也算本块定义
+                    
                     定义.insert(lhs.base, bi as BlockId);
                 }
             }
         }
-        //nt: 改长度的调用禁外提
+        
         let mut 改长 = false;
         for &b in &节点 {
             for s in &f.blocks[b as usize].stmts {
@@ -283,7 +283,7 @@ fn 外提(f: &mut prion_ir::Function) {
     }
 }
 
-//nt: 全程序入口
+
 pub fn run(p: &mut Program) {
     for f in &mut p.functions {
         外提(f);

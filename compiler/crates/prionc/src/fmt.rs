@@ -1,15 +1,15 @@
-//nt: 装饰性缩进
-//nt: 块体一级
-//nt: 冒号加一级
-//nt: 分号减一级
-//nt: asm 原样
+
+
+
+
+
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
 pub const 步长: usize = 4;
 
-///nt: 块行解析
+
 fn 块行(t: &str) -> Option<(bool, bool)> {
     if !t.starts_with("#:") {
         return None;
@@ -34,7 +34,7 @@ fn 行首(级: usize, t: &str) -> String {
     s
 }
 
-///nt: 全文格式化
+
 pub fn format_source(src: &str) -> String {
     let mut 行: Vec<&str> = src.split('\n').collect();
     if 行.last() == Some(&"") {
@@ -120,7 +120,7 @@ fn 收文件(p: &Path, 出: &mut Vec<PathBuf>) {
     }
 }
 
-///nt: 格式化文件或目录
+
 pub fn 执行(p: &Path, 只查: bool) -> Result<(usize, Vec<PathBuf>), String> {
     let mut 文件 = Vec::new();
     收文件(p, &mut 文件);

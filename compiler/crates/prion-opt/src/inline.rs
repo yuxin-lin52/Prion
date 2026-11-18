@@ -1,17 +1,17 @@
-//! 表达式体函数内联
-//!
-//! 候选 = 单块且出口 Return(Some)、形参全标量、体只含 Assign/Call 的函数。
-//! 体只含 Assign/Call 的函数。调用点就地展开：全部局部重编新号，形参先以实参赋值，
-//! 出口值替换原调用结果。单遍不级联——克隆体内的新调用不再展开。
+
+
+
+
+
 
 use prion_ir::{Exit, Function, Local, Place, Program, Rvalue, Stmt, Value};
 
-//nt: 标量形参可内联
+
 fn 标量(t: &str) -> bool {
     matches!(t, "int" | "float" | "bool")
 }
 
-//nt: 内联候选
+
 fn 候选(f: &Function) -> bool {
     if f.blocks.len() != 1 || !matches!(f.blocks[0].exit, Exit::Return(Some(_))) {
         return false;
@@ -29,7 +29,7 @@ fn 候选(f: &Function) -> bool {
         .all(|st| matches!(st, Stmt::Assign { .. } | Stmt::Call { .. }))
 }
 
-//nt: 展开一个调用点
+
 fn 展开(
     callee: &Function,
     lhs: &Place,
@@ -62,7 +62,7 @@ fn 展开(
         Place { base: if p.base < n { remap[p.base] } else { p.base }, proj: p.proj.clone() }
     };
     let mut out: Vec<Stmt> = Vec::new();
-    //nt: 实参喂形参
+    
     let 形参: Vec<usize> = callee.locals.iter().enumerate().filter(|(_, l)| l.is_param).map(|(i, _)| i).collect();
     for (k, pid) in 形参.iter().enumerate() {
         let Some(a) = args.get(k) else { break };
@@ -72,7 +72,7 @@ fn 展开(
         };
         out.push(Stmt::Assign { lhs: Place::local(remap[*pid]), rhs: rv });
     }
-    //nt: 体克隆
+    
     for st in &callee.blocks[0].stmts {
         if let Stmt::Assign { lhs, rhs } = st {
             let rhs2 = match rhs {
@@ -91,7 +91,7 @@ fn 展开(
             out.push(Stmt::Assign { lhs: mp(lhs), rhs: rhs2 });
         }
     }
-    //nt: 出口值替换调用结果
+    
     if let Exit::Return(Some(v)) = &callee.blocks[0].exit {
         let rv = match mv(v) {
             Value::Local(id) => Rvalue::Use(Place::local(id)),
@@ -102,9 +102,9 @@ fn 展开(
     (out, 新locals)
 }
 
-//nt: 跑一遍
+
 pub fn run(prog: &mut Program) {
-    //nt: 快照候选
+    
     let cands: Vec<(String, Function)> = prog
         .functions
         .iter()
@@ -115,7 +115,7 @@ pub fn run(prog: &mut Program) {
         return;
     }
     for fi in 0..prog.functions.len() {
-        //nt: 本函数要展开的调用点
+        
         let mut 替换: Vec<(usize, usize, usize)> = Vec::new();
         for (bi, b) in prog.functions[fi].blocks.iter().enumerate() {
             for (si, st) in b.stmts.iter().enumerate() {

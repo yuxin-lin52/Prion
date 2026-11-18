@@ -1,60 +1,60 @@
-//! prion-codegen —— 后端之一：中间表示 → C 源码
-//!
-//! 另一条 lower 在 `prion-llvm`。
-//!
-//! 覆盖：算术、控制流、容器、字符串、结构体、链式执行、运行子程序。
-//! 编码约定：`print` 走 libc 的 `printf`；局部变量映射为 `v<序号>`。
+
+
+
+
+
+
 
 use prion_ir::{
     BinOp, Block, Exit, Function, Local, LocalId, Place, Proj, Program, Rvalue, Stmt, Ty, Value,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-// nt: 后端错误
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct CodegenError {
     pub message: String,
-// nt: 错误码 E4xx 段
+
     pub code: String,
-    // nt: 源行号
+    
     pub line: usize,
 }
 
-// nt: 积类型表
+
 type TypeMap = BTreeMap<String, (String, Vec<(String, Ty)>)>;
 
 thread_local! {
-    // nt: 调试模式插行号
+    
     static DEBUG_LINES: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-    // nt: 发布态抽护栏
+    
     static RELEASE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-    // nt: 源文件名
+    
     static SRC_FILE: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
-    // nt: 各文件源码行
+    
     static SRC_LINES: std::cell::RefCell<BTreeMap<String, Vec<String>>> =
         const { std::cell::RefCell::new(BTreeMap::new()) };
-    // nt: 拥有元素的容器对象
+    
     static OWNED: std::cell::RefCell<BTreeSet<u32>> =
         const { std::cell::RefCell::new(BTreeSet::new()) };
-    // nt: 值装箱容器对象
+    
     static 值入列: std::cell::RefCell<BTreeSet<u32>> =
         const { std::cell::RefCell::new(BTreeSet::new()) };
 }
 
-// nt: C 类型映射
+
 fn c_ty_in(t: &Ty, types: &TypeMap) -> String {
     let n = t.0.as_str();
     if let Some(base) = n.strip_suffix('*') {
         if let Some((c, _)) = types.get(base) {
-            return format!("{}*", c); // 把手
+            return format!("{}*", c); 
         }
     }
     if let Some((c, _)) = types.get(n) {
-        return c.clone(); // 积类型（值聚合）
+        return c.clone(); 
     }
     match n {
         "int" => "long long".to_string(),
-        // nt: 定长族 → C 原生
+        
         "int_8" => "signed char".to_string(),
         "uint_8" => "unsigned char".to_string(),
         "int_16" => "short".to_string(),
@@ -66,11 +66,11 @@ fn c_ty_in(t: &Ty, types: &TypeMap) -> String {
         "float" => "double".to_string(),
         "bool" => "long long".to_string(),
         "str" => "const char*".to_string(),
-        // nt: 指针
+        
         n if n.ends_with('*') => {
             format!("{}*", c_ty_in(&Ty(n[..n.len() - 1].to_string()), types))
         }
-        // nt: 容器
+        
         n if n.starts_with("list") || n.starts_with("que") || n.starts_with("stack") => {
             "PrionList*".to_string()
         }
@@ -79,7 +79,7 @@ fn c_ty_in(t: &Ty, types: &TypeMap) -> String {
     }
 }
 
-// nt: list 的最小 C
+
 const PRION_LIST_RT: &str = r#"const char* prion_str_copy(const char* s);
 \
 \
@@ -322,7 +322,7 @@ const PRION_LIST_RT: &str = r#"const char* prion_str_copy(const char* s);
 
 "#;
 
-// nt: 字符串的最小 C 运
+
 const PRION_STR_RT: &str = r#"long long prion_str_char_len(const char* s) {
   long long n = 0;
   const unsigned char* p = (const unsigned char*)(s ? s : "");
@@ -399,7 +399,7 @@ const PRION_STR_RT: &str = r#"long long prion_str_char_len(const char* s) {
   return "";
 }
 \
-     /* 串遍历游标：顺序取 O(1)/字符，由 IR 的 #str_iter_* 专用 */
+     
 static const char* prion_it_s = 0;
 static long long prion_it_i = 0;
 static long long prion_it_off = 0;
@@ -487,8 +487,8 @@ static const char* prion_str_iter_next(const char* s, long long n) {
 
 "#;
 
-// nt: map 最小 C 模
-// nt: 键槽longlong
+
+
 const PRION_MAP_RT: &str = r#"const char* prion_str_copy(const char* s);
 \
      typedef struct { long long len; long long cap; long long esz; long long sgn; long long kty; long long* k; char* v; } PrionMap;
@@ -621,12 +621,12 @@ const PRION_MAP_RT: &str = r#"const char* prion_str_copy(const char* s);
 
 "#;
 
-// nt: 文件 IO 最小模板
+
 const PRION_FILE_RT: &str = r#"#ifdef _WIN32
 __declspec(dllimport) int __stdcall MultiByteToWideChar(unsigned int, unsigned long, const char*, int, wchar_t*, int);
 __declspec(dllimport) int __stdcall WideCharToMultiByte(unsigned int, unsigned long, const wchar_t*, int, char*, int, const char*, int*);
 #endif
-/* 路径是 UTF-8 字节；Windows 的 fopen 按本地 ANSI 代码页解 ⇒ 先转 UTF-16 再转 CP_ACP（中文系统即 GBK） */
+
 static char* prion_path_local(const char* p) {
 #ifdef _WIN32
   if (!p || !*p) return (char*)"";
@@ -702,7 +702,7 @@ const char* prion_read_file(const char* path) {
 
 "#;
 
-// nt: 命令行参数的最小 C
+
 const PRION_ARGS_RT: &str = r#"static int g_argc = 0;
 \
      static char** g_argv = 0;
@@ -724,7 +724,7 @@ const PRION_ARGS_RT: &str = r#"static int g_argc = 0;
 
 "#;
 
-// nt: 程序里是否用到 ma
+
 fn uses_map(p: &Program) -> bool {
     p.functions.iter().any(|f| {
         f.locals.iter().any(|l| l.ty.0 == "map" || l.ty.0.starts_with("map("))
@@ -738,8 +738,8 @@ fn uses_map(p: &Program) -> bool {
     })
 }
 
-// nt: 程序里是否用到 li
-// nt: queue / st
+
+
 fn uses_list(p: &Program) -> bool {
     const LIST_RET_FNS: &[&str] = &["args", "keys", "vals", "slice"];
     p.functions.iter().any(|f| {
@@ -762,23 +762,23 @@ fn uses_list(p: &Program) -> bool {
     })
 }
 
-// nt: 程序里是否用到字符串
+
 fn uses_str(p: &Program) -> bool {
-    // nt: ⚠️ 这张表判的是「
-    // nt: 名字对应 codeg
-    // nt: nth_char /
-    // nt: slice 也在列
+    
+    
+    
+    
     const STR_FNS: &[&str] = &[
         "len", "len_utf8", "concat", "slice", "sub_str", "nth_char", "code", "char", "int", "str",
         "split", "join", "replace", "starts_with", "ends_with", "trim",
-        //nt: 串遍历游标
+        
         "#str_iter_start", "#str_iter_next",
     ];
     p.functions.iter().any(|f| {
         f.blocks.iter().any(|b| {
             b.stmts.iter().any(|s| match s {
                 Stmt::Assign { rhs: Rvalue::Call { name, .. }, .. } => STR_FNS.contains(&name.as_str()),
-                // nt: 字符串比较
+                
                 Stmt::Assign { rhs: Rvalue::BinOp { op: BinOp::Eq | BinOp::Ne, lhs, rhs }, .. } => {
                     is_str_val(f, lhs) && is_str_val(f, rhs)
                 }
@@ -791,19 +791,19 @@ fn uses_str(p: &Program) -> bool {
     })
 }
 
-// nt: 是否用到文件 IO
+
 fn uses_file(p: &Program) -> bool {
     called_builtins(p)
         .iter()
         .any(|n| matches!(*n, "read_file" | "save_file"))
 }
 
-// nt: 程序里是否用到命令行
+
 fn uses_args(p: &Program) -> bool {
     called_builtins(p).contains("args")
 }
 
-// nt: 收集程序里所有被调用
+
 fn called_builtins(p: &Program) -> std::collections::BTreeSet<&str> {
     let mut s = std::collections::BTreeSet::new();
     for f in &p.functions {
@@ -824,16 +824,16 @@ fn called_builtins(p: &Program) -> std::collections::BTreeSet<&str> {
     s
 }
 
-// nt: C 局部变量名
+
 fn vname(id: LocalId) -> String {
-    //nt: 槽局部指向全局
+    
     if let Some(g) = SLOT_MAP.with(|m| m.borrow().get(&id).cloned()) {
         return g;
     }
     format!("v{}", id)
 }
 
-// nt: 字段名的 C 形态
+
 fn field_c_name(types: &TypeMap, owner: Option<&str>, field: &str) -> String {
     if let Some((_, fields)) = owner.and_then(|o| types.get(o)) {
         if let Some(i) = fields.iter().position(|(n, _)| n == field) {
@@ -849,7 +849,7 @@ fn field_ty(types: &TypeMap, owner: Option<&str>, field: &str) -> Option<String>
         .and_then(|(_, fs)| fs.iter().find(|(n, _)| n == field).map(|(_, t)| t.0.clone()))
 }
 
-// nt: MMIO 族
+
 fn mmio_ty(name: &str) -> Option<&'static str> {
     match name {
         "read_8" | "write_8" => Some("char"),
@@ -860,7 +860,7 @@ fn mmio_ty(name: &str) -> Option<&'static str> {
     }
 }
 
-// nt: 位置 → C 左值
+
 fn place_c(f: &Function, types: &TypeMap, p: &Place) -> String {
     let mut s = vname(p.base);
     let mut cur: Option<String> = f.locals.get(p.base).map(|l| l.ty.0.clone());
@@ -876,7 +876,7 @@ fn place_c(f: &Function, types: &TypeMap, p: &Place) -> String {
             }
             Proj::Index(i) => s.push_str(&format!("[{}]", i)),
             Proj::Deref => {
-                // nt: 解引用
+                
                 s = format!("(*{})", s);
                 cur = cur.as_deref().and_then(|t| t.strip_suffix('*')).map(|t| t.to_string());
                 is_ptr = false;
@@ -886,8 +886,8 @@ fn place_c(f: &Function, types: &TypeMap, p: &Place) -> String {
     s
 }
 
-// nt: 边实参落到目标块参数
-// nt: 顺序=目标块参数
+
+
 fn 边实参代码(f: &Function, s: &prion_ir::Succ) -> String {
     if s.args.is_empty() {
         return String::new();
@@ -904,8 +904,8 @@ fn 边实参代码(f: &Function, s: &prion_ir::Succ) -> String {
     o
 }
 
-// nt: 位置的有效类型
-// nt: 与 place 共用
+
+
 fn place_ty_of(f: &Function, types: &TypeMap, p: &Place) -> String {
     let mut t = f.locals.get(p.base).map(|l| l.ty.0.clone()).unwrap_or_default();
     for pr in &p.proj {
@@ -945,7 +945,7 @@ fn c_escape(s: &str) -> String {
     o
 }
 
-// nt: 拆函数类型
+
 fn fn_sig_c(s: &str) -> (String, Vec<String>) {
     if let Some(rest) = s.strip_prefix("fn(") {
         let mut 深 = 1i32;
@@ -1005,7 +1005,7 @@ fn split_ty_list(s: &str) -> Vec<String> {
 fn value_c(v: &Value) -> String {
     match v {
         Value::Local(id) => vname(*id),
-        // nt: 整数一律 long
+        
         Value::Int(i) => format!("{}LL", i),
         Value::Float(x) => format!("{:?}", x),
         Value::Str(s) => format!("\"{}\"", c_escape(s)),
@@ -1014,9 +1014,9 @@ fn value_c(v: &Value) -> String {
     }
 }
 
-// nt: 算术是否走护栏函数
+
 fn guarded(op: BinOp) -> Option<&'static str> {
-    //nt: 发布态不走护栏函数
+    
     if RELEASE.with(|c| c.get()) {
         return None;
     }
@@ -1030,12 +1030,12 @@ fn guarded(op: BinOp) -> Option<&'static str> {
     }
 }
 
-// nt: 容器种类
+
 fn container_kind(ty: &str) -> &'static str {
     if ty.starts_with("que") { "que" } else if ty.starts_with("stack") { "stack" } else { "list" }
 }
 
-// nt: 值若是容器局部 ⇒
+
 fn container_val_kind(f: &Function, v: &Value) -> Option<&'static str> {
     let ty = match v {
         Value::Local(id) => f.locals.get(*id).map(|l| l.ty.0.as_str())?,
@@ -1078,7 +1078,7 @@ fn container_val_kind(f: &Function, v: &Value) -> Option<&'static str> {
     }
 }
 
-// nt: 单个标量实参的 pr
+
 fn print_one_c(f: &Function, a: &Value) -> (String, String) {
     let is_bool = match a {
         Value::Bool(_) => true,
@@ -1094,7 +1094,7 @@ fn print_one_c(f: &Function, a: &Value) -> (String, String) {
         Value::Local(id) => match f.locals.get(*id).map(|l| l.ty.0.as_str()) {
             Some("str") => ("%s".into(), value_c(a)),
             Some("float") => ("%g".into(), value_c(a)),
-            // nt: 定长族
+            
             Some(t)
                 if matches!(
                     t,
@@ -1110,21 +1110,21 @@ fn print_one_c(f: &Function, a: &Value) -> (String, String) {
     }
 }
 
-// nt: list
+
 fn elem_ty_of(ty: &str) -> Option<String> {
     ty.strip_prefix("list(")
         .and_then(|s| s.strip_suffix(')'))
         .map(|s| s.to_string())
 }
 
-// nt: 容器的元素类型
+
 fn container_elem_ty(ty: &str) -> Option<String> {
     let (head, inner) = ty.split_once('(')?;
     let tail = inner.strip_suffix(')')?;
     match head {
         "list" | "que" | "stack" => Some(tail.trim().to_string()),
         "map" => {
-            // nt: map
+            
             let mut depth = 0i32;
             for (i, c) in tail.char_indices() {
                 match c {
@@ -1140,9 +1140,9 @@ fn container_elem_ty(ty: &str) -> Option<String> {
     }
 }
 
-// nt: 元素槽的
+
 fn elem_esz_sgn(t: &str, types: &TypeMap) -> (String, i64) {
-    //nt: 聚合元素
+    
     if let Some((c, _)) = types.get(t) {
         return (format!("sizeof({})", c), 0);
     }
@@ -1160,12 +1160,12 @@ fn elem_esz_sgn(t: &str, types: &TypeMap) -> (String, i64) {
     (n.to_string(), s)
 }
 
-//nt: 是否聚合
+
 fn is_agg_ty(t: &str, types: &TypeMap) -> bool {
     types.contains_key(t)
 }
 
-//nt: 值是否聚合
+
 fn is_agg_val(f: &Function, types: &TypeMap, v: &Value) -> bool {
     match v {
         Value::Local(id) => f
@@ -1177,7 +1177,7 @@ fn is_agg_val(f: &Function, types: &TypeMap, v: &Value) -> bool {
     }
 }
 
-// nt: 把手型值
+
 fn is_ptr_val(f: &Function, v: &Value) -> bool {
     match v {
         Value::Local(id) => f.locals.get(*id).map(|l| l.ty.0.ends_with('*')).unwrap_or(false),
@@ -1185,8 +1185,8 @@ fn is_ptr_val(f: &Function, v: &Value) -> bool {
     }
 }
 
-// nt: 字符串比较
-// nt: 值是否是把手
+
+
 fn is_handle_val(f: &Function, v: &Value) -> bool {
     match v {
         Value::Local(id) => f
@@ -1206,7 +1206,7 @@ fn is_str_val(f: &Function, v: &Value) -> bool {
     }
 }
 
-// nt: 键型str或int
+
 fn map_kty(ty: &str) -> i64 {
     if let Some(rest) = ty.strip_prefix("map(") {
         let k = rest.split(',').next().unwrap_or("").trim();
@@ -1217,7 +1217,7 @@ fn map_kty(ty: &str) -> i64 {
     0
 }
 
-// nt: str键转指针整数
+
 fn key_c(f: &Function, v: &Value) -> String {
     if is_str_val(f, v) {
         format!("(long long)(size_t)({})", value_c(v))
@@ -1226,7 +1226,7 @@ fn key_c(f: &Function, v: &Value) -> String {
     }
 }
 
-/// nt: 元素是否 float
+
 fn container_elem_is_float(f: &Function, v: &Value) -> bool {
     match v {
         Value::Local(id) => f
@@ -1239,7 +1239,7 @@ fn container_elem_is_float(f: &Function, v: &Value) -> bool {
     }
 }
 
-//nt: 元素是否聚合
+
 fn container_elem_is_agg(f: &Function, v: &Value, types: &TypeMap) -> bool {
     match v {
         Value::Local(id) => f
@@ -1252,7 +1252,7 @@ fn container_elem_is_agg(f: &Function, v: &Value, types: &TypeMap) -> bool {
     }
 }
 
-//nt: 聚合取元素助手名
+
 fn 容器元素助手(f: &Function, v: &Value, types: &TypeMap) -> String {
     match v {
         Value::Local(id) => f
@@ -1265,7 +1265,7 @@ fn 容器元素助手(f: &Function, v: &Value, types: &TypeMap) -> String {
     }
 }
 
-// nt: 值是否是 float
+
 fn is_float_val(f: &Function, v: &Value) -> bool {
     match v {
         Value::Float(_) => true,
@@ -1274,7 +1274,7 @@ fn is_float_val(f: &Function, v: &Value) -> bool {
     }
 }
 
-// nt: 值是否是把手
+
 fn value_is_handle(f: &Function, v: &Value) -> bool {
     match v {
         Value::Local(id) => f
@@ -1293,19 +1293,19 @@ fn binop_c(
     rhs: &Value,
     used: &mut BTreeSet<&'static str>,
 ) -> String {
-    // nt: 字符串的 == /
+    
     if matches!(op, BinOp::Eq | BinOp::Ne) && is_str_val(f, lhs) && is_str_val(f, rhs) {
         used.insert("prion_str_eq");
         let c = format!("prion_str_eq({}, {})", value_c(lhs), value_c(rhs));
         return if matches!(op, BinOp::Ne) { format!("(!{})", c) } else { c };
     }
-// nt: 字符串拼接
+
     if matches!(op, BinOp::Add) && (is_str_val(f, lhs) || is_str_val(f, rhs)) {
         return format!("prion_concat({}, {})", value_c(lhs), value_c(rhs));
     }
     let a = value_c(lhs);
     let b = value_c(rhs);
-    // nt: float 参与算术
+    
     if is_float_val(f, lhs) || is_float_val(f, rhs) {
         if let Some(sym) = match op {
             BinOp::Add => Some("+"),
@@ -1324,7 +1324,7 @@ fn binop_c(
         }
         None => {
             let sym = match op {
-                //nt: 发布态直接算
+                
                 BinOp::Add => "+",
                 BinOp::Sub => "-",
                 BinOp::Mul => "*",
@@ -1348,7 +1348,7 @@ fn binop_c(
             format!("(({}) {} ({}))", a, sym, b)
         }
     };
-    // nt: 定长操作数 ⇒ 结果
+    
     if is_wrap_op(op) {
         if let Some(t) = fixed_cty(f, lhs).or_else(|| fixed_cty(f, rhs)) {
             return format!("(({})({}))", t, core);
@@ -1357,7 +1357,7 @@ fn binop_c(
     core
 }
 
-// nt: 需要按定长宽度截回结
+
 fn is_wrap_op(op: BinOp) -> bool {
     matches!(
         op,
@@ -1374,7 +1374,7 @@ fn is_wrap_op(op: BinOp) -> bool {
     )
 }
 
-// nt: 值若是定长族局部 ⇒
+
 fn fixed_cty(f: &Function, v: &Value) -> Option<&'static str> {
     let ty = match v {
         Value::Local(id) => f.locals.get(*id).map(|l| l.ty.0.as_str())?,
@@ -1402,7 +1402,7 @@ fn stmt_c(
     types: &TypeMap,
 ) -> Result<(), CodegenError> {
     match s {
-// nt: 裸地址写
+
         Stmt::Call { name, args }
             if mmio_ty(name).is_some() && name.starts_with("write_") => {
             match (mmio_ty(name), args.first(), args.get(1)) {
@@ -1419,11 +1419,11 @@ fn stmt_c(
                 _ => return Err(CodegenError { message: format!("「{}」要地址与值两个参数", name) , code: "E401".into() , line: 0 }),
             }
         }
-        // nt: 对象三件套本步空臂
+        
         Stmt::Alloc { .. } | Stmt::Bind { .. } => {}
-        // nt: kill 挂名已展开
+        
         Stmt::Kill { .. } => {}
-        // nt: 就地 Drop 放容器
+        
         Stmt::Drop { obj } => {
             let lids: Vec<usize> = f
                 .locals
@@ -1433,29 +1433,29 @@ fn stmt_c(
                 .map(|(i, _)| i)
                 .collect();
             let owned = OWNED.with(|s| s.borrow().contains(obj));
-            //nt: 值装箱容器标记
+            
             let 值入 = 值入列.with(|s| s.borrow().contains(obj));
             for lid in lids {
                 let Some(l) = f.locals.get(lid) else { continue };
                 let ct = c_ty_in(&l.ty, types);
                 if ct.starts_with("PrionMap") || ct.starts_with("PrionList") {
-                    //nt: 聚合元素槽存指针
+                    
                     let 聚合元 = container_elem_ty(&l.ty.0)
                         .map(|e| types.contains_key(e.trim_end_matches('*')))
                         .unwrap_or(false);
                     out.push_str(&drop_container_code(&vname(lid), &l.ty.0, owned || 值入, 聚合元));
                 } else if l.ty.0.strip_suffix('*').map(|b| types.contains_key(b)).unwrap_or(false) {
-                    // nt: 把手聚合放块
+                    
                     let vn = vname(lid);
                     out.push_str(&format!("  if ({vn}) {{ free({vn}); {vn} = 0; }}\n"));
                 } else if l.ty.0 == "str" {
-                    // nt: 串放自身缓冲
+                    
                     let vn = vname(lid);
                     out.push_str(&format!("  if ({vn}) {{ free((void*){vn}); {vn} = 0; }}\n"));
                 }
             }
         }
-        // nt: 释放局部当前值
+        
         Stmt::DropVar { lid } => {
             let Some(l) = f.locals.get(*lid) else { return Ok(()) };
             let ct = c_ty_in(&l.ty, types);
@@ -1464,7 +1464,7 @@ fn stmt_c(
                 let o = l.obj.unwrap_or(u32::MAX);
                 let owned = OWNED.with(|s| s.borrow().contains(&o));
                 let 值入 = 值入列.with(|s| s.borrow().contains(&o));
-                //nt: 聚合元素槽存指针
+                
                 let 聚合元 = container_elem_ty(&l.ty.0)
                     .map(|e| types.contains_key(e.trim_end_matches('*')))
                     .unwrap_or(false);
@@ -1477,7 +1477,7 @@ fn stmt_c(
 "));
             }
         }
-        // nt: 内联汇编
+        
         Stmt::Asm(form) => {
             let outs: Vec<String> = form
                 .outs
@@ -1513,9 +1513,9 @@ fn stmt_c(
             ));
             return Ok(());
         }
-        // nt: 无返回值的调用语句
+        
         Stmt::Call { name, args } => {
-            //nt: 串遍历游标置起点
+            
             if name == "#str_iter_start" {
                 if let Some(a) = args.first() {
                     out.push_str(&format!("  prion_str_iter_start({});\n", value_c(a)));
@@ -1523,14 +1523,14 @@ fn stmt_c(
                 return Ok(());
             }
             if name == "print" {
-                // nt: print 整个 l
+                
                 if let (Some(Value::Local(id)), None) = (args.first(), args.get(1)) {
                     let ty = f.locals.get(*id).map(|l| l.ty.0.clone()).unwrap_or_default();
                     if ty.starts_with("list(str") {
                         out.push_str(&format!("  prion_list_print_s({});\n  printf(\"\\n\");\n", value_c(&args[0])));
                         return Ok(());
                     }
-                    // nt: 定长族
+                    
                     if matches!(ty.as_str(), "int_8" | "uint_8" | "int_16" | "uint_16"
                         | "int_32" | "uint_32" | "int_64" | "uint_64")
                     {
@@ -1546,7 +1546,7 @@ fn stmt_c(
                         out.push_str(&format!("  prion_list_print({});\n  printf(\"\\n\");\n", value_c(&args[0])));
                         return Ok(());
                     }
-                    // nt: 队列/栈 print
+                    
                     if ty.starts_with("que") {
                         let fname = match container_elem_ty(&ty).as_deref() {
                             Some("str") => "prion_list_print_tag_s",
@@ -1583,8 +1583,8 @@ fn stmt_c(
                         return Ok(());
                     }
                 }
-                // nt: 多参里含容器
-                // nt: 故仅当它排在末位
+                
+                
                 if args.iter().any(|a| container_val_kind(f, a).is_some()) {
                     for (i, a) in args.iter().enumerate() {
                         if i > 0 {
@@ -1639,11 +1639,11 @@ fn stmt_c(
                             }
                         }
                     }
-// nt: 容器 helper
+
                     out.push_str("  printf(\"\\n\");\n");
                     return Ok(());
                 }
-// nt: print 不收积类
+
                 for a in args {
                     if let Value::Local(id) = a {
                         if let Some(l) = f.locals.get(*id) {
@@ -1657,7 +1657,7 @@ fn stmt_c(
                         }
                     }
                 }
-                // nt: 逐参定格式
+                
                 let mut fmts: Vec<String> = Vec::new();
                 let mut as_: Vec<String> = Vec::new();
                 for a in args {
@@ -1691,7 +1691,7 @@ fn stmt_c(
                                 fmts.push("%g".into());
                                 as_.push(value_c(a));
                             }
-                            // nt: 定长族
+                            
                             Some(t)
                                 if matches!(
                                     t,
@@ -1719,7 +1719,7 @@ fn stmt_c(
                     as_.join(", ")
                 ));
             } else if name == "push" {
-                // nt: push
+                
                 if args.len() != 2 {
                     return Err(CodegenError { message: "push 要 2 个参数（列表, 值）".into() , code: "E401".into() , line: 0 });
                 }
@@ -1736,8 +1736,8 @@ fn stmt_c(
                         value_c(&args[1])
                     ));
                 } else if is_handle_val(f, &args[1]) {
-                    // nt: 把手
-                    //nt: fn自有对象复印重绑
+                    
+                    
                     let esc = match &args[1] {
                         Value::Local(id) => f.locals.get(*id).filter(|l| l.fn_owned).and_then(|l| {
                             let b = l.ty.0.trim_end_matches('*').to_string();
@@ -1762,7 +1762,7 @@ fn stmt_c(
                         value_c(&args[1])
                     ));
                 } else if is_agg_val(f, types, &args[1]) {
-                    //nt: 聚合按地址
+                    
                     out.push_str(&format!(
                         "  prion_list_push_from({}, (const char*)&{});\n",
                         value_c(&args[0]),
@@ -1776,31 +1776,31 @@ fn stmt_c(
                     ));
                 }
             } else if name == "exit" {
-                // nt: exit
+                
                 if args.len() != 1 {
                     return Err(CodegenError { message: "exit 要 1 个参数（码）".into() , code: "E401".into() , line: 0 });
                 }
                 out.push_str(&format!("  exit((int)({}));\n", value_c(&args[0])));
             } else if name == "save_file" {
-                // nt: save_file
+                
                 if args.len() != 2 {
                     return Err(CodegenError { message: "save_file 要 2 个参数（路径, 内容）".into() , code: "E401".into() , line: 0 });
                 }
                 let as_: Vec<String> = args.iter().map(value_c).collect();
                 out.push_str(&format!("  prion_save_file({}, {});\n", as_[0], as_[1]));
             } else if name == "put" {
-                // nt: put
+                
                 if args.len() != 3 {
                     return Err(CodegenError { message: "put 要 3 个参数（map, 键, 值）".into() , code: "E401".into() , line: 0 });
                 }
                 let mut as_: Vec<String> = args.iter().map(value_c).collect();
-                // nt: str键转指针整数
+                
                 if args.len() > 1 {
                     as_[1] = key_c(f, &args[1]);
                 }
-                // nt: map 的值槽是 8
+                
                 if let Some(v) = args.get(2) {
-                    // nt: 值槽是 8 字节整数
+                    
                     let need_box = match v {
                         Value::Str(_) => true,
                         Value::Local(id) => f
@@ -1819,7 +1819,7 @@ fn stmt_c(
                         _ => false,
                     };
                     if is_str_val(f, v) {
-                        // nt: 复印 str
+                        
                         as_[2] = format!("(long long)(size_t)prion_str_copy({})", value_c(v));
                     } else if is_float_val(f, v) {
                         as_[2] = format!("prion_f2s({})", value_c(v));
@@ -1829,7 +1829,7 @@ fn stmt_c(
                 }
                 out.push_str(&format!("  prion_map_put({}, {}, {});\n", as_[0], as_[1], as_[2]));
             } else if name == "remove" && matches!(args.first(), Some(Value::Local(id)) if f.locals.get(*id).map(|l| l.ty.0 == "map" || l.ty.0.starts_with("map(")).unwrap_or(false)) {
-                // nt: remove
+                
                 if args.len() != 2 {
                     return Err(CodegenError { message: "remove 要 2 个参数（map, 键）".into() , code: "E401".into() , line: 0 });
                 }
@@ -1844,7 +1844,7 @@ fn stmt_c(
             {
                 out.push_str(&format!("  prion_map_clear({});\n", value_c(&args[0])));
             } else if name == "pop" {
-                // nt: pop 共用
+                
                 let first_ty = match args.first() {
                     Some(Value::Local(id)) => {
                         f.locals.get(*id).map(|l| l.ty.0.clone()).unwrap_or_default()
@@ -1860,7 +1860,7 @@ fn stmt_c(
                     out.push_str(&format!("  prion_list_pop({});\n", value_c(&args[0])));
                 }
             } else if name == "insert" || name == "remove" || name == "clear" || name == "sort" {
-                // nt: 列表增删改排
+                
                 let first_ty = match args.first() {
                     Some(Value::Local(id)) => {
                         f.locals.get(*id).map(|l| l.ty.0.clone()).unwrap_or_default()
@@ -1884,7 +1884,7 @@ fn stmt_c(
                     "remove" => "prion_list_remove",
                     "clear" => "prion_list_clear",
                     _ => {
-                        // nt: sort
+                        
                         let is_str_elem = matches!(args.first(), Some(Value::Local(id))
                             if f.locals.get(*id).map(|l| l.ty.0.starts_with("list(str")).unwrap_or(false));
                         if is_str_elem {
@@ -1900,21 +1900,21 @@ fn stmt_c(
                     as_[2] = format!("prion_f2s({})", as_[2]);
                 }
                 if name == "insert" && args.len() == 3 && is_agg_val(f, types, &args[2]) {
-                    //nt: 聚合按地址
+                    
                     as_[2] = format!("(const char*)&{}", as_[2]);
                     out.push_str(&format!("  prion_list_insert_from({});\n", as_.join(", ")));
                     return Ok(());
                 }
                 out.push_str(&format!("  {}({});\n", c, as_.join(", ")));
             } else if name == "sle_ms" {
-                // nt: sleep
+                
                 if args.len() != 1 {
                     return Err(CodegenError { message: "sleep 要 1 个参数（毫秒）".into() , code: "E401".into() , line: 0 });
                 }
                 used.insert("prion_sleep");
                 out.push_str(&format!("  prion_sleep({});\n", value_c(&args[0])));
             } else if let Some(callee) = names.get(name) {
-                // nt: 调用方 fn 的调用
+                
                 let as_: Vec<String> = args.iter().map(value_c).collect();
                 out.push_str(&format!("  {}({});\n", callee, as_.join(", ")));
             } else {
@@ -1922,7 +1922,7 @@ fn stmt_c(
             }
         }
         Stmt::Assign { lhs, rhs } => {
-            // nt: 容器元素槽尺寸按
+            
             let dest_ty = place_ty_of(f, types, lhs);
             let (elem_esz, elem_sgn) = container_elem_ty(&dest_ty)
                 .map(|e| elem_esz_sgn(&e, types))
@@ -1930,17 +1930,17 @@ fn stmt_c(
             let r = match rhs {
                 Rvalue::Use(p) => place_c(f, types, p),
                 Rvalue::Ref(p) => format!("(&{})", place_c(f, types, p)),
-                // nt: 和类型构造 ⇒ 复合
+                
                 Rvalue::VariantLit { ty, tag, args, tys } => {
                     let c = types.get(ty).map(|(c, _)| c.clone()).unwrap_or_else(|| ty.clone());
                     let mut parts = vec![format!(".tag = {}LL", tag)];
                     for (i, a) in args.iter().enumerate() {
-                        // nt: payload 槽统
+                        
                         let v = value_c(a);
                         let v = match tys.get(i).map(|t| t.0.as_str()) {
                             Some("str") => format!("(long long)(size_t)({})", v),
-                            // nt: 指针字段
-                            // nt: 实参已是把手
+                            
+                            
                             Some(t) if t.ends_with('*') => match a {
                                 Value::Local(id)
                                     if !f.locals.get(*id).map(|l| l.ty.0.ends_with('*')).unwrap_or(false) =>
@@ -1956,7 +1956,7 @@ fn stmt_c(
                     format!("(({}){{ {} }})", c, parts.join(", "))
                 }
                 Rvalue::VariantTag(v) => {
-                    // nt: 对象是把手
+                    
                     let base = if value_is_handle(f, v) {
                         format!("(*{})", value_c(v))
                     } else {
@@ -1971,7 +1971,7 @@ fn stmt_c(
                         value_c(value)
                     };
                     let raw = format!("(({}).p{})", base, idx);
-                    // nt: 拆箱
+                    
                     if ty.0 == "str" {
                         format!("((const char*)(size_t)({}))", raw)
                     } else if ty.0.ends_with('*') {
@@ -2007,7 +2007,7 @@ fn stmt_c(
                     )
                 }
                 Rvalue::BinOp { op, lhs, rhs } => binop_c(f, *op, lhs, rhs, used),
-// nt: 裸地址读
+
                 Rvalue::Call { name, args }
                     if mmio_ty(name).is_some() && name.starts_with("read_") => {
                     match (mmio_ty(name), args.first()) {
@@ -2021,9 +2021,9 @@ fn stmt_c(
                     let as_: Vec<String> = args.iter().map(value_c).collect();
                     let arg = |i: usize| as_.get(i).cloned().unwrap_or_else(|| "0".to_string());
                     match name.as_str() {
-                        // nt: len
+                        
                         "len" => {
-                            // nt: 列表/队列/栈共用同
+                            
                             let is_list = matches!(args.first(), Some(Value::Local(id))
                                 if f.locals.get(*id).map(|l| {
                                     let t = l.ty.0.as_str();
@@ -2051,7 +2051,7 @@ fn stmt_c(
                         }
                         "len_utf8" => format!("prion_str_byte_len({})", arg(0)),
                         "str_index" => {
-                            //nt: 串内找子串
+                            
                             format!(
                                 "(strstr({}, {}) ? (long long)(strstr({}, {}) - {}) + 1 : 0)",
                                 arg(0), arg(1), arg(0), arg(1), arg(0)
@@ -2072,7 +2072,7 @@ fn stmt_c(
                                         key_c(f, &args[1])
                                     )
                                 } else {
-                                    // nt: map 的 inde
+                                    
                                     format!(
                                         "prion_map_at({}, {})",
                                         arg(0),
@@ -2101,9 +2101,9 @@ fn stmt_c(
                                 format!("prion_list_index({}, {})", arg(0), b)
                             }
                         }
-                        // nt: 切片
-                        // nt: 列表/队列/栈基按元
-                        // nt: 读长度 ⇒ 申请巨大
+                        
+                        
+                        
                         "slice" => {
                             let is_str = matches!(args.first(), Some(Value::Local(id))
                                 if f.locals.get(*id).map(|l| l.ty.0 == "str").unwrap_or(false));
@@ -2113,11 +2113,11 @@ fn stmt_c(
                                 format!("prion_list_slice({}, {}, {})", arg(0), arg(1), arg(2))
                             }
                         }
-                        // nt: take 的复印
+                        
                         "#str_copy" => format!("prion_str_copy({})", arg(0)),
                         "#dc_list" => format!("prion_dc_list({}, {})", arg(0), arg(1)),
                         "#dc_map" => format!("prion_dc_map({}, {})", arg(0), arg(1)),
-                        //nt: 结构体深拷
+                        
                         n if n.starts_with("#dcdeep_") => {
                             let 型 = n.trim_start_matches("#dcdeep_");
                             let c = types.get(型).map(|t| t.0.clone()).unwrap_or_default();
@@ -2127,12 +2127,12 @@ fn stmt_c(
                         "concat" => format!("prion_concat({}, {})", arg(0), arg(1)),
                         "sub_str" => format!("prion_sub_str({}, {}, {})", arg(0), arg(1), arg(2)),
                         "nth_char" => format!("prion_nth_char({}, {})", arg(0), arg(1)),
-                        //nt: 串顺序取字符
+                        
                         "#str_iter_next" => format!("prion_str_iter_next({}, {})", arg(0), arg(1)),
                         "code" => format!("prion_char_code({})", arg(0)),
                         "char" => format!("prion_code_char({})", arg(0)),
-// nt: 类型名当函数
-                        // nt: queue/stac
+
+                        
                         "que" | "stack" => {
                             if args.is_empty() {
                                 format!("prion_list_new({}, {})", elem_esz, elem_sgn)
@@ -2142,7 +2142,7 @@ fn stmt_c(
                         }
                         "args" => "prion_args()".to_string(),
                         "read_file" => format!("prion_read_file({})", arg(0)),
-                        // nt: pop
+                        
                         "pop" => {
                             let first_ty = match args.first() {
                                 Some(Value::Local(id)) => {
@@ -2155,8 +2155,8 @@ fn stmt_c(
                             } else {
                                 format!("prion_list_pop({})", arg(0))
                             };
-                            // nt: str 元素 ⇒ 把
-                            // nt: 注意用 contai
+                            
+                            
                             if matches!(container_elem_ty(&first_ty).unwrap_or_default().as_str(), "str") {
                                 format!("((const char*)(size_t){})", raw)
                             } else if matches!(container_elem_ty(&first_ty).unwrap_or_default().as_str(), "float") {
@@ -2168,7 +2168,7 @@ fn stmt_c(
                         "keys" => format!("prion_map_keys({})", arg(0)),
                         "vals" => format!("prion_map_values({})", arg(0)),
                         "int" => {
-                            //nt: float截断
+                            
                             let is_f = matches!(args.first(), Some(Value::Float(_)))
                                 || matches!(args.first(), Some(Value::Local(id))
                                     if f.locals.get(*id).map(|l| l.ty.0 == "float").unwrap_or(false))
@@ -2180,7 +2180,7 @@ fn stmt_c(
                             }
                         }
                         "str" => {
-                            // nt: str
+                            
                             let is_float = matches!(args.first(), Some(Value::Float(_)))
                                 || matches!(args.first(), Some(Value::Local(id))
                                     if f.locals.get(*id).map(|l| l.ty.0 == "float").unwrap_or(false));
@@ -2191,7 +2191,7 @@ fn stmt_c(
                             }
                         }
                         "float" => {
-                            //nt: str解析int提升
+                            
                             let is_s = matches!(args.first(), Some(Value::Str(_)))
                                 || matches!(args.first(), Some(Value::Local(id))
                                     if f.locals.get(*id).map(|l| l.ty.0 == "str").unwrap_or(false));
@@ -2202,23 +2202,23 @@ fn stmt_c(
                             }
                         }
                         "bool" => format!("(({}) != 0)", arg(0)),
-                        // nt: 定长族转换 `int
+                        
                         "int_8" | "uint_8" | "int_16" | "uint_16" | "int_32" | "uint_32"
                         | "int_64" | "uint_64" => {
                             format!("(({})({}))", c_ty_in(&Ty(name.clone()), types), arg(0))
                         }
-                        // nt: 时间与随机 / FF
+                        
                         "rnd" => {
                             used.insert("prion_random");
                             format!("prion_random({})", arg(0))
                         }
-                        // nt: remove
+                        
                         "remove" => {
                             let first_ty = match args.first() {
                                 Some(Value::Local(id)) => f.locals.get(*id).map(|l| l.ty.0.clone()).unwrap_or_default(),
                                 _ => String::new(),
                             };
-                            //nt: map按键删除
+                            
                             if first_ty == "map" || first_ty.starts_with("map(") {
                                 used.insert("prion_map_remove");
                                 format!("prion_map_remove({}, {})", arg(0), key_c(f, &args.get(1).unwrap_or(&Value::Int(0))))
@@ -2235,7 +2235,7 @@ fn stmt_c(
                             }
                             }
                         }
-// nt: 运行子程序
+
                         "run" => {
                             used.insert("prion_run");
                             let a1 = args.get(1).map(value_c).unwrap_or_else(|| "0".into());
@@ -2251,7 +2251,7 @@ fn stmt_c(
                             used.insert("prion_from_c_str");
                             format!("prion_from_c_str({})", arg(0))
                         }
-                        // nt: 文件写
+                        
                         "save_file" => {
                             used.insert("prion_save_file");
                             format!("prion_save_file({}, {})", arg(0), arg(1))
@@ -2267,14 +2267,14 @@ fn stmt_c(
                     if es.is_empty() {
                         format!("prion_list_new({}, {})", elem_esz, elem_sgn)
                     } else if elems.iter().any(|e| is_str_val(f, e)) {
-                        // nt: str 元素 ⇒ 逐
+                        
                         format!(
                             "prion_list_lit_s({}, (const char* const[]){{{}}})",
                             es.len(),
                             es.join(", ")
                         )
                     } else if elems.iter().any(|e| is_float_val(f, e)) {
-                        // nt: 按元素判 float
+                        
                         let es2: Vec<String> = elems
                             .iter()
                             .map(|e| {
@@ -2293,7 +2293,7 @@ fn stmt_c(
                             elem_sgn
                         )
                     } else if elems.iter().any(|e| is_ptr_val(f, e)) {
-                        // nt: 把手元素 ⇒ 指针按
+                        
                         let es2: Vec<String> = elems
                             .iter()
                             .map(|e| format!("(long long)(size_t){}", value_c(e)))
@@ -2306,7 +2306,7 @@ fn stmt_c(
                             elem_sgn
                         )
                     } else if elems.iter().any(|e| is_agg_val(f, types, e)) {
-                        //nt: 聚合字面量
+                        
                         let (c, _) = container_elem_ty(&dest_ty)
                             .and_then(|e| types.get(&e).map(|t| (t.0.clone(), ())))
                             .unwrap_or((String::new(), ()));
@@ -2328,7 +2328,7 @@ fn stmt_c(
                     }
                 }
                 Rvalue::MapLit { pairs } => {
-                     // nt: 键槽随键型
+                     
                     let kty = map_kty(&dest_ty);
                     let ks: Vec<String> = pairs
                         .iter()
@@ -2360,8 +2360,8 @@ fn stmt_c(
                     )
                 }
                 Rvalue::MapGet { map, key } => {
-                    // nt: map 的值槽是 8
-                    // nt: 值类型 = `map
+                    
+                    
                     let vt = match map {
                         Value::Local(id) => f
                             .locals
@@ -2386,7 +2386,7 @@ fn stmt_c(
                         _ => String::new(),
                     };
                     let raw = format!("prion_map_at({}, {})", value_c(map), key_c(f, key));
-                    // nt: IR 侧已把结果类型
+                    
                     if vt == "str" {
                         format!("((const char*)(size_t){})", raw)
                     } else if vt.ends_with('*') {
@@ -2400,7 +2400,7 @@ fn stmt_c(
                     }
                 }
                 Rvalue::ListGet { list, index } => {
-                    // nt: str 元素 ⇒ 把
+                    
                     let elem_str = matches!(list, Value::Local(id)
                         if f.locals.get(*id).map(|l| l.ty.0.starts_with("list(str")).unwrap_or(false));
                     let elem_handle = matches!(list, Value::Local(id)
@@ -2408,7 +2408,7 @@ fn stmt_c(
                             let e = elem_ty_of(&l.ty.0).unwrap_or_default();
                             e.ends_with('*')
                         }).unwrap_or(false));
-                    //nt: 八字节元素直读
+                    
                     let 直读 = format!(
                         "((long long*)({})->d)[({}) - 1]",
                         value_c(list),
@@ -2421,23 +2421,23 @@ fn stmt_c(
                     } else if container_elem_is_float(f, list) {
                         format!("prion_s2f({})", 直读)
                     } else if container_elem_is_agg(f, list, types) {
-                        //nt: 聚合走助手
+                        
                         let 助手 = 容器元素助手(f, list, types);
                         format!("{}({}, {})", 助手, value_c(list), value_c(index))
                     } else if !RELEASE.with(|c| c.get()) {
-                        //nt: 调试态走检查函数
+                        
                         used.insert("prion_list_at");
                         format!("prion_list_at({}, {})", value_c(list), value_c(index))
                     } else {
                         直读
                     }
                 }            };
-            // nt: 积类型
-            // nt: 目标类型按**投影链
+            
+            
             let base_ty = dest_ty.trim_end_matches('*').to_string();
             let is_handle = dest_ty.ends_with('*');
             let is_struct_val = matches!(rhs, Rvalue::Use(_) | Rvalue::Const(Value::Local(_)));
-// nt: 把手 ⇒ 把手
+
             if is_handle && is_struct_val {
                 let src_is_handle = match rhs {
                     Rvalue::Use(p) => f.locals.get(p.base).map(|l| l.ty.0.ends_with('*')).unwrap_or(false),
@@ -2456,7 +2456,7 @@ fn stmt_c(
                 let dc = ct.replace("prion_st_", "prion_dc_");
                 let lhs_c = place_c(f, types, lhs);
                 if is_handle {
-                    let ptr_ct = c_ty_in(&Ty(dest_ty.clone()), types); // prion_st_0*
+                    let ptr_ct = c_ty_in(&Ty(dest_ty.clone()), types); 
                     out.push_str(&format!(
                         "  {lhs} = ({ptr})malloc((size_t)(sizeof({ct})));\n  *{lhs} = {dc}(&{r});\n",
                         lhs = lhs_c,
@@ -2470,8 +2470,8 @@ fn stmt_c(
                 }
                 return Ok(());
             }
-            //nt: 槽赋容器复印
-            //nt: fn内容器活得过fn
+            
+            
             let 槽赋容器 = matches!(rhs, Rvalue::ListLit { .. })
                 && matches!(lhs, Place { base, proj } if proj.is_empty()
                     && f.locals.get(*base).map(|l| l.is_param && l.ty.0.ends_with('*')).unwrap_or(false));
@@ -2480,8 +2480,8 @@ fn stmt_c(
             } else {
                 r
             };
-            //nt: str 赋值即堆副本
-            //nt: 调用来源也拷
+            
+            
             let r = if dest_ty == "str"
                 && !matches!(rhs, Rvalue::BinOp { .. })
             {
@@ -2490,11 +2490,11 @@ fn stmt_c(
                 r
             };
             out.push_str(&format!("  {} = {};\n", place_c(f, types, lhs), r));
-            //nt: 容器赋值移交
+            
             if dest_ty.starts_with("list") || dest_ty.starts_with("map")
                 || dest_ty.starts_with("que") || dest_ty.starts_with("stack")
             {
-                //nt: que 构造转手
+                
                 let 源 = match rhs {
                     Rvalue::Const(Value::Local(u)) | Rvalue::Use(Place { base: u, proj: _ }) => Some(*u),
                     Rvalue::Call { name, args } if (name == "que" || name == "stack") && args.len() == 1 => {
@@ -2513,9 +2513,9 @@ fn stmt_c(
                 }
             }
         }
-        // nt: 访问期
+        
         Stmt::AccessBegin(_) | Stmt::AccessEnd(_) => {}
-        // nt: map 键写
+        
         Stmt::MapSet { map, key, value } => {
             let slot = if is_str_val(f, value) {
                 format!("(long long)(size_t)prion_str_copy({})", value_c(value))
@@ -2531,7 +2531,7 @@ fn stmt_c(
                 slot
             ))
         }
-        // nt: 下标写
+        
         Stmt::ListSet { list, index, value } => {
             if is_str_val(f, value) {
                 out.push_str(&format!(
@@ -2548,7 +2548,7 @@ fn stmt_c(
                     value_c(value)
                 ));
             } else if is_agg_val(f, types, value) {
-                //nt: 聚合按地址
+                
                 out.push_str(&format!(
                     "  prion_list_setat_from({}, {}, (const char*)&{});\n",
                     value_c(list),
@@ -2564,7 +2564,7 @@ fn stmt_c(
                 ));
             }
         }
-        //nt: 发布态不发断言
+        
         Stmt::Assert { .. } if RELEASE.with(|c| c.get()) => {}
         Stmt::Assert { cond, msg, fix } => out.push_str(&format!(
             "  if (!({})) {{ prion_die({}, prion_line, \"{}\", \"{}\"); }}\n",
@@ -2577,32 +2577,32 @@ fn stmt_c(
     Ok(())
 }
 
-// nt: 跨块槽全局化
+
 thread_local! {
-    //nt: 槽局部到全局名
+    
     static SLOT_MAP: std::cell::RefCell<std::collections::BTreeMap<usize, String>> =
         std::cell::RefCell::new(std::collections::BTreeMap::new());
-    //nt: 已复印逃逸的局部
+    
     static ESCAPED: std::cell::RefCell<std::collections::BTreeSet<usize>> =
         std::cell::RefCell::new(std::collections::BTreeSet::new());
 }
 
-//nt: 槽名修饰
+
 fn slot_global_name(key: &str, idx: usize) -> String {
     let _ = key;
     format!("prion_slot_{}", idx)
 }
 
-//nt: 槽局部判定
+
 fn is_slot_local(l: &Local) -> bool {
     l.name.as_deref().map(|n| n.contains('#')).unwrap_or(false)
 }
 
-// nt: 容器释放代码
-// nt: 元素按类型逐个放
+
+
 fn drop_container_code(vn: &str, ty: &str, owned: bool, 聚合元: bool) -> String {
     if ty.starts_with("map(") {
-        // nt: 值为串才逐个放
+        
         let vstr = if container_elem_ty(ty).as_deref() == Some("str") { 1 } else { 0 };
         return format!("  if ({vn}) {{ prion_map_free({vn}, {vstr}); {vn} = 0; }}\n");
     }
@@ -2614,8 +2614,8 @@ fn drop_container_code(vn: &str, ty: &str, owned: bool, 聚合元: bool) -> Stri
     }
 }
 
-// nt: 块函数出口代码
-// nt: 必须在**每个 re
+
+
 fn block_c(
     f: &Function,
     b: &Block,
@@ -2627,13 +2627,13 @@ fn block_c(
 ) -> Result<(), CodegenError> {
     out.push_str(&format!("bb{}:\n", b.id));
     for (i, s) in b.stmts.iter().enumerate() {
-        // nt: 语句级位置
+        
         if let Some(sp) = b.spans.get(i) {
             if sp.line > 0 {
                 if DEBUG_LINES.with(|c| c.get()) {
                     let 文件名 = SRC_FILE.with(|c| c.borrow().clone());
                     out.push_str(&format!("#line {} \"{}\"\n", sp.line, c_escape(&文件名)));
-                    //nt: 溯源信息随调试开关
+                    
                     let key = if f.file.is_empty() {
                         SRC_FILE.with(|c| c.borrow().clone())
                     } else {
@@ -2658,8 +2658,8 @@ fn block_c(
     }
     match &b.exit {
         Exit::Return(Some(v)) => {
-            //nt: fn自有对象复印重绑
-            //nt: 复印目标 = 调用方地皮
+            
+            
             let esc = match v {
                 Value::Local(id) => f.locals.get(*id).filter(|l| l.fn_owned).and_then(|l| {
                     let b = l.ty.0.trim_end_matches('*').to_string();
@@ -2680,7 +2680,7 @@ fn block_c(
             }
             out.push_str(&format!("  return {};\n", value_c(v)))
         }
-        // nt: 无返回值的块/函数
+        
         Exit::Return(None) => {
             out.push_str(if is_void { "  return;\n" } else { "  return 0;\n" })
         }
@@ -2746,20 +2746,20 @@ fn support_section(used: &BTreeSet<&'static str>) -> String {
             "long long prion_mod(long long a, long long b) {\n  PRION_GUARD(if (b == 0) { prion_die_nc(2, \"除以零——除数不能是 0\", \"先用 if 判一下（if 除数 != 0:）再除\"); })\n  return a % b;\n}\n\n",
         );
     }
-    // nt: 时间与随机
+    
     if used.contains("prion_sleep") {
         s.push_str("\n#ifdef _WIN32\n#include <windows.h>\n#else\n#include <unistd.h>\n#endif\nvoid prion_sleep(long long ms) {\n#ifdef _WIN32\n  Sleep((unsigned long)ms);\n#else\n  usleep((unsigned int)(ms * 1000));\n#endif\n}\n");
     }
     if used.contains("prion_random") {
         s.push_str("\n#include <time.h>\nlong long prion_random(long long n) {\n  static int seeded = 0;\n  if (!seeded) { srand((unsigned)time(0)); seeded = 1; }\n  if (n <= 0) n = 1;\n  return (long long)(((unsigned long long)rand()) % (unsigned long long)n);\n}\n");
     }
-// nt: 运行子程序
-    // nt: stdout / s
+
+    
 
     s
 }
 
-//nt: FFI 串转换
+
 fn ffi_str_section(used: &BTreeSet<&'static str>) -> String {
     if !(used.contains("prion_to_c_str") || used.contains("prion_from_c_str")) {
         return String::new();
@@ -2767,7 +2767,7 @@ fn ffi_str_section(used: &BTreeSet<&'static str>) -> String {
     "const char* prion_to_c_str(const char* s) {\n  size_t n = strlen(s) + 1;\n  char* p = (char*)malloc((size_t)(n));\n  memcpy(p, s, n);\n  return p;\n}\nconst char* prion_from_c_str(long long addr) {\n  const char* s = (const char*)(size_t)addr;\n  size_t n = strlen(s) + 1;\n  char* p = (char*)malloc((size_t)(n));\n  memcpy(p, s, n);\n  return p;\n}\n".to_string()
 }
 
-// nt: 运行子程序运行时
+
 const PRION_RUN_RT: &str = r#"
 #ifdef _WIN32
 #include <windows.h>
@@ -2879,13 +2879,13 @@ long long prion_run(const char* prog, PrionList* args, const char* out_file, con
 "#;
 
 
-// nt: 调用的内置名 → 它
+
 fn mark_runtime(name: &str, used: &mut BTreeSet<&'static str>) {
     match name {
         "rnd" => {
             used.insert("prion_random");
         }
-// nt: 运行子程序
+
         "run" => {
             used.insert("prion_run");
         }
@@ -2902,10 +2902,10 @@ fn mark_runtime(name: &str, used: &mut BTreeSet<&'static str>) {
     }
 }
 
-// nt: lower
 
-// nt: 逃逸复印运行时
-const PRION_COPY_RT: &str = r#"/* 逃逸复印：整值拷出一份系统堆块 */
+
+
+const PRION_COPY_RT: &str = r#"
 static void* prion_copy_to_parent(const void* src, long long n) {
   void* d = malloc((size_t)(n));
   if (src && d) memcpy(d, src, (size_t)n);
@@ -2939,29 +2939,29 @@ const PRION_DIE_RT: &str = r#"void prion_die(int code, long long line, const cha
 void prion_die_nc(int code, const char* msg, const char* fix) { prion_die(code, prion_line, msg, fix); }
 "#;
 
-// nt: 顶层块种类
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum 块类 {
-    //nt: 预处理指令
+    
     指令,
-    //nt: 类型声明
+    
     声明,
-    //nt: 函数定义
+    
     函数,
-    //nt: 全局变量定义
+    
     全局,
-    //nt: 已有原型
+    
     原型,
 }
 
-//nt: 按顶层切块
+
 fn 顶层切块(s: &str) -> Result<Vec<(块类, &str)>, String> {
     let b = s.as_bytes();
     let n = b.len();
     let mut out: Vec<(块类, &str)> = Vec::new();
     let mut i = 0usize;
     while i < n {
-        //nt: 跳过空白与注释
+        
         loop {
             while i < n && (b[i] as char).is_whitespace() {
                 i += 1;
@@ -2986,7 +2986,7 @@ fn 顶层切块(s: &str) -> Result<Vec<(块类, &str)>, String> {
             break;
         }
         let 起 = i;
-        //nt: 预处理到行尾
+        
         if b[i] == b'#' {
             while i < n && b[i] != b'\n' {
                 i += 1;
@@ -3052,7 +3052,7 @@ fn 顶层切块(s: &str) -> Result<Vec<(块类, &str)>, String> {
                         return Err(format!("前置段括号不配对，偏移 {}", 起));
                     }
                     if 深 == 0 {
-                        //nt: 吃掉尾随分号
+                        
                         let mut j = i;
                         while j < n && (b[j] as char).is_whitespace() {
                             j += 1;
@@ -3060,7 +3060,7 @@ fn 顶层切块(s: &str) -> Result<Vec<(块类, &str)>, String> {
                         if j < n && b[j] == b';' {
                             i = j + 1;
                         } else {
-                            //nt: typedef 尾巴
+                            
                             let mut k = j;
                             while k < n && ((b[k] as char).is_ascii_alphanumeric() || b[k] == b'_') {
                                 k += 1;
@@ -3093,7 +3093,7 @@ fn 顶层切块(s: &str) -> Result<Vec<(块类, &str)>, String> {
     Ok(out)
 }
 
-//nt: 判顶层块种类
+
 fn 判类(t: &str) -> Result<块类, String> {
     if t.starts_with('#') {
         return Ok(块类::指令);
@@ -3107,7 +3107,7 @@ fn 判类(t: &str) -> Result<块类, String> {
         return Ok(块类::函数);
     }
     if t.ends_with(';') {
-        //nt: 静态暂定定义
+        
         if t.starts_with("static ") {
             return Ok(块类::全局);
         }
@@ -3116,7 +3116,7 @@ fn 判类(t: &str) -> Result<块类, String> {
     Err(format!("前置段有认不出的块：{}", &t[..t.len().min(60)]))
 }
 
-//nt: 函数定义转原型
+
 fn 转原型(t: &str) -> Option<String> {
     let p = t.find('{')?;
     let mut sig = t[..p].trim();
@@ -3126,7 +3126,7 @@ fn 转原型(t: &str) -> Option<String> {
     Some(format!("{};", sig))
 }
 
-//nt: 全局定义转外部声明
+
 fn 转外部(t: &str) -> String {
     let mut out = String::new();
     for 段 in t.split(';') {
@@ -3145,12 +3145,12 @@ fn 转外部(t: &str) -> String {
     out
 }
 
-/// nt: 前置段拆头与体
-///
-/// nt: 拆出声明与定义单元
-/// nt: 定义去static
+
+
+
+
 pub fn split_prelude(prelude: &str) -> Result<(String, String), String> {
-    //nt: 消掉续行符
+    
     let 平 = prelude.replace("\\\r\n", "").replace("\\\n", "");
     let 块 = 顶层切块(&平)?;
     let mut 头 = String::new();
@@ -3171,7 +3171,7 @@ pub fn split_prelude(prelude: &str) -> Result<(String, String), String> {
                 let 原 = 转原型(t).ok_or_else(|| format!("函数块没找到左花括号：{}", &t[..t.len().min(60)]))?;
                 头.push_str(&原);
                 头.push('\n');
-                //nt: 去static定义
+                
                 let 去 = match t.strip_prefix("static ") {
                     Some(r) => r.trim_start(),
                     None => t,
@@ -3180,14 +3180,14 @@ pub fn split_prelude(prelude: &str) -> Result<(String, String), String> {
                 体.push('\n');
             }
             块类::全局 => {
-                //nt: 全局去static
+                
                 let 去 = match t.strip_prefix("static ") {
                     Some(r) => r.trim_start(),
                     None => t,
                 };
                 体.push_str(去);
                 体.push('\n');
-                //nt: 头给外部声明
+                
                 if !去.contains('[') {
                     头.push_str(&转外部(去));
                 }
@@ -3197,7 +3197,7 @@ pub fn split_prelude(prelude: &str) -> Result<(String, String), String> {
     Ok((头, 体))
 }
 
-// nt: 供增量编译
+
 pub fn split_parts(full: &str) -> (String, Vec<(usize, String)>) {
     const BEG: &str = "/*@FN_BEGIN:";
     const END: &str = "/*@FN_END@*/";
@@ -3221,12 +3221,12 @@ pub fn split_parts(full: &str) -> (String, Vec<(usize, String)>) {
     (prelude, units)
 }
 
-// nt: 导出完整 C 运行时
+
 pub fn runtime_c() -> String {
     runtime_c_for("", "")
 }
 
-/// nt: 运行时对象
+
 pub fn runtime_c_for(file: &str, src_text: &str) -> String {
     let mut used: BTreeSet<&'static str> = BTreeSet::new();
     for n in [
@@ -3240,14 +3240,14 @@ pub fn runtime_c_for(file: &str, src_text: &str) -> String {
     }
     let mut s = String::new();
     s.push_str("#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\n");
-    //nt: 护栏开关宏
+    
     s.push_str("#ifdef PRION_NOGUARD\n#define PRION_GUARD(x)\n#else\n#define PRION_GUARD(x) x\n#endif\n\n");
     s.push_str("long long prion_line = 0; long long prion_col = 0; long long prion_len = 0; const char* prion_cur_file = 0; const char* prion_src = 0;\nvoid prion_at(void) { fprintf(stderr, \"  （第 %lld 行）\\n\", prion_line); }\nconst char* prion_bool_str(long long b) { return b ? \"re\" : \"fa\"; }\n\n");
     {
         let esc = |x: &str| x.replace('\\', "\\\\").replace('"', "\\\"");
         s.push_str(&format!("static const char* PRION_FILE = \"{}\";\n", esc(file)));
         s.push_str("static const char* PRION_SRC[] = {\n");
-        //nt: 源码表随调试开关
+        
         if DEBUG_LINES.with(|c| c.get()) {
             for ln in src_text.lines() {
                 s.push_str(&format!("  \"{}\",\n", esc(ln)));
@@ -3281,14 +3281,14 @@ pub fn lower_to_c(
     debug: bool,
 ) -> Result<String, CodegenError> {
     DEBUG_LINES.with(|c| c.set(debug));
-    //nt: 发布态抽护栏
+    
     RELEASE.with(|c| c.set(!debug));
-    //nt: 容器拥有元素入槽
+    
     OWNED.with(|s| *s.borrow_mut() = p.owned_elem.keys().copied().collect());
-    //nt: 值装箱容器入槽
+    
     值入列.with(|s| *s.borrow_mut() = p.值入列.clone());
     SRC_FILE.with(|c| *c.borrow_mut() = file.to_string());
-    //nt: 各文件源码行
+    
     let mut 源表: BTreeMap<String, Vec<String>> = BTreeMap::new();
     源表.insert(file.to_string(), src_text.lines().map(|s| s.to_string()).collect());
     for f in &p.functions {
@@ -3301,7 +3301,7 @@ pub fn lower_to_c(
     SRC_LINES.with(|c| *c.borrow_mut() = 源表);
     let mut used: BTreeSet<&'static str> = BTreeSet::new();
 
-    // nt: 先过一遍
+    
     for f in &p.functions {
         for b in &f.blocks {
             for s in &b.stmts {
@@ -3319,7 +3319,7 @@ pub fn lower_to_c(
         }
     }
 
-    // nt: 积类型表
+    
     let mut types: TypeMap = BTreeMap::new();
     for (i, st) in p.types.iter().enumerate() {
         types.insert(st.name.clone(), (format!("prion_st_{}", i), st.fields.clone()));
@@ -3327,16 +3327,16 @@ pub fn lower_to_c(
 
     let mut out = String::new();
     out.push_str("#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\n");
-    //nt: 护栏开关宏
+    
     out.push_str("#ifdef PRION_NOGUARD\n#define PRION_GUARD(x)\n#else\n#define PRION_GUARD(x) x\n#endif\n\n");
-    // nt: 真假值按源码字面量的
+    
     out.push_str("long long prion_line = 0; long long prion_col = 0; long long prion_len = 0; const char* prion_cur_file = 0; const char* prion_src = 0;\nvoid prion_at(void) { fprintf(stderr, \"  （第 %lld 行）\\n\", prion_line); }\nconst char* prion_bool_str(long long b) { return b ? \"re\" : \"fa\"; }\n\n");
-    // nt: 源码位置
+    
     {
         let esc = |x: &str| x.replace('\\', "\\\\").replace('"', "\\\"");
         out.push_str(&format!("static const char* PRION_FILE = \"{}\";\n", esc(file)));
         out.push_str("static const char* PRION_SRC[] = {\n");
-        //nt: 源码表随调试开关
+        
         if DEBUG_LINES.with(|c| c.get()) {
             for ln in src_text.lines() {
                 out.push_str(&format!("  \"{}\",\n", esc(ln)));
@@ -3346,43 +3346,43 @@ pub fn lower_to_c(
         out.push_str(PRION_DIE_RT);
     }
     out.push_str(&support_section(&used));
-    // nt: 内存管理基础设施
+    
     out.push_str(PRION_COPY_RT);
     out.push_str(&ffi_str_section(&used));
 
-    // nt: list 运行时
+    
     if uses_list(p) || uses_map(p) {
         out.push_str(PRION_LIST_RT);
     }
-    // nt: 运行子程序
+    
     if used.contains("prion_run") {
         out.push_str(PRION_RUN_RT);
     }
-    // nt: str 运行时
+    
     if uses_str(p) {
         out.push_str(PRION_STR_RT);
     }
-    // nt: map 运行时
+    
     if uses_map(p) {
         out.push_str(PRION_MAP_RT);
     }
-    // nt: 文件 IO 运行时
+    
     if uses_file(p) {
         out.push_str(PRION_FILE_RT);
     }
-    // nt: 命令行参数
+    
     if uses_args(p) {
         out.push_str(PRION_ARGS_RT);
     }
 
-    // nt: str 的「一层复印
+    
     out.push_str("const char* prion_str_copy(const char* s) {\n  if (!s) return 0;\n  size_t n = strlen(s) + 1;\n  char* p = (char*)malloc((size_t)(n));\n  if (!p) { prion_die_nc(6, \"内存不够——程序申请的空间超出可用内存\", \"缩小数据量，或换更省内存的写法\"); }\n  memcpy(p, s, n);\n  return p;\n}\n\n");
 
-    // nt: 积类型 ⇒ C ty
+    
     for st in &p.types {
         let (c, _) = &types[&st.name];
         let fs: Vec<String> = if !st.variants.is_empty() {
-            // nt: 和类型
+            
             let maxn = st.variants.iter().map(|v| v.fields.len()).max().unwrap_or(0);
             let mut v = vec!["  long long tag;".to_string()];
             for i in 0..maxn {
@@ -3404,13 +3404,13 @@ pub fn lower_to_c(
     }
     out.push('\n');
 
-// nt: 「一层复印」助手
+
     for (i, st) in p.types.iter().enumerate() {
         let (c, fields) = &types[&st.name];
         let mut body = String::new();
         body.push_str(&format!("  {} r;\n", c));
         if !st.variants.is_empty() {
-            // nt: 和类型
+            
             body.push_str("  r = *s;\n");
             body.push_str("  return r;\n");
             out.push_str(&format!(
@@ -3425,7 +3425,7 @@ pub fn lower_to_c(
             if base == "str" {
                 body.push_str(&format!("  r.f{} = s->f{} ? prion_str_copy(s->f{}) : 0;\n", k, k, k));
             } else if fty.ends_with('*') {
-                body.push_str(&format!("  r.f{} = s->f{};\n", k, k)); // 把手：只抄指针（共享）
+                body.push_str(&format!("  r.f{} = s->f{};\n", k, k)); 
             } else if let Some((cc, _)) = types.get(base) {
                 let idx = cc.trim_start_matches("prion_st_");
                 body.push_str(&format!("  r.f{} = prion_dc_{}(&s->f{});\n", k, idx, k));
@@ -3440,7 +3440,7 @@ pub fn lower_to_c(
         ));
     }
 
-    // nt: 聚合取元素助手
+    
     if uses_list(p) || uses_map(p) {
         for (i, st) in p.types.iter().enumerate() {
         let (c, _) = &types[&st.name];
@@ -3452,7 +3452,7 @@ pub fn lower_to_c(
         }
     }
 
-    // nt: 结构体深拷助手
+    
     let mut 深拷表: Vec<(usize, String, String)> = Vec::new();
     for (i, st) in p.types.iter().enumerate() {
         if !st.variants.is_empty() {
@@ -3502,8 +3502,8 @@ pub fn lower_to_c(
         }
     }
 
-    // nt: 前向声明
-    // nt: 无别名标注
+    
+    
     let 观感 = prion_ir::形参观感(p);
     let release = RELEASE.with(|c| c.get());
     for (fi, f) in p.functions.iter().enumerate() {
@@ -3539,7 +3539,7 @@ pub fn lower_to_c(
     }
     out.push('\n');
 
-    // nt: 外部函数声明
+    
     for e in &p.externs {
         let ps: Vec<String> = e
             .params
@@ -3558,18 +3558,18 @@ pub fn lower_to_c(
 
     let has_main = p.functions.iter().any(|f| f.name == "main");
 
-    // nt: 源函数名 → C 函
+    
     let mut names: BTreeMap<String, String> = BTreeMap::new();
     for (fi, f) in p.functions.iter().enumerate() {
         let c = if f.name == "main" { "main".to_string() } else { format!("f{}", fi) };
         names.insert(f.name.clone(), c);
     }
-    // nt: 外部函数
+    
     for e in &p.externs {
         names.insert(e.name.clone(), e.name.clone());
     }
 
-    // nt: 地皮树接线
+    
     let mut called_early: BTreeSet<String> = BTreeSet::new();
     for f in &p.functions {
         for b in &f.blocks {
@@ -3583,8 +3583,8 @@ pub fn lower_to_c(
         }
     }
 
-    //nt: 跨块槽收集为全局
-    //nt: 同键共用一份存储
+    
+    
     let mut slot_keys: std::collections::BTreeMap<String, Ty> = std::collections::BTreeMap::new();
     for f in &p.functions {
         for l in &f.locals {
@@ -3616,8 +3616,8 @@ pub fn lower_to_c(
     for (fi, f) in p.functions.iter().enumerate() {
         out.push_str(&format!("/*@FN_BEGIN:{}@*/\n", fi));
         let is_main = f.name == "main";
-        //nt: 槽局部映射到全局
-        //nt: 先于签名，防串函数
+        
+        
         ESCAPED.with(|s| s.borrow_mut().clear());
         SLOT_MAP.with(|m| {
             let mut m = m.borrow_mut();
@@ -3633,13 +3633,13 @@ pub fn lower_to_c(
                 }
             }
         });
-        // nt: 函数名同样 mang
+        
         let c_name = if is_main {
             "main".to_string()
         } else {
             format!("f{}", fi)
         };
-        // nt: naked
+        
         if f.is_naked {
             out.push_str(&format!(
                 "__attribute__((naked)) void {}(void) {{  /* {} */\n",
@@ -3655,7 +3655,7 @@ pub fn lower_to_c(
             out.push_str("/*@FN_END@*/\n");
             continue;
         }
-        // nt: 无返回类型
+        
         let (ret_ty, is_void) = if is_main {
             ("int".to_string(), false)
         } else {
@@ -3687,17 +3687,17 @@ pub fn lower_to_c(
             if params.is_empty() { "void".to_string() } else { params.join(", ") },
             if release { String::new() } else { format!("  /* {} */", f.name) }
         ));
-        // nt: 块入口
-        // nt: 段上记的块名 = 源
+        
+        
         let _blk_src_name = f.name.rsplit('|').next().unwrap_or(&f.name);
-        //nt: 当前源文件
+        
         let 文件名 = f.file.rsplit(['/', '\\']).next().unwrap_or("");
         if 文件名.is_empty() {
             out.push_str("  prion_cur_file = 0;\n");
         } else {
             out.push_str(&format!("  prion_cur_file = \"{}\";\n", c_escape(文件名)));
         }
-        // nt: 局部声明
+        
         for (i, l) in f.locals.iter().enumerate() {
             if !l.is_param && !is_slot_local(l) {
                 let ct2 = c_ty_in(&l.ty, &types);
@@ -3715,21 +3715,21 @@ pub fn lower_to_c(
         out.push_str("/*@FN_END@*/\n");
     }
 
-    // nt: 入口
+    
     if !has_main && !p.functions.is_empty() {
-// nt: 链式执行
-        // nt: 其余块 = 链根，按
-        // nt: 「绝不静默不跑」。
+
+        
+        
         let mut called: BTreeSet<String> = BTreeSet::new();
         for f in &p.functions {
             for b in &f.blocks {
                 for st in &b.stmts {
                     match st {
-                        // nt: 无返回值调用语句
+                        
                         Stmt::Call { name, .. } => {
                             called.insert(name.clone());
                         }
-                        // nt: 带返回值的调用
+                        
                         Stmt::Assign { rhs: Rvalue::Call { name, .. }, .. } => {
                             called.insert(name.clone());
                         }
@@ -3745,16 +3745,16 @@ pub fn lower_to_c(
             .filter(|(_, f)| f.is_block && !f.is_sle && !called.contains(&f.name))
             .map(|(i, _)| i)
             .collect();
-        // nt: 调用图
-        // nt: 索引建两份
-        // nt: 块名索引
+        
+        
+        
         let mut block_idx: BTreeMap<&str, usize> = BTreeMap::new();
         for (i, f) in p.functions.iter().enumerate() {
             if f.is_block {
                 block_idx.insert(f.name.as_str(), i);
             }
         }
-        // nt: 裸名备用
+        
         let mut by_short: BTreeMap<&str, Vec<usize>> = BTreeMap::new();
         for (i, f) in p.functions.iter().enumerate() {
             if f.is_block {
@@ -3799,7 +3799,7 @@ pub fn lower_to_c(
                 }
             }
         }
-        // nt: 死块 = 块函数、非
+        
         let dead: Vec<&str> = p
             .functions
             .iter()
@@ -3818,7 +3818,7 @@ pub fn lower_to_c(
                 line: 0,
             });
         }
-        // nt: 每个链根
+        
         let mut prologue = String::new();
         let mut calls = String::new();
         let mut k = 0usize;
@@ -3841,7 +3841,7 @@ pub fn lower_to_c(
             }
             calls.push_str(&format!("  f{}({});\n", i, args.join(", ")));
         }
-        // nt: 用到 args 时才
+        
         if uses_args(p) {
             out.push_str(&format!(
                 "int main(int argc, char** argv) {{\n  g_argc = argc;\n  g_argv = argv;\n{}{}  return 0;\n}}\n",

@@ -1,18 +1,18 @@
-//! prion-parser —— 语法层：层级语法「分号收束」
-//!
-//! - 开体：以 `:` 结尾的结构行开一个体（统一规则，不逐构造特判）
-//! - 收体：独占一行的 `;` 收体，强制配对
-//! - 缩进纯装饰：parser 不看缩进，缩进错位不影响结构
-//! - 块界：`#: 名 b` / `#: 名 d` 显式定界，块体无需 `;`
-//! - 空体：开体后（仅注释 / 空行）紧跟 `;` ⇒ 报错
-//! - `else`：`else:` 必须紧跟其 if 体的收束 `;`（之间仅允许注释 / 空行）
-//!
-//! 产出语句树；`Stmt::Line` 内的表达式树由 `expr` 模块产出（与记号并存）。
+
+
+
+
+
+
+
+
+
+
 
 use prion_error::{render_parse, ParseCode, DiagParts, Span, Tone};
 use prion_lexer::{Spanned, Token};
 
-//nt: 表达式树
+
 pub mod expr;
 
 pub use expr::Expr;
@@ -22,9 +22,9 @@ pub struct ParseError {
     pub line: usize,
     pub message: String,
     pub code: String,
-//nt: 结构化原文
+
     pub parts: DiagParts,
-    // nt: 可延后到保存
+    
     pub 可延后: bool,
 }
 
@@ -39,13 +39,13 @@ impl ParseError {
         }
     }
 
-    // nt: 标记可延后
+    
     pub fn 延后(mut self) -> Self {
         self.可延后 = true;
         self
     }
 }
-//nt: 行内表达式
+
 fn 行表达式(toks: &TokStream) -> Vec<Expr> {
     let t: &[Token] = toks;
     let sp = toks.spans();
@@ -63,7 +63,7 @@ fn 行表达式(toks: &TokStream) -> Vec<Expr> {
         }
     }
     let 起 = eq.map(|e| e + 1).unwrap_or(0);
-    //nt: give 前缀剥掉
+    
     let 起 = if matches!(t.get(起), Some(Token::Kw("give"))) { 起 + 1 } else { 起 };
     if 起 >= t.len() {
         return Vec::new();
@@ -75,8 +75,8 @@ fn 行表达式(toks: &TokStream) -> Vec<Expr> {
     }
 }
 
-//nt: 记号流与位置表
-//nt: 构造口
+
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct TokStream {
     toks: Vec<Token>,
@@ -84,7 +84,7 @@ pub struct TokStream {
 }
 
 impl TokStream {
-    //nt: 三元组构造
+    
     pub fn new(三元组: Vec<(Token, usize, usize)>) -> Self {
         let mut toks = Vec::with_capacity(三元组.len());
         let mut spans = Vec::with_capacity(三元组.len());
@@ -96,23 +96,23 @@ impl TokStream {
         TokStream { toks, spans }
     }
 
-    //nt: 合成行构造
+    
     pub fn 无位(v: Vec<Token>) -> TokStream {
         let n = v.len();
         TokStream { toks: v, spans: vec![(0, 0); n] }
     }
 
-    //nt: 一次取两样
+    
     pub fn get2(&self, i: usize) -> Option<(&Token, (usize, usize))> {
         self.toks.get(i).map(|t| (t, self.spans[i]))
     }
 
-    //nt: 取第 i 个位置
+    
     pub fn span(&self, i: usize) -> Option<(usize, usize)> {
         self.spans.get(i).copied()
     }
 
-    //nt: 全部位置表
+    
     pub fn spans(&self) -> &[(usize, usize)] {
         &self.spans
     }
@@ -125,47 +125,47 @@ impl std::ops::Deref for TokStream {
     }
 }
 
-//nt: 语句
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
-    //nt: 普通语句
+    
     Line { line: usize, col: usize, len: usize, kind: LineKind, exprs: Vec<Expr> },
-    //nt: 结构语句
+    
     Struct { line: usize, col: usize, len: usize, kind: StructKind, head: TokStream, body: Vec<Stmt> },
-    //nt: 语句体函数
+    
     Fn { line: usize, col: usize, len: usize, head: TokStream, body: Vec<Stmt> },
 }
 
-//nt: 语句种类
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum LineKind {
     Give(TokStream),
-    //nt: 建值
+    
     AddVal(TokStream),
-    //nt: add type
+    
     AddType(TokStream),
-    //nt: add hide
+    
     AddHide(TokStream),
-    //nt: 建函数
+    
     AddFn(TokStream),
-    //nt: add outs fn
+    
     AddOutsFn(TokStream),
-    //nt: call fn
+    
     CallFn(TokStream),
-    //nt: call 块
+    
     CallBlock(TokStream),
-    //nt: kill
+    
     Kill(TokStream),
-    //nt: val 改赋
+    
     Assign(TokStream),
-    //nt: 裸名调用
+    
     BareCall(TokStream),
-    //nt: 其余形态
+    
     Other(TokStream),
 }
 
 impl LineKind {
-    //nt: 本语句的记号流
+    
     pub fn tokens(&self) -> &TokStream {
         match self {
             LineKind::Give(t) | LineKind::AddVal(t) | LineKind::AddFn(t) | LineKind::AddOutsFn(t)
@@ -176,7 +176,7 @@ impl LineKind {
     }
 }
 
-//nt: 语句分类
+
 pub fn line_kind(toks: &TokStream) -> LineKind {
     let own = toks.clone();
     match toks.first() {
@@ -204,7 +204,7 @@ pub fn line_kind(toks: &TokStream) -> LineKind {
     }
 }
 
-//nt: 结构种类
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StructKind {
     If,
@@ -212,11 +212,11 @@ pub enum StructKind {
     While,
     Match,
     For,
-    //nt: 匹配臂
+    
     Case,
 }
 
-//nt: 结构分类
+
 pub fn struct_kind(head: &[Token]) -> StructKind {
     match head.first() {
         Some(Token::Kw("else")) => StructKind::Else,
@@ -228,32 +228,32 @@ pub fn struct_kind(head: &[Token]) -> StructKind {
     }
 }
 
-//nt: 块
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Block {
     pub name: String,
-    //nt: 块行号
+    
     pub line: usize,
     pub col: usize,
     pub len: usize,
     pub stmts: Vec<Stmt>,
-    //nt: 块属性后缀
+    
     pub attrs: Vec<String>,
-    //nt: asm 原始行
+    
     pub asm_lines: Vec<String>,
-    //nt: 所属模块
+    
     pub module: String,
-    //nt: 源文件路径
+    
     pub file: String,
 }
 
-//nt: 程序=若干块
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Program {
     pub blocks: Vec<Block>,
 }
 
-//nt: 栈帧：块体或结构体
+
 enum Kind {
     Block,
     Struct,
@@ -268,16 +268,16 @@ struct Frame {
     line: usize,
     col: usize,
     len: usize,
-    //nt: 块属性后缀
+    
     attrs: Vec<String>,
-    //nt: asm 原始行
+    
     asm_lines: Vec<String>,
 }
 
-/** 块行？`#: 名 b|d [unsafe] [pub] [sle] [ABI]` → Some((名, 开块?, 属性后缀))
- *
-* 后缀集合：`b`/`d` 固定；`unsafe` 紧贴 `b`；
- * `pub` / `sle` 先后随意；`ABI` 殿后。此处只**如实收集**，顺序与合法性由后续层判。*/
+
+
+
+
 fn is_block_line(t: &[Token]) -> Option<(String, bool, Vec<String>)> {
     if t.first() != Some(&Token::HashColon) {
         return None;
@@ -297,13 +297,13 @@ fn is_block_line(t: &[Token]) -> Option<(String, bool, Vec<String>)> {
             Token::Kw(k) if *k == "unsafe" || *k == "pub" || *k == "sle" || *k == "ABI" || *k == "kill" || *k == "asm" => {
                 attrs.push((*k).to_string())
             }
-            _ => return None, // 认不出的后缀 ⇒ 不是块行
+            _ => return None, 
         }
     }
     Some((name, open, attrs))
 }
 
-//nt: fn 定义行
+
 fn is_fn_head(t: &[Token]) -> bool {
     match (t.first(), t.get(1), t.get(2)) {
         (Some(Token::Kw("fn")), _, _) => true,
@@ -313,17 +313,17 @@ fn is_fn_head(t: &[Token]) -> bool {
     }
 }
 
-//nt: 结构行
+
 fn is_struct_head(t: &[Token]) -> bool {
     matches!(t.last(), Some(Token::Sym(":")))
 }
 
-//nt: 独占一行的`;`
+
 fn is_semi_line(t: &[Token]) -> bool {
     t.len() == 1 && t[0] == Token::Sym(";")
 }
 
-//nt: 语法入口
+
 pub fn parse(spanned: Vec<Spanned>) -> Result<Program, ParseError> {
     let (ast, errs) = parse_all(spanned);
     match errs.into_iter().next() {
@@ -332,10 +332,10 @@ pub fn parse(spanned: Vec<Spanned>) -> Result<Program, ParseError> {
     }
 }
 
-// nt: 多错恢复入口
+
 pub fn parse_all(spanned: Vec<Spanned>) -> (Program, Vec<ParseError>) {
     let mut errs: Vec<ParseError> = Vec::new();
-    // nt: 记录并跳行
+    
     macro_rules! 报错 {
         ($e:expr) => {{
             errs.push($e);
@@ -344,10 +344,10 @@ pub fn parse_all(spanned: Vec<Spanned>) -> (Program, Vec<ParseError>) {
     }
     let mut blocks: Vec<Block> = Vec::new();
     let mut stack: Vec<Frame> = Vec::new();
-    let mut after_semi = false; // 上一个有意义行是否为 `;`（供 else 规则）
+    let mut after_semi = false; 
 
-    //nt: 按换行切分行
-    //nt: 记号与位置同收
+    
+    
     let mut lines: Vec<(Span, TokStream)> = Vec::new();
     let mut cur: Vec<(Token, usize, usize)> = Vec::new();
     let mut cur_span = Span::default();
@@ -375,9 +375,9 @@ pub fn parse_all(spanned: Vec<Spanned>) -> (Program, Vec<ParseError>) {
             continue;
         }
 
-        //nt: 块开
+        
         if let Some((name, true, attrs)) = is_block_line(&toks) {
-//nt: 块不许嵌套
+
             if let Some(top) = stack.last() {
                 if matches!(top.kind, Kind::Block) {
                     报错!(ParseError::with_code(
@@ -394,7 +394,7 @@ pub fn parse_all(spanned: Vec<Spanned>) -> (Program, Vec<ParseError>) {
                     ));
                 }
             }
-//nt: kill 作关块后缀
+
             if attrs.iter().any(|a| a == "kill") {
                 报错!(ParseError::with_code(
                     line_no,
@@ -414,9 +414,9 @@ pub fn parse_all(spanned: Vec<Spanned>) -> (Program, Vec<ParseError>) {
             continue;
         }
 
-        //nt: 块关
+        
         if let Some((name, false, close_attrs)) = is_block_line(&toks) {
-        //nt: 体未收束报错
+        
             if let Some(top) = stack.last() {
                 if matches!(top.kind, Kind::Struct | Kind::Fn) {
                     let l = top.line;
@@ -462,7 +462,7 @@ pub fn parse_all(spanned: Vec<Spanned>) -> (Program, Vec<ParseError>) {
                     Tone::Fix,
                 ));
             }
-//nt: 合并块属性
+
             let mut all_attrs = f.attrs;
             all_attrs.extend(close_attrs.iter().cloned());
             blocks.push(Block {
@@ -480,7 +480,7 @@ pub fn parse_all(spanned: Vec<Spanned>) -> (Program, Vec<ParseError>) {
             continue;
         }
 
-        //nt: 收体
+        
         if is_semi_line(&toks) {
             let Some(f) = stack.pop() else {
                 报错!(ParseError::with_code(
@@ -549,7 +549,7 @@ pub fn parse_all(spanned: Vec<Spanned>) -> (Program, Vec<ParseError>) {
             continue;
         }
 
-        //nt: 结构行开体
+        
         if is_struct_head(&toks) {
             if let Some(Token::Kw("else")) = toks.first() {
                 if !after_semi {
@@ -573,9 +573,9 @@ pub fn parse_all(spanned: Vec<Spanned>) -> (Program, Vec<ParseError>) {
             continue;
         }
 
-        //nt: 普通语句
-        //nt: kill 限顺序体
-        //nt: 体内出现即报错
+        
+        
+        
         if matches!(toks.first(), Some(Token::Kw("kill"))) {
             if let Some(p) = stack.last() {
                 if matches!(p.kind, Kind::Struct) {
@@ -595,7 +595,7 @@ pub fn parse_all(spanned: Vec<Spanned>) -> (Program, Vec<ParseError>) {
                 }
             }
         }
-        //nt: asm 原始行入表
+        
         if let [Token::RawAsm(s)] = &toks[..] {
             match stack.last_mut() {
                 Some(p) if matches!(p.kind, Kind::Block) => p.asm_lines.push(s.to_string()),
@@ -632,7 +632,7 @@ pub fn parse_all(spanned: Vec<Spanned>) -> (Program, Vec<ParseError>) {
             continue;
         }
 
-        //nt: 普通语句
+        
         match stack.last_mut() {
             Some(p) => {
                 let exprs = 行表达式(&toks);
@@ -657,7 +657,7 @@ pub fn parse_all(spanned: Vec<Spanned>) -> (Program, Vec<ParseError>) {
         after_semi = false;
     }
 
-//nt: 未收的体
+
     while let Some(f) = stack.pop() {
         errs.push(match f.kind {
             Kind::Struct | Kind::Fn => ParseError::with_code(
@@ -696,7 +696,7 @@ pub fn parse_all(spanned: Vec<Spanned>) -> (Program, Vec<ParseError>) {
                     ),
                     Tone::Fix,
                 )
-                // nt: 到文件尾才算
+                
                 .延后()
             }
         });

@@ -1,9 +1,9 @@
-//! prion-llvm —— 后端之一：中间表示 → LLVM IR → 目标文件
-//!
-//! 另一条 lower 在 `prion-codegen`。
-//!
-//! 覆盖：与 C 后端同一套 IR 输入；产出 `.ll` 与 `.o`，由外部 clang 链接。
-//! 静态链接 LLVM 22.1；运行期不依赖 LLVM 动态库。
+
+
+
+
+
+
 
 use prion_ir::{AsmForm, BinOp, Exit, Function, LocalId, Place, Proj, Program, Rvalue, Stmt, Ty, Value};
 pub mod flat_emit;
@@ -22,8 +22,8 @@ use inkwell::{IntPredicate, OptimizationLevel};
 use std::collections::BTreeMap;
 use std::path::Path;
 
-//nt: 槽键索引全局名
-//nt: 顺序与 C 后端一致
+
+
 fn slot_idx_of(p: &Program) -> BTreeMap<String, usize> {
     let mut keys: BTreeMap<String, Ty> = BTreeMap::new();
     for f in &p.functions {
@@ -38,7 +38,7 @@ fn slot_idx_of(p: &Program) -> BTreeMap<String, usize> {
     keys.keys().enumerate().map(|(i, k)| (k.clone(), i)).collect()
 }
 
-//nt: 已复印逃逸的局部
+
 thread_local! {
     static ESCAPED: std::cell::RefCell<std::collections::BTreeSet<usize>> =
         std::cell::RefCell::new(std::collections::BTreeSet::new());
@@ -98,7 +98,7 @@ pub fn emit_object(p: &Program, path: &Path, opt: u32, debug: bool, file: &str) 
     } else {
         None
     };
-    //nt: 各文件源码行
+    
     let mut src_lines: BTreeMap<String, Vec<String>> = BTreeMap::new();
     if let Ok(t) = std::fs::read_to_string(file) {
         src_lines.insert(file.to_string(), t.lines().map(|s| s.to_string()).collect());
@@ -137,10 +137,10 @@ pub fn emit_object(p: &Program, path: &Path, opt: u32, debug: bool, file: &str) 
     for f in &p.functions {
         lo.lower_fn(f, p)?;
     }
-    //nt: 先收尾调试信息
+    
     lo.dbg = None;
     lo.module.verify().map_err(|e| format!("LLVM 校验失败：{}", e.to_string()))?;
-    //nt: IR优化管线
+    
     if opt != OptimizationLevel::None {
         use inkwell::passes::PassBuilderOptions;
         let 级 = match opt {
@@ -152,7 +152,7 @@ pub fn emit_object(p: &Program, path: &Path, opt: u32, debug: bool, file: &str) 
             .run_passes(级, &tm, PassBuilderOptions::create())
             .map_err(|e| e.to_string())?;
     }
-    //nt: 优化后快照
+    
     let _ = std::fs::write(path.with_extension("ll"), lo.module.print_to_string().to_string());
     tm.write_to_file(&lo.module, FileType::Object, path)
         .map_err(|e| e.to_string())
@@ -162,40 +162,40 @@ struct Lower<'ctx> {
     ctx: &'ctx Context,
     module: Module<'ctx>,
     builder: Builder<'ctx>,
-    //nt: 发布版开关
+    
     release: bool,
     funcs: BTreeMap<String, FunctionValue<'ctx>>,
     strings: BTreeMap<String, PointerValue<'ctx>>,
-    ///nt: 赋值目标类型
+    
     want: Option<Ty>,
     td: TargetData,
-    ///nt: 类型到结构体
+    
     structs: BTreeMap<String, inkwell::types::StructType<'ctx>>,
-    ///nt: 类型字段表
+    
     type_fields: BTreeMap<String, Vec<(String, Ty)>>,
-    ///nt: 单赋值局部的值槽
+    
     值槽: std::cell::RefCell<Vec<Option<inkwell::values::BasicValueEnum<'ctx>>>>,
-    ///nt: 块参数的φ节点
+    
     块参数phi: std::cell::RefCell<BTreeMap<usize, inkwell::values::PhiValue<'ctx>>>,
-    ///nt: 列表结构体
+    
     列表型: Option<inkwell::types::StructType<'ctx>>,
-    ///nt: 当前语句行号
+    
     cur_line: usize,
-    ///nt: 入口文件
+    
     entry_file: String,
-    ///nt: 各文件源码行
+    
     src_lines: BTreeMap<String, Vec<String>>,
-    ///nt: 调试信息
+    
     dbg: Option<Dbg<'ctx>>,
-    ///nt: 容器拥有的元素对象
+    
     owned: std::collections::BTreeMap<prion_ir::ObjId, Vec<prion_ir::ObjId>>,
-    //nt: 循环元数据登记表
+    
     循环环: std::cell::RefCell<Vec<(FunctionValue<'ctx>, String, u64)>>,
-    //nt: 值装箱容器对象
+    
     值入列: std::collections::BTreeSet<prion_ir::ObjId>,
 }
 
-///nt: 调试信息上下文
+
 struct Dbg<'ctx> {
     dib: DebugInfoBuilder<'ctx>,
     file: DIFile<'ctx>,
@@ -204,7 +204,7 @@ struct Dbg<'ctx> {
 }
 
 impl<'ctx> Lower<'ctx> {
-    ///nt: 先占名再填体
+    
     fn declare_types(&mut self, p: &Program) -> Result<(), String> {
         for (i, st) in p.types.iter().enumerate() {
             let t = self.ctx.opaque_struct_type(&format!("prion_st_{}", i));
@@ -229,7 +229,7 @@ impl<'ctx> Lower<'ctx> {
     }
 
     fn declare(&mut self, p: &Program) -> Result<(), String> {
-        //nt: 无别名标注
+        
         let 观感 = prion_ir::形参观感(p);
         let 发布 = self.release;
         for (i, f) in p.functions.iter().enumerate() {
@@ -285,7 +285,7 @@ impl<'ctx> Lower<'ctx> {
             let fv = self.module.add_function("main", fty, None);
             let bb = self.ctx.append_basic_block(fv, "entry");
             self.builder.position_at_end(bb);
-            //nt: 转交命令行参数
+            
             let argc = fv.get_nth_param(0).ok_or_else(|| "main 缺 argc".to_string())?;
             let argv = fv.get_nth_param(1).ok_or_else(|| "main 缺 argv".to_string())?;
             let sps = [
@@ -300,8 +300,8 @@ impl<'ctx> Lower<'ctx> {
                 .map_err(|e| e.to_string())?;
             for r in &roots {
                 if let Some(rf) = self.funcs.get(r).copied() {
-                    //nt: 槽参在调用方备存储
-                    //nt: 与 C 后端 main 一致
+                    
+                    
                     let mut args: Vec<BasicMetadataValueEnum> = Vec::new();
                     if let Some(fdef) = p.functions.iter().find(|f| &f.name == r) {
                         for l in fdef.locals.iter().filter(|l| l.is_param) {
@@ -319,7 +319,7 @@ impl<'ctx> Lower<'ctx> {
         Ok(())
     }
 
-    ///nt: 链根块表
+    
     fn root_names(p: &Program) -> Vec<String> {
         let mut called = std::collections::BTreeSet::new();
         for f in &p.functions {
@@ -391,7 +391,7 @@ impl<'ctx> Lower<'ctx> {
         self.ctx.i64_type().into()
     }
 
-    ///nt: 字段按宽度
+    
     fn field_ty(&self, t: &Ty) -> BasicTypeEnum<'ctx> {
         match t.0.as_str() {
             "int_8" | "uint_8" => self.ctx.i8_type().into(),
@@ -401,7 +401,7 @@ impl<'ctx> Lower<'ctx> {
         }
     }
 
-    ///nt: 位置有效类型
+    
     fn place_ty(&self, f: &Function, p: &Place) -> Ty {
         let mut t = self.local_ty(f, p.base);
         for pr in &p.proj {
@@ -415,7 +415,7 @@ impl<'ctx> Lower<'ctx> {
                         .unwrap_or_else(|| Ty("int".into()));
                 }
                 Proj::Deref => {
-                    //nt: 只去一层
+                    
                     t = Ty(t.0.strip_suffix('*').unwrap_or(&t.0).to_string());
                 }
                 Proj::Index(_) => {
@@ -428,18 +428,18 @@ impl<'ctx> Lower<'ctx> {
         t
     }
 
-    ///nt: 类型转调试类型
+    
     fn di_ty(&self, ty: &Ty) -> Option<DIType<'ctx>> {
         let d = self.dbg.as_ref()?;
         let 名 = ty.0.trim();
-        // nt: 指针递归
+        
         if let Some(基) = 名.strip_suffix('*') {
             let 内 = self.di_ty(&Ty(基.trim().to_string()))?;
             return Some(
                 d.dib.create_pointer_type(&ty.0, 内, 64, 64, AddressSpace::default()).as_type(),
             );
         }
-        // nt: 位宽与编码
+        
         let (位, 码) = match 名 {
             "bool" => (8u64, 0x02u32),
             "float" => (64, 0x04),
@@ -452,13 +452,13 @@ impl<'ctx> Lower<'ctx> {
             "uint_32" => (32, 0x07),
             "uint_16" => (16, 0x07),
             "uint_8" => (8, 0x07),
-            // nt: 其余不透明
+            
             _ => (64, 0x07),
         };
         d.dib.create_basic_type(名, 位, 码, DIFlags::PUBLIC).ok().map(|t| t.as_type())
     }
 
-    ///nt: 发变量调试信息
+    
     fn 发变量调试(&self, f: &Function, allocas: &[Option<PointerValue<'ctx>>]) -> Result<(), String> {
         let Some(d) = self.dbg.as_ref() else { return Ok(()) };
         let Some(scope) = d.scope else { return Ok(()) };
@@ -510,7 +510,7 @@ impl<'ctx> Lower<'ctx> {
     }
 
     fn lower_fn(&mut self, f: &Function, p: &Program) -> Result<(), String> {
-        //nt: 逃逸集按函数清
+        
         ESCAPED.with(|s| s.borrow_mut().clear());
         let _ = p;
         let fv = *self.funcs.get(&f.name).ok_or_else(|| format!("缺函数 {}", f.name))?;
@@ -534,9 +534,9 @@ impl<'ctx> Lower<'ctx> {
         }
         let entry = self.ctx.append_basic_block(fv, "entry");
         self.builder.position_at_end(entry);
-        //nt: 清调试位置
+        
         self.builder.unset_current_debug_location();
-        //nt: 当前源文件
+        
         let fg = self.ptr_global("prion_cur_file");
         let 文件名 = f.file.rsplit(['/', '\\']).next().unwrap_or("");
         let fval = if 文件名.is_empty() {
@@ -546,7 +546,7 @@ impl<'ctx> Lower<'ctx> {
         };
         self.builder.build_store(fg.as_pointer_value(), fval).map_err(|e| e.to_string())?;
         let mut allocas: Vec<Option<PointerValue<'ctx>>> = vec![None; f.locals.len()];
-        //nt: 塊參數集合
+        
         let mut 塊參數集: std::collections::BTreeSet<usize> = std::collections::BTreeSet::new();
         for b in &f.blocks {
             for (pid, _) in &b.params {
@@ -554,21 +554,21 @@ impl<'ctx> Lower<'ctx> {
             }
         }
         self.块参数phi.borrow_mut().clear();
-        //nt: 单赋值局部走值槽
+        
         let 值槽集 = 单选局部(f);
         self.值槽.borrow_mut().clear();
         self.值槽.borrow_mut().resize(f.locals.len(), None);
-        //nt: 槽键索引与后端一致
+        
         let slot_idx = slot_idx_of(p);
         for (i, l) in f.locals.iter().enumerate() {
             if l.is_param {
                 continue;
             }
-            //nt: 塊參數走φ不建棧位
+            
             if 塊參數集.contains(&i) {
                 continue;
             }
-            //nt: 跨块槽用全局
+            
             if let Some(n) = &l.name {
                 if let Some(idx) = slot_idx.get(n) {
                     let g = self.slot_global(n, &l.ty, *idx)?;
@@ -577,11 +577,11 @@ impl<'ctx> Lower<'ctx> {
                 }
             }
             if 值槽集.contains(&i) {
-                continue; //nt: 值槽不建栈位
+                continue; 
             }
             let t = self.ty(&l.ty);
             let a = self.alloca(t, &format!("v{}", i)).map_err(|e| e.to_string())?;
-            //nt: 指针栈位先置空
+            
             if t.is_pointer_type() {
                 self.builder
                     .build_store(a, t.into_pointer_type().const_null())
@@ -601,7 +601,7 @@ impl<'ctx> Lower<'ctx> {
             allocas[i] = Some(a);
             pi += 1;
         }
-        //nt: 变量级调试
+        
         self.发变量调试(f, &allocas)?;
         let mut bbs = Vec::new();
         for b in &f.blocks {
@@ -610,7 +610,7 @@ impl<'ctx> Lower<'ctx> {
         if let Some(first) = bbs.first() {
             self.builder.build_unconditional_branch(*first).map_err(|e| e.to_string())?;
         }
-        //nt: 先建全部φ 再发射
+        
         for (bi, b) in f.blocks.iter().enumerate() {
             self.builder.position_at_end(bbs[bi]);
             for (pid, pty) in &b.params {
@@ -648,7 +648,7 @@ impl<'ctx> Lower<'ctx> {
                     }
                 }
                 if ln > 0 && self.dbg.is_some() {
-                    //nt: 溯源仅调试态
+                    
                     let g = self.line_global();
                     self.builder
                         .build_store(g.as_pointer_value(), self.ctx.i64_type().const_int(ln as u64, false))
@@ -661,7 +661,7 @@ impl<'ctx> Lower<'ctx> {
                     self.builder
                         .build_store(gl.as_pointer_value(), self.ctx.i64_type().const_int(sp.len as u64, false))
                         .map_err(|e| e.to_string())?;
-                    //nt: 当前源码行
+                    
                     let key = if f.file.is_empty() { self.entry_file.clone() } else { f.file.clone() };
                     let 行文本 = self
                         .src_lines
@@ -685,8 +685,8 @@ impl<'ctx> Lower<'ctx> {
                         self.builder.build_return(Some(&self.ctx.i32_type().const_int(0, false))).map_err(|e| e.to_string())?;
                     } else if let Some(v) = v {
                         let mut x = self.value(f, &allocas, v)?;
-                        //nt: fn自有对象复印重绑
-                        //nt: 复印目标 = 调用方地皮
+                        
+                        
                         if let Value::Local(lid) = v {
                             if f.locals.get(*lid).map(|l| l.fn_owned).unwrap_or(false) {
                                 if let BasicValueEnum::PointerValue(pv) = x {
@@ -704,7 +704,7 @@ impl<'ctx> Lower<'ctx> {
                                             if let Some(a) = allocas[*lid] {
                                                 self.builder.build_store(a, c).map_err(|e| e.to_string())?;
                                             } else if let Some(x) = self.值槽.borrow_mut().get_mut(*lid) {
-                                                //nt: 值槽也回写
+                                                
                                                 *x = Some(c.into());
                                             }
                                             ESCAPED.with(|s| s.borrow_mut().insert(*lid));
@@ -720,7 +720,7 @@ impl<'ctx> Lower<'ctx> {
                     }
                 }
                 Exit::Unreachable => {
-                    //nt: 不可达先 abort
+                    
                     self.call_rt("abort", &[], None, &[])?;
                     self.builder.build_unreachable().map_err(|e| e.to_string())?;
                 }
@@ -747,7 +747,7 @@ impl<'ctx> Lower<'ctx> {
                                 .ok_or_else(|| "分支不在基本块里".to_string())?;
                             self.邊φ(f, &allocas, &targets[k], cur)?;
                         }
-                        //nt: br发当前位置
+                        
                         self.builder
                             .build_conditional_branch(i1, dest[0], dest[1])
                             .map_err(|e| e.to_string())?;
@@ -774,7 +774,7 @@ impl<'ctx> Lower<'ctx> {
         f.locals.get(id).map(|l| l.ty.clone()).unwrap_or(Ty("int".into()))
     }
 
-    //nt: 小工具
+    
 
     fn is_container_ty(t: &str) -> bool {
         t == "list" || t == "map"
@@ -782,7 +782,7 @@ impl<'ctx> Lower<'ctx> {
             || t.starts_with("map(")
     }
 
-    ///nt: 取序列元素类型
+    
     fn seq_elem_ty(t: &str) -> Option<String> {
         let (head, inner) = t.split_once('(')?;
         let tail = inner.strip_suffix(')')?;
@@ -792,7 +792,7 @@ impl<'ctx> Lower<'ctx> {
         }
     }
 
-    ///nt: 取 map 值类型
+    
     fn map_value_ty(t: &str) -> Option<String> {
         let inner = t.strip_prefix("map(")?.strip_suffix(')')?;
         let mut depth = 0i32;
@@ -807,7 +807,7 @@ impl<'ctx> Lower<'ctx> {
         None
     }
 
-    ///nt: 槽宽与符号
+    
     fn elem_esz_sgn(t: &str) -> (i64, i64) {
         match t {
             "int_8" => (1, 1),
@@ -822,7 +822,7 @@ impl<'ctx> Lower<'ctx> {
         }
     }
 
-    ///nt: 指针进槽
+    
     fn boxed_ty(t: &str) -> bool {
         t == "str" || t.ends_with('*') || Self::is_container_ty(t)
     }
@@ -850,7 +850,7 @@ impl<'ctx> Lower<'ctx> {
         self.ctx.i64_type().into()
     }
 
-    ///nt: 调运行时函数
+    
     fn call_rt(
         &mut self,
         name: &str,
@@ -877,7 +877,7 @@ impl<'ctx> Lower<'ctx> {
         Ok(c.try_as_basic_value().basic().unwrap_or_else(|| self.ci(0)))
     }
 
-    //nt: 键统一转i64
+    
     fn key_ll(&self, v: BasicValueEnum<'ctx>) -> Result<BasicValueEnum<'ctx>, String> {
         match v {
             BasicValueEnum::PointerValue(p) => {
@@ -897,7 +897,7 @@ impl<'ctx> Lower<'ctx> {
         let z = self.ctx.i64_type().const_int(0, false);
         for (i, v) in vals.iter().enumerate() {
             let idx = self.ctx.i64_type().const_int(i as u64, false);
-            //nt: GEP 用数组类型
+            
             let p = unsafe { self.builder.build_gep(at, a, &[z, idx], "ae") }.map_err(|e| e.to_string())?;
             self.builder.build_store(p, *v).map_err(|e| e.to_string())?;
         }
@@ -911,14 +911,14 @@ impl<'ctx> Lower<'ctx> {
         let z = self.ctx.i64_type().const_int(0, false);
         for (i, v) in vals.iter().enumerate() {
             let idx = self.ctx.i64_type().const_int(i as u64, false);
-            //nt: GEP 用数组类型
+            
             let p = unsafe { self.builder.build_gep(at, a, &[z, idx], "pe") }.map_err(|e| e.to_string())?;
             self.builder.build_store(p, *v).map_err(|e| e.to_string())?;
         }
         Ok(a)
     }
 
-    ///nt: 聚合字节宽
+    
     fn 聚合宽(&self, t: &str) -> Option<i64> {
         self.structs.get(t).map(|s| {
             s.size_of()
@@ -928,7 +928,7 @@ impl<'ctx> Lower<'ctx> {
         })
     }
 
-    ///nt: alloca入首块
+    
     fn alloca<'a, T: inkwell::types::BasicType<'ctx>>(
         &mut self,
         ty: T,
@@ -951,7 +951,7 @@ impl<'ctx> Lower<'ctx> {
         self.builder.build_alloca(ty, name).map_err(|e| e.to_string())
     }
 
-    ///nt: 值进槽
+    
     fn to_slot(&self, v: BasicValueEnum<'ctx>) -> Result<inkwell::values::IntValue<'ctx>, String> {
         match v {
             BasicValueEnum::IntValue(i) => Ok(i),
@@ -966,7 +966,7 @@ impl<'ctx> Lower<'ctx> {
         }
     }
 
-    ///nt: 槽按类型拆箱
+    
     fn from_slot(&self, v: BasicValueEnum<'ctx>, ty: &str) -> Result<BasicValueEnum<'ctx>, String> {
         let i = match v {
             BasicValueEnum::IntValue(i) => i,
@@ -986,8 +986,8 @@ impl<'ctx> Lower<'ctx> {
         Ok(i.into())
     }
 
-    //nt: 邊實參落φ
-    //nt: 來源塊 = 邊的真正前驅
+    
+    
     fn 邊φ(
         &mut self,
         f: &Function,
@@ -1008,7 +1008,7 @@ impl<'ctx> Lower<'ctx> {
             let Some(phi) = self.块参数phi.borrow().get(pid).copied() else {
                 continue;
             };
-            //nt: 同前驱块只落一次
+            
             let mut 已有 = false;
             let mut i = 0u32;
             while let Some((_, blk)) = phi.get_incoming(i) {
@@ -1059,7 +1059,7 @@ impl<'ctx> Lower<'ctx> {
         }
     }
 
-    ///nt: 位置取指针
+    
     fn place_ptr(
         &self,
         allocas: &[Option<PointerValue<'ctx>>],
@@ -1110,7 +1110,7 @@ impl<'ctx> Lower<'ctx> {
         Ok(a)
     }
 
-    ///nt: 容器赋值移交
+    
     fn 容器移交(
         &mut self,
         f: &Function,
@@ -1150,7 +1150,7 @@ impl<'ctx> Lower<'ctx> {
         Ok(())
     }
 
-    ///nt: 释放局部持有的容器
+    
     fn 释放局部(
         &mut self,
         f: &Function,
@@ -1158,7 +1158,7 @@ impl<'ctx> Lower<'ctx> {
         lid: LocalId,
     ) -> Result<(), String> {
         let ty = f.locals.get(lid).map(|l| l.ty.0.clone()).unwrap_or_default();
-        //nt: 把手与串按块放
+        
         let 把手 = ty
             .strip_suffix('*')
             .map(|b| self.structs.contains_key(b))
@@ -1167,7 +1167,7 @@ impl<'ctx> Lower<'ctx> {
         if !prion_ir::is_container_ty(&ty) && !把手 {
             return Ok(());
         }
-        //nt: 取局部值
+        
         let v = match self.值槽.borrow().get(lid).and_then(|x| *x) {
             Some(bv) => bv,
             None => {
@@ -1180,7 +1180,7 @@ impl<'ctx> Lower<'ctx> {
             BasicValueEnum::PointerValue(p) => p,
             _ => return Ok(()),
         };
-        //nt: 判空
+        
         let pt = self.ctx.ptr_type(AddressSpace::default());
         let pi = self
             .builder
@@ -1199,17 +1199,17 @@ impl<'ctx> Lower<'ctx> {
         let 有 = self.ctx.append_basic_block(fnv, "rel.has");
         let 出 = self.ctx.append_basic_block(fnv, "rel.exit");
         self.builder.build_conditional_branch(is_null, 空, 有).map_err(|e| e.to_string())?;
-        //nt: 空⇒跳过
+        
         self.builder.position_at_end(空);
         self.builder.build_unconditional_branch(出).map_err(|e| e.to_string())?;
-        //nt: 有⇒释放
+        
         self.builder.position_at_end(有);
         if 把手 {
-            //nt: 把手只放块本身
+            
             let free = self.rt_free();
             self.builder.build_call(free, &[p.into()], "").map_err(|e| e.to_string())?;
         } else if ty.starts_with("map(") {
-            //nt: 值为串才逐个放
+            
             let vstr = Self::map_value_ty(&ty).as_deref() == Some("str");
             let fv = self.rt_map_free();
             let _ = fv;
@@ -1220,7 +1220,7 @@ impl<'ctx> Lower<'ctx> {
                 &[p.into(), self.ci(if vstr { 1 } else { 0 })],
             )?;
         } else {
-            //nt: 列表同构布局
+            
             let t = self.列表型();
             let dp = self
                 .builder
@@ -1230,7 +1230,7 @@ impl<'ctx> Lower<'ctx> {
                 .builder
                 .build_load(self.pty(), dp, "lv")
                 .map_err(|e| e.to_string())?;
-            //nt: 元素按类型逐个放
+            
             let ety = Self::seq_elem_ty(&ty).unwrap_or_default();
             let 拥有元素 = f
                 .locals
@@ -1262,7 +1262,7 @@ impl<'ctx> Lower<'ctx> {
             self.builder.build_call(free, &[dv.into()], "").map_err(|e| e.to_string())?;
             self.builder.build_call(free, &[p.into()], "").map_err(|e| e.to_string())?;
         }
-        //nt: 置零⇒与读取同优先级
+        
         if allocas.get(lid).and_then(|x| *x).is_none() {
             let mut 槽 = self.值槽.borrow_mut();
             if let Some(x) = 槽.get_mut(lid) {
@@ -1277,7 +1277,7 @@ impl<'ctx> Lower<'ctx> {
         Ok(())
     }
 
-    ///nt: 逐个释放元素指针
+    
     fn 逐元素释放(
         &mut self,
         dv: PointerValue<'ctx>,
@@ -1306,7 +1306,7 @@ impl<'ctx> Lower<'ctx> {
             .map_err(|e| e.to_string())?;
         self.builder.build_conditional_branch(未完, 体, 出).map_err(|e| e.to_string())?;
         self.builder.position_at_end(体);
-        //nt: 元素槽按八字节
+        
         let 偏 = self
             .builder
             .build_int_mul(当前, i64t.const_int(8, false), "eoff")
@@ -1358,7 +1358,7 @@ impl<'ctx> Lower<'ctx> {
         allocas: &[Option<PointerValue<'ctx>>],
         p: &Place,
     ) -> Result<BasicValueEnum<'ctx>, String> {
-        //nt: 值槽直取
+        
         if p.proj.is_empty() {
             let v = self.值槽.borrow().get(p.base).and_then(|x| *x);
             if let Some(bv) = v {
@@ -1384,10 +1384,10 @@ impl<'ctx> Lower<'ctx> {
         Ok(v)
     }
 
-    ///nt: 积类型一层复印
+    
     fn deep_copy_struct(&mut self, name: &str, val: StructValue<'ctx>) -> Result<BasicValueEnum<'ctx>, String> {
         let st = *self.structs.get(name).ok_or_else(|| format!("缺类型 {}", name))?;
-        //nt: alloca提到入口
+        
         let 原块 = self.builder.get_insert_block();
         let tmp = {
             let 入口 = 原块
@@ -1428,7 +1428,7 @@ impl<'ctx> Lower<'ctx> {
                     .map_err(|e| e.to_string())?;
                 self.builder.build_store(fp, picked).map_err(|e| e.to_string())?;
             } else if base == "list" || base == "que" || base == "stack" || base == "map" {
-                //nt: 容器字段按元素深拷
+                
                 let 内 = ft
                     .0
                     .split_once('(')
@@ -1469,7 +1469,7 @@ impl<'ctx> Lower<'ctx> {
         self.builder.build_load(st, tmp, "dcv").map_err(|e| e.to_string())
     }
 
-    ///nt: 聚合开一段并写入
+    
     fn 开段存聚合(
         &mut self,
         base: &str,
@@ -1493,11 +1493,11 @@ impl<'ctx> Lower<'ctx> {
         p: &Place,
         v: BasicValueEnum<'ctx>,
     ) -> Result<(), String> {
-        //nt: 值槽记录
+        
         if p.proj.is_empty() {
             let 无栈 = allocas.get(p.base).map(|a| a.is_none()).unwrap_or(false);
             if 无栈 {
-                //nt: 指针槽收聚合⇒开段存
+                
                 let dst = self.place_ty(f, p);
                 let base = dst.0.trim_end_matches('*').to_string();
                 if dst.0.ends_with('*') && self.structs.contains_key(&base) {
@@ -1519,7 +1519,7 @@ impl<'ctx> Lower<'ctx> {
         }
         let a = self.place_ptr(allocas, p, f)?;
         let dst = self.place_ty(f, p);
-        //nt: 积类型一层复印
+        
         let mut v = v;
         let base = dst.0.trim_end_matches('*').to_string();
         if let BasicValueEnum::StructValue(sv) = v {
@@ -1527,7 +1527,7 @@ impl<'ctx> Lower<'ctx> {
                 v = self.deep_copy_struct(&base, sv)?;
             }
         }
-        //nt: 开段存结构
+        
         if dst.0.ends_with('*') && self.structs.contains_key(&base) {
             if let BasicValueEnum::StructValue(sv) = v {
                 let mem = self.开段存聚合(&base, sv)?;
@@ -1583,14 +1583,14 @@ impl<'ctx> Lower<'ctx> {
                 self.want = Some(self.local_ty(f, lhs.base));
                 let v = self.rvalue(f, allocas, rhs)?;
                 self.want = None;
-                //nt: str 赋值即堆副本
+                
                 let v = if self.place_ty(f, lhs).0 == "str" && !matches!(rhs, Rvalue::BinOp { .. }) {
                     self.call_rt("prion_str_copy", &[self.pty()], Some(self.pty()), &[v])?
                 } else {
                     v
                 };
                 self.store_place(f, allocas, lhs, v)?;
-                //nt: 容器赋值移交
+                
                 self.容器移交(f, allocas, lhs, rhs)?;
             }
             Stmt::Call { name, args } => {
@@ -1607,15 +1607,15 @@ impl<'ctx> Lower<'ctx> {
                 }
             }
             Stmt::AccessBegin(_) | Stmt::AccessEnd(_) => {}
-            //nt: 对象三件套本步空臂
+            
             Stmt::Alloc { .. } | Stmt::Bind { .. } => {}
-            //nt: kill 挂名已展开
+            
             Stmt::Kill { .. } => {}
-            //nt: 释放局部当前值
+            
             Stmt::DropVar { lid } => {
                 self.释放局部(f, allocas, *lid)?;
             }
-            //nt: 就地 Drop 放容器
+            
             Stmt::Drop { obj } => {
                 let lids: Vec<LocalId> = f
                     .locals
@@ -1628,7 +1628,7 @@ impl<'ctx> Lower<'ctx> {
                     self.释放局部(f, allocas, lid)?;
                 }
             }
-            //nt: 断言只在调试态
+            
             Stmt::Assert { cond, msg, fix } if self.dbg.is_some() => {
                 let c = self.value(f, allocas, cond)?;
                 let i1 = self.to_bool(c)?;
@@ -1651,7 +1651,7 @@ impl<'ctx> Lower<'ctx> {
                 self.builder.build_unreachable().map_err(|e| e.to_string())?;
                 self.builder.position_at_end(ok);
             }
-            //nt: 发布态不发断言
+            
             Stmt::Assert { .. } => {}
             Stmt::ListSet { list, index, value } => {
                 let lt = self.arg_ty(f, list);
@@ -1660,7 +1660,7 @@ impl<'ctx> Lower<'ctx> {
                 let iv = self.value(f, allocas, index)?;
                 let vv = self.value(f, allocas, value)?;
                 if let Some(st) = self.structs.get(&et).copied() {
-                    //nt: 聚合按地址
+                    
                     let a = self.alloca(st, "as").map_err(|e| e.to_string())?;
                     self.builder.build_store(a, vv).map_err(|e| e.to_string())?;
                     self.call_rt(
@@ -1699,7 +1699,7 @@ impl<'ctx> Lower<'ctx> {
         Ok(())
     }
 
-    ///nt: 内联汇编
+    
     fn asm_stmt(
         &mut self,
         f: &Function,
@@ -1710,7 +1710,7 @@ impl<'ctx> Lower<'ctx> {
         let mut in_ty = Vec::new();
         for (_, v) in &form.ins {
             let x = self.value(f, allocas, v)?;
-            //nt: 实参按宽度
+            
             let want = self.field_ty(&Ty(self.arg_ty(f, v)));
             let x = match (x, want) {
                 (BasicValueEnum::IntValue(i), BasicTypeEnum::IntType(t))
@@ -1800,7 +1800,7 @@ impl<'ctx> Lower<'ctx> {
         }
     }
 
-    ///nt: 约束转寄存器类
+    
     fn llvm_constraint(c: &str, ty: &BasicTypeEnum<'ctx>) -> String {
         let w = match ty {
             BasicTypeEnum::IntType(t) => t.get_bit_width(),
@@ -1832,7 +1832,7 @@ impl<'ctx> Lower<'ctx> {
         }
     }
 
-    ///nt: 占位符改写
+    
     fn asm_template(tmpl: &str, names: &BTreeMap<String, usize>) -> String {
         let mut out = String::new();
         let bytes = tmpl.as_bytes();
@@ -1981,7 +1981,7 @@ impl<'ctx> Lower<'ctx> {
                     );
                 }
                 if let Some(宽) = 宽 {
-                    //nt: 聚合字面量
+                    
                     let pt = self.ctx.ptr_type(AddressSpace::default());
                     let at = pt.array_type(elems.len() as u32);
                     let a = self.alloca(at, "aarr").map_err(|e| e.to_string())?;
@@ -2039,7 +2039,7 @@ impl<'ctx> Lower<'ctx> {
                 let lv = self.value(f, allocas, list)?;
                 let iv = self.value(f, allocas, index)?;
                 if let Some(st) = self.structs.get(&et).copied() {
-                    //nt: 聚合整块拷
+                    
                     let a = self.alloca(st, "ae").map_err(|e| e.to_string())?;
                     self.call_rt(
                         "prion_list_copy_at",
@@ -2050,7 +2050,7 @@ impl<'ctx> Lower<'ctx> {
                     let v = self.builder.build_load(st, a, "av").map_err(|e| e.to_string())?;
                     return Ok(v);
                 }
-                //nt: 调试态走检查函数
+                
                 if self.dbg.is_some() {
                     let c = self.call_rt(
                         "prion_list_at",
@@ -2060,7 +2060,7 @@ impl<'ctx> Lower<'ctx> {
                     )?;
                     return self.from_slot(c, &et);
                 }
-                //nt: 八字节元素直读
+                
                 let raw = {
                     let 位 = self.builder
                         .build_int_sub(iv.into_int_value(), self.ity().into_int_type().const_int(1, false), "idx")
@@ -2089,7 +2089,7 @@ impl<'ctx> Lower<'ctx> {
             Rvalue::MapLit { pairs } => {
                 let wty = self.want.clone().map(|t| t.0).unwrap_or_default();
                 let vt = Self::map_value_ty(&wty).unwrap_or_else(|| "int".into());
-                 //nt: 键型按声明
+                 
                 let kty = if wty
                     .strip_prefix("map(")
                     .map(|r| r.split(',').next().unwrap_or("").trim() == "int")
@@ -2142,7 +2142,7 @@ impl<'ctx> Lower<'ctx> {
         }
     }
 
-    ///nt: 变体解引用
+    
     fn struct_value(
         &self,
         f: &Function,
@@ -2168,7 +2168,7 @@ impl<'ctx> Lower<'ctx> {
         }
     }
 
-    ///nt: 解析函数签名
+    
     fn fn_sig(s: &str) -> Option<(Vec<Ty>, Option<Ty>)> {
         let rest = s.strip_prefix("fn(")?;
         let mut depth = 1i32;
@@ -2258,8 +2258,8 @@ impl<'ctx> Lower<'ctx> {
         g
     }
 
-    //nt: 跨块槽全局
-    //nt: 同键共用一份存储
+    
+    
     fn slot_global(&mut self, _key: &str, ty: &Ty, idx: usize) -> Result<PointerValue<'ctx>, String> {
         let name = format!("prion_slot_{}", idx);
         if let Some(g) = self.module.get_global(&name) {
@@ -2281,8 +2281,8 @@ impl<'ctx> Lower<'ctx> {
         a: BasicValueEnum<'ctx>,
         b: BasicValueEnum<'ctx>,
     ) -> Result<BasicValueEnum<'ctx>, String> {
-        //nt: 整浮混合提升
-        //nt: 对齐C后端隐式转换
+        
+        
         if matches!(a, BasicValueEnum::FloatValue(_)) {
             if let BasicValueEnum::IntValue(bi) = b {
                 let fb = self
@@ -2326,7 +2326,7 @@ impl<'ctx> Lower<'ctx> {
         if let (BasicValueEnum::PointerValue(pa), BasicValueEnum::PointerValue(pb)) = (a, b) {
             let lt = self.arg_ty(f, lhs);
             let rt = self.arg_ty(f, rhs);
-            //nt: 句柄按地址比
+            
             let 是串 = lt == "str" || rt == "str";
             return match op {
                 BinOp::Add => {
@@ -2367,7 +2367,7 @@ impl<'ctx> Lower<'ctx> {
             _ => return Err("LLVM 后端算术只支持整数/浮点/字符串".into()),
         };
         let r = match op {
-            //nt: 发布态直接算
+            
             BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Mod
                 if self.dbg.is_none() =>
             {
@@ -2396,7 +2396,7 @@ impl<'ctx> Lower<'ctx> {
                 c.try_as_basic_value().basic().ok_or_else(|| "运行时调用没有返回值".to_string())?
             }
             BinOp::And | BinOp::Or => {
-                //nt: 逻辑与或归一
+                
                 let ca = self.to_bool(ai.into())?;
                 let cb = self.to_bool(bi.into())?;
                 let c = if op == BinOp::And {
@@ -2412,7 +2412,7 @@ impl<'ctx> Lower<'ctx> {
             BinOp::BitXor => self.builder.build_xor(ai, bi, "bxor").map_err(|e| e.to_string())?.into(),
             BinOp::Shl => self.builder.build_left_shift(ai, bi, "shl").map_err(|e| e.to_string())?.into(),
             BinOp::Shr => {
-                //nt: 按符号选右移
+                
                 let arith = !Self::fixed_width(f, lhs).map(|(_, s)| !s).unwrap_or(false);
                 self.builder.build_right_shift(ai, bi, arith, "shr").map_err(|e| e.to_string())?.into()
             }
@@ -2429,7 +2429,7 @@ impl<'ctx> Lower<'ctx> {
                     self.builder.build_int_z_extend(c, self.ctx.i64_type(), "bool").map_err(|e| e.to_string())?.into()
             }
         };
-        //nt: 结果按宽度截
+        
         if matches!(
             op,
             BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Mod
@@ -2458,7 +2458,7 @@ impl<'ctx> Lower<'ctx> {
         Ok(r)
     }
 
-    ///nt: 定长族宽度
+    
     fn fixed_width(f: &Function, v: &Value) -> Option<(u32, bool)> {
         let t = match v {
             Value::Local(id) => f.locals.get(*id).map(|l| l.ty.0.as_str())?,
@@ -2518,7 +2518,7 @@ impl<'ctx> Lower<'ctx> {
         }
         for (i, a) in args.iter().enumerate() {
             let ty = self.arg_ty(f, a);
-            //nt: 积类型不可印
+            
             if self.structs.contains_key(ty.trim_end_matches('*')) {
                 return Err("print 不收积类型——先取字段（结构可能成环）".into());
             }
@@ -2629,7 +2629,7 @@ impl<'ctx> Lower<'ctx> {
         if ty == "str" {
             return Ok(("%s".to_string(), v));
         }
-        //nt: 指针转整数
+        
         if let BasicValueEnum::PointerValue(p) = v {
             let i = self.builder.build_ptr_to_int(p, self.ctx.i64_type(), "pv").map_err(|e| e.to_string())?;
             return Ok(("%lld".to_string(), i.into()));
@@ -2646,7 +2646,7 @@ impl<'ctx> Lower<'ctx> {
         self.module.add_function("prion_bool_str", fty, None)
     }
 
-    ///nt: 内置函数分派
+    
     fn builtin(
         &mut self,
         f: &Function,
@@ -2679,11 +2679,11 @@ impl<'ctx> Lower<'ctx> {
         let v = match name {
             "len" => {
                 if Self::is_container_ty(&t0) && !t0.starts_with("map") {
-                    //nt: 列表长度直读
+                    
                     match vals.first() {
                         Some(BasicValueEnum::PointerValue(pp)) => {
                             let p = *pp;
-                            //nt: 空槽指向恒零哨兵再读
+                            
                             let isnull = self.builder.build_is_null(p, "len.null").map_err(|e| e.to_string())?;
                             let 哨兵 = self.len_zero_global();
                             let 安全 = self
@@ -2721,7 +2721,7 @@ impl<'ctx> Lower<'ctx> {
             }
             "push" => {
                 let mut a1 = *vals.get(1).ok_or_else(|| "push 要 2 个参数".to_string())?;
-                //nt: fn自有对象复印重绑
+                
                 if let (Value::Local(lid), BasicValueEnum::PointerValue(pv)) = (&args[1], a1) {
                     if f.locals.get(*lid).map(|l| l.fn_owned).unwrap_or(false) {
                         let base = f.locals[*lid].ty.0.trim_end_matches('*').to_string();
@@ -2738,7 +2738,7 @@ impl<'ctx> Lower<'ctx> {
                                 if let Some(a) = allocas[*lid] {
                                     self.builder.build_store(a, c).map_err(|e| e.to_string())?;
                                 } else if let Some(x) = self.值槽.borrow_mut().get_mut(*lid) {
-                                    //nt: 值槽也回写
+                                    
                                     *x = Some(c.into());
                                 }
                                 ESCAPED.with(|s| s.borrow_mut().insert(*lid));
@@ -2748,7 +2748,7 @@ impl<'ctx> Lower<'ctx> {
                     }
                 }
                 if let BasicValueEnum::StructValue(sv) = a1 {
-                    //nt: 聚合按地址
+                    
                     let st = sv.get_type();
                     let a = self.alloca(st, "ap").map_err(|e| e.to_string())?;
                     self.builder.build_store(a, sv).map_err(|e| e.to_string())?;
@@ -2778,7 +2778,7 @@ impl<'ctx> Lower<'ctx> {
             "insert" => {
                 let a2 = *vals.get(2).ok_or_else(|| "insert 要 3 个参数".to_string())?;
                 if let BasicValueEnum::StructValue(sv) = a2 {
-                    //nt: 聚合按地址
+                    
                     let st = sv.get_type();
                     let a = self.alloca(st, "ai").map_err(|e| e.to_string())?;
                     self.builder.build_store(a, sv).map_err(|e| e.to_string())?;
@@ -2887,7 +2887,7 @@ impl<'ctx> Lower<'ctx> {
                 }
             }
             "int" => {
-                //nt: 按型转int
+                
                 match vals[0] {
                     BasicValueEnum::IntValue(i) => self
                         .builder
@@ -2903,7 +2903,7 @@ impl<'ctx> Lower<'ctx> {
                 }
             }
             "float" => {
-                //nt: 按型转float
+                
                 match vals[0] {
                     BasicValueEnum::PointerValue(_) => {
                         self.call_rt("prion_float_of_str", &[self.pty()], Some(BasicTypeEnum::from(self.ctx.f64_type())), &vals)?
@@ -2932,7 +2932,7 @@ impl<'ctx> Lower<'ctx> {
             }
             "sub_str" => self.call_rt("prion_sub_str", &[self.pty(), self.ity(), self.ity()], Some(self.pty()), &vals[0..3])?,
             "nth_char" => self.call_rt("prion_nth_char", &[self.pty(), self.ity()], Some(self.pty()), &vals[0..2])?,
-            //nt: 串顺序取字符
+            
             "#str_iter_start" => {
                 self.call_rt("prion_str_iter_start", &[self.pty()], None, &vals[0..1])?;
                 self.ctx.i64_type().const_int(0, false).into()
@@ -2943,7 +2943,7 @@ impl<'ctx> Lower<'ctx> {
             "#str_copy" => self.call_rt("prion_str_copy", &[self.pty()], Some(self.pty()), &vals)?,
             "#dc_list" => self.call_rt("prion_dc_list", &[self.pty(), self.ity()], Some(self.pty()), &vals[0..2])?,
             "#dc_map" => self.call_rt("prion_dc_map", &[self.pty(), self.ity()], Some(self.pty()), &vals[0..2])?,
-            //nt: 结构体深拷
+            
             n if n.starts_with("#dcdeep_") => {
                 let 型 = n.trim_start_matches("#dcdeep_").to_string();
                 match vals[0] {
@@ -2955,7 +2955,7 @@ impl<'ctx> Lower<'ctx> {
             "read_file" => self.call_rt("prion_read_file", &[self.pty()], Some(self.pty()), &vals)?,
             "save_file" => self.call_rt("prion_save_file", &[self.pty(), self.pty()], Some(self.ity()), &vals[0..2])?,
             "run" => {
-                //nt: 缺省为空
+                
                 let p0 = *vals.first().ok_or_else(|| "run 要 1 个参数".to_string())?;
                 let a1 = vals.get(1).copied().unwrap_or_else(|| self.ctx.ptr_type(AddressSpace::default()).const_null().into());
                 let a2 = match vals.get(2).copied() {
@@ -3009,7 +3009,7 @@ impl<'ctx> Lower<'ctx> {
                     .builder
                     .build_int_to_ptr(i, self.ctx.ptr_type(AddressSpace::default()), "mmio")
                     .map_err(|e| e.to_string())?;
-                //nt: 符号扩展
+                
                 let w = match name {
                     "read_8" => 8,
                     "read_16" => 16,
@@ -3082,14 +3082,14 @@ impl<'ctx> Lower<'ctx> {
     }
 }
 
-//nt: SSA 值局部筛选
+
 fn 单选局部(f: &Function) -> std::collections::BTreeSet<usize> {
     prion_walk::ssa::ssa值局部(f)
 }
 
 impl<'ctx> Lower<'ctx> {
-    //nt: 列表结构体
-    //nt: len 空槽哨兵
+    
+    
     fn len_zero_global(&mut self) -> inkwell::values::GlobalValue<'ctx> {
         if let Some(g) = self.module.get_global("prion_len_zero") {
             return g;
@@ -3110,7 +3110,7 @@ impl<'ctx> Lower<'ctx> {
         t
     }
 
-    //nt: 取列表字段
+    
     fn 列表字段(&mut self, p: inkwell::values::PointerValue<'ctx>, 序: u32) -> Result<inkwell::values::BasicValueEnum<'ctx>, String> {
         let t = self.列表型();
         let sp = self

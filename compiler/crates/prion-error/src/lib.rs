@@ -1,12 +1,12 @@
-//! prion-error —— Prion 错误体系（最小版：结构化诊断「5 段位」+ 词法错误码 `E0xx`）
-//!
-//! 5 段位（哪/做/缺/致/改）渲染为：`{哪} 处 {做} 的 {缺}「{致}」，{引导词}{改}`
-//!
-//! 错误码分段：
-//! `E0` 词法 / `E1` 语法 / `E2` 检查 / `E3` 中间表示 / `E4` 后端 /
-//! `E5` 工程·配置 / `E6` 环境·外部 / `E7` 编译器内部 / `E9` 其它未归类。
 
-//nt: 源位置
+
+
+
+
+
+
+
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Span {
     pub line: usize,
@@ -14,14 +14,14 @@ pub struct Span {
     pub len: usize,
 }
 
-//nt: 渲染语气
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tone {
     Suggest,
     Fix,
 }
 
-//nt: 5 段位
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DiagParts {
     pub 哪: String,
@@ -29,11 +29,11 @@ pub struct DiagParts {
     pub 缺: String,
     pub 致: String,
     pub 改: String,
-    //nt: 编译器预期
+    
     pub 预期: String,
-    //nt: 详细解释
+    
     pub 详解: String,
-    //nt: 一键应用
+    
     pub 可应用: String,
 }
 
@@ -55,35 +55,35 @@ impl DiagParts {
         }
     }
 
-    //nt: 编译器预期，链式补
+    
     pub fn 预期(mut self, v: impl Into<String>) -> Self {
         self.预期 = v.into();
         self
     }
-    //nt: 详细解释，链式补
+    
     pub fn 详解(mut self, v: impl Into<String>) -> Self {
         self.详解 = v.into();
         self
     }
-    //nt: 一键应用的可套用代码
+    
     pub fn 可应用(mut self, v: impl Into<String>) -> Self {
         self.可应用 = v.into();
         self
     }
 }
 
-//nt: 渲染上下文
+
 pub struct RenderCtx<'a> {
     pub code: &'a str,
     pub file: &'a str,
     pub src_line: &'a str,
 }
 
-//nt: 渲染完整句
-//nt: 空子句省略
+
+
 pub fn render_full(parts: &DiagParts, tone: Tone, cx: &RenderCtx) -> String {
     let mut s = String::new();
-    //nt: 头：码+位置
+    
     if !cx.code.is_empty() {
         s.push_str(&format!("[{}] ", cx.code));
     }
@@ -93,9 +93,9 @@ pub fn render_full(parts: &DiagParts, tone: Tone, cx: &RenderCtx) -> String {
             "位于 {} {}的「{}」发生错误",
             cx.file, 哪, parts.做
         )),
-        //nt: 有文件 + 行、无「
+        
         (false, false, true) => s.push_str(&format!("位于 {} {}发生错误", cx.file, 哪)),
-        //nt: 无行号形态
+        
         (false, true, false) => {
             s.push_str(&format!("位于 {} 的「{}」发生错误", cx.file, parts.做))
         }
@@ -105,11 +105,11 @@ pub fn render_full(parts: &DiagParts, tone: Tone, cx: &RenderCtx) -> String {
         (_, true, false) => s.push_str(&format!("「{}」发生错误", parts.做)),
         _ => s.push_str("发生错误"),
     }
-    //nt: 源码
+    
     if !cx.src_line.is_empty() {
         s.push_str(&format!("，源码为：{}", cx.src_line.trim()));
     }
-    //nt: 错误为
+    
     let mut 错 = parts.缺.clone();
     if !parts.致.is_empty() {
         错.push_str(&format!("「{}」", parts.致));
@@ -117,12 +117,12 @@ pub fn render_full(parts: &DiagParts, tone: Tone, cx: &RenderCtx) -> String {
     if !错.is_empty() {
         s.push_str(&format!("，错误为：{}", 错));
     }
-    //nt: 编译器预期为
+    
     if !parts.预期.is_empty() {
         s.push_str(&format!("，编译器预期为：{}", parts.预期));
     }
     s.push('。');
-    //nt: 改法+一键应用
+    
     if !parts.改.is_empty() {
         s.push_str(match tone {
             Tone::Suggest => "建议：",
@@ -134,16 +134,16 @@ pub fn render_full(parts: &DiagParts, tone: Tone, cx: &RenderCtx) -> String {
         }
         s.push('。');
     }
-    //nt: 详细解释
+    
     if !parts.详解.is_empty() {
         s.push_str(&format!("详细解释如下：{}", parts.详解));
     }
     s
 }
 
-//nt: 按错误码的默认「预期
-//nt: 码段
-//nt: E4 后端 / E5
+
+
+
 pub fn code_defaults(code: &str) -> (&'static str, &'static str) {
     match code {
         "E202" => (
@@ -335,7 +335,7 @@ pub fn code_defaults(code: &str) -> (&'static str, &'static str) {
     }
 }
 
-//nt: 渲染5段位→完整句
+
 pub fn render(parts: &DiagParts, tone: Tone) -> String {
     let mut s = String::new();
     match (parts.哪.is_empty(), parts.做.is_empty()) {
@@ -358,23 +358,23 @@ pub fn render(parts: &DiagParts, tone: Tone) -> String {
     s
 }
 
-//nt: 词法错误码E0xx
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LexCode {
-    //nt: 不识字符
+    
     E001,
-    //nt: nt 形态错
+    
     E002,
-    //nt: 数字字面量错
+    
     E003,
-    //nt: 字符串字面量/转义错
+    
     E004,
-    //nt: 原样串形态错
+    
     E005,
-    //nt: 换行符不合契约
+    
     E006,
-    //nt: 源文件带 BOM
+    
     E007,
 }
 
@@ -392,24 +392,24 @@ impl LexCode {
     }
 }
 
-//nt: 渲染词法错误
+
 pub fn render_lex(code: LexCode, parts: &DiagParts, tone: Tone) -> String {
     format!("[{}] {}", code.number(), render(parts, tone))
 }
 
-//nt: 语法错误码E1xx
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ParseCode {
-    //nt: 体未收束
+    
     E101,
-    //nt: 多余收束符
+    
     E102,
-    //nt: 空体
+    
     E103,
-    //nt: 块开关不配对
+    
     E104,
-    //nt: else 位置错
+    
     E105,
 }
 
@@ -425,22 +425,22 @@ impl ParseCode {
     }
 }
 
-//nt: 渲染语法错误
+
 pub fn render_parse(code: ParseCode, parts: &DiagParts, tone: Tone) -> String {
     format!("[{}] {}", code.number(), render(parts, tone))
 }
 
-//nt: 检查错误码 E2xx
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CheckCode {
-    //nt: 名字
+    
     E201,
-    //nt: 类型
+    
     E202,
-    //nt: 内存语义
+    
     E203,
-    //nt: 穷尽性
+    
     E204,
 }
 
@@ -455,29 +455,29 @@ impl CheckCode {
     }
 }
 
-//nt: 渲染检查错误
+
 pub fn render_check(code: CheckCode, parts: &DiagParts, tone: Tone) -> String {
     format!("[{}] {}", code.number(), render(parts, tone))
 }
 
-//nt: 中间表示错误码 E3
-//nt: E3段首份码清单
+
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IrCode {
-    //nt: 表达式 / 语句结构
+    
     E301,
-    //nt: 容器操作
+    
     E302,
-    //nt: 自定义类型与字段
+    
     E303,
-    //nt: 跨块 / 模块引用
+    
     E304,
-    //nt: 和类型
+    
     E305,
-    //nt: 类型标注与容器元素类
+    
     E306,
-    //nt: 未归类的IR构建错
+    
     E309,
 }
 
@@ -495,17 +495,17 @@ impl IrCode {
     }
 }
 
-//nt: 后端·代码生成错误码
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GenCode {
-    //nt: 死环 / 执行不到的
+    
     E401,
-    //nt: 后端已支持的特性之外
+    
     E402,
-    //nt: 产出的中间产物被编译
+    
     E403,
-    //nt: 后端内部缺陷
+    
     E404,
 }
 
@@ -520,19 +520,19 @@ impl GenCode {
     }
 }
 
-//nt: 工程·配置错误码 E
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CliCode {
-    //nt: 不认识的命令
+    
     E501,
-    //nt: 不认识的选项
+    
     E502,
-    //nt: 选项取值非法
+    
     E503,
-    //nt: 多余的参数
+    
     E504,
-    //nt: 找不到目标
+    
     E505,
 }
 
@@ -548,17 +548,17 @@ impl CliCode {
     }
 }
 
-//nt: 环境·外部错误码 E
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EnvCode {
-    //nt: 调不起编译器
+    
     E601,
-    //nt: 读写文件 / 目录失
+    
     E602,
-    //nt: 起不了子进程
+    
     E603,
-    //nt: 子进程的结束状态无法
+    
     E604,
 }
 
@@ -573,11 +573,11 @@ impl EnvCode {
     }
 }
 
-//nt: 编译器内部错误码 E
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InternalCode {
-    //nt: 编译器内部错误
+    
     E701,
 }
 
@@ -588,7 +588,7 @@ impl InternalCode {
         }
     }
 }
-//nt: 编译器错误码注册表
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Code {
     E001, E002, E003, E004, E005, E006, E007,
@@ -602,7 +602,7 @@ pub enum Code {
 }
 
 impl Code {
-    //nt: 码号文本
+    
     pub fn as_str(&self) -> &'static str {
         match self {
             Code::E001 => "E001", Code::E002 => "E002", Code::E003 => "E003",

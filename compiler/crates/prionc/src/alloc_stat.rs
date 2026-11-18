@@ -1,19 +1,19 @@
-//! 分配统计
-//!
-//! 包一层全局分配器，统计分配次数与字节数；只在 `PRION_ALLOC_STAT=1` 时输出。
-//! 计数用原子操作，开销远小于一次分配，可以常开。
+
+
+
+
 
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-//nt: 分配次数
+
 static 次数: AtomicUsize = AtomicUsize::new(0);
-//nt: 分配字节
+
 static 字节: AtomicUsize = AtomicUsize::new(0);
-//nt: 释放次数
+
 static 释放: AtomicUsize = AtomicUsize::new(0);
 
-//nt: 计数分配器
+
 pub struct 计数;
 
 unsafe impl GlobalAlloc for 计数 {
@@ -35,7 +35,7 @@ unsafe impl GlobalAlloc for 计数 {
     }
 }
 
-//nt: 打印统计
+
 pub fn 报告() {
     if std::env::var("PRION_ALLOC_STAT").is_err() {
         return;
