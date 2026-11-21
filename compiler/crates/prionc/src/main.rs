@@ -1352,7 +1352,12 @@ fn do_build_llvm(
             "fix the source and retry",
         )));
     }
-    let st = Command::new(&cc).arg(&obj).arg("-o").arg(exe).status();
+    let mut link = Command::new(&cc);
+    link.arg(&obj).arg("-o").arg(exe);
+    if !cfg!(windows) {
+        link.arg("-lm");
+    }
+    let st = link.status();
     match st {
         Ok(s) if s.success() => Ok(()),
         Ok(_) => Err(fail101(render_nofile(
