@@ -136,6 +136,8 @@ pub enum Tag {
     VariantTag,
     VariantGet,
     Ref,
+    CtxArray,
+    CtxGet,
     Alloc,
     Bind,
     Drop,
@@ -148,6 +150,7 @@ pub enum Tag {
     Assert,
     Asm,
     Nop,
+    NopRel,
 }
 
 
@@ -470,6 +473,17 @@ impl 转中<'_> {
                 }
                 r
             }
+            Rvalue::CtxArray { args } => {
+                let a: Vec<InstId> = args.iter().map(|v| self.val(v)).collect();
+                let (st, ln) = self.push_extra(&a);
+                self.push(Tag::CtxArray, st, ln, 0)
+            }
+            Rvalue::CtxGet { ctx, idx, ty } => {
+                let cid = self.val(&Value::Local(*ctx));
+                let tid = self.ty_id(ty);
+                let (st, _ln) = self.push_extra(&[tid]);
+                self.push(Tag::CtxGet, cid, st, *idx as u32)
+            }
         }
     }
 }
@@ -486,7 +500,7 @@ fn 转函数(f: &Function) -> FlatFn {
             块参集.insert(*pid);
         }
         for st in &b.stmts {
-            if let Stmt::Assign { lhs, rhs } = st {
+            if let Some((lhs, rhs)) = st.赋值体() {
                 if lhs.base < n {
                     if lhs.proj.is_empty() {
                         定义数[lhs.base] += 1;
@@ -619,7 +633,13 @@ fn 转语句(t: &mut 转中, st: &Stmt) {
             };
             let nb = 裸.map(|u| u as u32 + 1).unwrap_or(0);
             
-            let nc: u32 = if matches!(rhs, Rvalue::BinOp { .. }) { 0 } else { 1 };
+            let nc: u32 = if matches!(rhs, Rvalue::BinOp { .. })
+                || matches!(rhs, Rvalue::Call { name, .. } if crate::返回自有串(name))
+            {
+                0
+            } else {
+                1
+            };
             
             if lhs.proj.is_empty() {
                 
@@ -684,6 +704,53 @@ fn 转语句(t: &mut 转中, st: &Stmt) {
             let np = nop as usize;
             if np < t.places.len() {
                 t.places[np] = Some(lhs.clone());
+            }
+        }
+        Stmt::AssignRelease { lhs, rhs } if lhs.proj.is_empty() => {
+            let nc: u32 = if matches!(rhs, Rvalue::BinOp { .. })
+                || matches!(rhs, Rvalue::Call { name, .. } if crate::返回自有串(name))
+            {
+                0
+            } else {
+                1
+            };
+            let v = t.rvalue(rhs);
+            let np = t.push(Tag::NopRel, v, 0, nc) as usize;
+            if np < t.places.len() {
+                t.places[np] = Some(lhs.clone());
+            }
+            t.定(lhs.base, v);
+        }
+        Stmt::AssignRelease { lhs, rhs } => {
+            let mut cur = t.val(&Value::Local(lhs.base));
+            let pc = lhs.proj.len();
+            for (pi, pr) in lhs.proj.iter().enumerate() {
+                let is_last = pi + 1 == pc;
+                cur = match pr {
+                    Proj::Field(n) => {
+                        let fid = t.intern(n);
+                        if is_last {
+                            t.push(Tag::GetFieldAddr, cur, fid, 0)
+                        } else {
+                            t.push(Tag::GetField, cur, fid, 0)
+                        }
+                    }
+                    Proj::Index(i) => {
+                        let ic = t.int_c(*i);
+                        if is_last {
+                            t.push(Tag::GetIndexAddr, cur, ic, 0)
+                        } else {
+                            t.push(Tag::GetIndex, cur, ic, 0)
+                        }
+                    }
+                    Proj::Deref => t.push(Tag::Deref, cur, 0, 0),
+                };
+            }
+            let v = t.rvalue(rhs);
+            let nop = t.push(Tag::Nop, v, 0, 0) as usize;
+            let _ = cur;
+            if nop < t.places.len() {
+                t.places[nop] = Some(lhs.clone());
             }
         }
         Stmt::Call { name, args } => {
@@ -887,7 +954,7 @@ fn 还原函数(f: &mut Function, ffn: &FlatFn, src: &Program) {
     let n = f.locals.len();
     let mut defs: Vec<Option<u32>> = vec![None; n];
     for (iid, inst) in ffn.insts.iter().enumerate() {
-        if inst.tag != Tag::Nop {
+        if !matches!(inst.tag, Tag::Nop | Tag::NopRel) {
             continue;
         }
         if let Some(Some(pl)) = ffn.places.get(iid) {
@@ -899,7 +966,7 @@ fn 还原函数(f: &mut Function, ffn: &FlatFn, src: &Program) {
     
     let mut 被引: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
     for inst in &ffn.insts {
-        if inst.tag == Tag::Nop {
+        if matches!(inst.tag, Tag::Nop | Tag::NopRel) {
             被引.insert(inst.a);
         }
         let 载荷: Vec<u32> = match inst.tag {
@@ -959,6 +1026,11 @@ fn 还原语句(
                 右值还原(ffn, inst.a, defs, src)?
             };
             Stmt::Assign { lhs, rhs }
+        }
+        Tag::NopRel => {
+            let lhs = ffn.places.get(iid).and_then(|x| x.clone())?;
+            let rhs = 右值还原(ffn, inst.a, defs, src)?;
+            Stmt::AssignRelease { lhs, rhs }
         }
         Tag::Call if !被引.contains(&(iid as u32)) => {
             let name = ffn.strings.get(inst.a as usize).cloned()?;
@@ -1131,6 +1203,25 @@ fn 右值还原(ffn: &FlatFn, id: u32, defs: &[Option<u32>], src: &Program) -> O
             ),
         },
         Tag::Ref => Rvalue::Ref(ffn.places.get(id as usize).and_then(|x| x.clone())?),
+        Tag::CtxArray => Rvalue::CtxArray {
+            args: (0..inst.b)
+                .filter_map(|k| ffn.extra.get(inst.a as usize + k as usize).copied())
+                .map(|x| 值还原(ffn, x, defs))
+                .collect::<Option<Vec<_>>>()?,
+        },
+        Tag::CtxGet => {
+            let cv = 值还原(ffn, inst.a, defs)?;
+            let ctx = match cv {
+                Value::Local(id) => id,
+                _ => return None,
+            };
+            let tid = ffn.extra.get(inst.b as usize).copied()?;
+            Rvalue::CtxGet {
+                ctx,
+                idx: inst.c as usize,
+                ty: Ty(ffn.strings.get(tid as usize).cloned()?),
+            }
+        }
         _ => return None,
     })
 }

@@ -139,7 +139,7 @@ impl Spanned {
 
 const KEYWORDS: &[&str] = &[
     
-    "add", "call", "fn", "val", "type", "hide", "give",
+    "add", "call", "take", "fn", "val", "type", "hide", "give",
     
     "outs",
     
@@ -150,6 +150,8 @@ const KEYWORDS: &[&str] = &[
     "unsafe", "pub", "sle", "ABI", "kill", "asm",
     
     "fix",
+    
+    "trait", "impl", "spawn", "share", "send",
     
     "int", "float", "bool", "str", "int_8", "int_16", "int_32", "int_64", "uint_8", "uint_16",
     "uint_32", "uint_64",

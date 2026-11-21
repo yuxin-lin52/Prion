@@ -189,6 +189,12 @@ fn 读右值(r: &Rvalue, out: &mut Vec<(LocalId, usize, usize)>) {
         }
         Rvalue::VariantTag(v) => 读值(v, out),
         Rvalue::VariantGet { value, .. } => 读值(value, out),
+        Rvalue::CtxArray { args } => {
+            for a in args {
+                读值(a, out);
+            }
+        }
+        Rvalue::CtxGet { ctx, .. } => out.push((*ctx, 0, 0)),
         Rvalue::FnRef { .. } => {}
     }
 }
@@ -196,7 +202,7 @@ fn 读右值(r: &Rvalue, out: &mut Vec<(LocalId, usize, usize)>) {
 
 fn 读语句(s: &Stmt, out: &mut Vec<(LocalId, usize, usize)>) {
     match s {
-        Stmt::Assign { lhs, rhs } => {
+        Stmt::Assign { lhs, rhs } | Stmt::AssignRelease { lhs, rhs } => {
             读右值(rhs, out);
             if 带投影(lhs) {
                 out.push((lhs.base, 1, 0));
@@ -255,7 +261,7 @@ pub fn ssa值局部(f: &Function) -> BTreeSet<LocalId> {
                     使用[id].push((bi, si, 标 as u8));
                 }
             }
-            if let Stmt::Assign { lhs, rhs } = s {
+            if let Some((lhs, rhs)) = s.赋值体() {
                 if !带投影(lhs) && lhs.base < n {
                     定义数[lhs.base] += 1;
                     定义处[lhs.base] = Some((bi, si));

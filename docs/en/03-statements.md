@@ -25,6 +25,7 @@ case Err("reason"):
 ```
 
 - `case Variant(binding)` destructures the payload; `case _:` is the fallback.
+- Guards: `case Variant(binding) if cond:` enters the arm only when the condition holds, otherwise tries the next case; the condition must be a boolean and is read-only.
 - The match subject accepts any expression with an inferable type.
 - Exhaustiveness is checked at compile time — adding a variant exposes every stale match.
 - Statement form (as above) and expression form (inside fn bodies) both exist.

@@ -296,6 +296,10 @@ fn 右用(r: &Rvalue, out: &mut BTreeSet<LocalId>) {
             值用(key, out);
         }
         Rvalue::VariantLit { args, .. } => args.iter().for_each(|a| 值用(a, out)),
+        Rvalue::CtxArray { args } => args.iter().for_each(|a| 值用(a, out)),
+        Rvalue::CtxGet { ctx, .. } => {
+            out.insert(*ctx);
+        }
         Rvalue::VariantTag(v) => 值用(v, out),
         Rvalue::VariantGet { value, .. } => 值用(value, out),
         Rvalue::FnRef { .. } => {}
@@ -305,7 +309,7 @@ fn 右用(r: &Rvalue, out: &mut BTreeSet<LocalId>) {
 
 fn 语句读(s: &Stmt, out: &mut BTreeSet<LocalId>) {
     match s {
-        Stmt::Assign { rhs, .. } => 右用(rhs, out),
+        Stmt::Assign { rhs, .. } | Stmt::AssignRelease { rhs, .. } => 右用(rhs, out),
         Stmt::Call { args, .. } => args.iter().for_each(|a| 值用(a, out)),
         Stmt::ListSet { list, index, value } => {
             值用(list, out);
@@ -323,6 +327,96 @@ fn 语句读(s: &Stmt, out: &mut BTreeSet<LocalId>) {
         | Stmt::Alloc { .. } | Stmt::Bind { .. } | Stmt::Drop { .. }
         | Stmt::DropVar { .. }
         | Stmt::Kill { .. } => {}
+    }
+}
+
+
+fn 临时直通(f: &mut Function) {
+    let mut 读次: BTreeMap<LocalId, usize> = BTreeMap::new();
+    for b in f.blocks.iter() {
+        for s in b.stmts.iter() {
+            let mut 用 = BTreeSet::new();
+            语句读(s, &mut 用);
+            for l in 用 {
+                *读次.entry(l).or_insert(0) += 1;
+            }
+        }
+        if let Exit::Return(Some(Value::Local(l))) = &b.exit {
+            *读次.entry(*l).or_insert(0) += 1;
+        }
+    }
+    for b in f.blocks.iter_mut() {
+        let 句数 = b.stmts.len();
+        let mut 并: BTreeMap<usize, Option<Stmt>> = BTreeMap::new();
+        let mut i = 0;
+        while i + 1 < 句数 {
+            if 并.contains_key(&i) {
+                i += 1;
+                continue;
+            }
+            let (tmp, 右) = match &b.stmts[i] {
+                Stmt::Assign { lhs, rhs }
+                    if lhs.proj.is_empty()
+                        && matches!(rhs, Rvalue::Call { .. } | Rvalue::BinOp { .. }) =>
+                {
+                    (lhs.base, rhs.clone())
+                }
+                _ => {
+                    i += 1;
+                    continue;
+                }
+            };
+            let 合 = match f.locals.get(tmp) {
+                Some(l) => l.name.is_none() && l.ty.0 == "str",
+                None => false,
+            };
+            if !合 || 读次.get(&tmp).copied().unwrap_or(0) != 1 {
+                i += 1;
+                continue;
+            }
+            let dst = match &b.stmts[i + 1] {
+                Stmt::Assign { lhs, rhs } if lhs.proj.is_empty() => match rhs {
+                    Rvalue::Use(p) if p.proj.is_empty() && p.base == tmp => lhs.base,
+                    Rvalue::Const(Value::Local(u)) if *u == tmp => lhs.base,
+                    _ => {
+                        i += 1;
+                        continue;
+                    }
+                },
+                _ => {
+                    i += 1;
+                    continue;
+                }
+            };
+            if dst == tmp {
+                i += 1;
+                continue;
+            }
+            并.insert(i, Some(Stmt::Assign { lhs: Place::local(dst), rhs: 右 }));
+            并.insert(i + 1, None);
+            i += 2;
+        }
+        if 并.is_empty() {
+            continue;
+        }
+        let mut 留: Vec<Stmt> = Vec::with_capacity(句数);
+        let mut 标: Vec<Span> = Vec::with_capacity(句数);
+        for (i, s) in b.stmts.iter().enumerate() {
+            let sp = b.spans.get(i).copied().unwrap_or_default();
+            match 并.get(&i) {
+                Some(None) => {}
+                Some(Some(x)) => {
+                    留.push(x.clone());
+                    标.push(sp);
+                }
+                None => {
+                    留.push(s.clone());
+                    标.push(sp);
+                }
+            }
+        }
+        b.stmts = 留;
+        b.spans = 标;
     }
 }
 
@@ -783,6 +877,16 @@ fn container_ty_at(段: &[Token], i: usize) -> Option<String> {
     container_ty_at_raw(段, i).map(|s| 代换类型(&s))
 }
 
+
+fn token容器载荷(t: &str) -> Option<String> {
+    let inner = t.strip_prefix("list(")?.strip_suffix(')')?.trim();
+    if inner == "token" {
+        return Some("int".into());
+    }
+    let rest = inner.strip_prefix("token(")?;
+    Some(rest.strip_suffix(')').unwrap_or("int").trim().to_string())
+}
+
 fn container_ty_at_raw(段: &[Token], i: usize) -> Option<String> {
     let name = match 段.get(i)? {
         Token::Kw(k) => (*k).to_string(),
@@ -911,6 +1015,8 @@ struct Builder {
     
     常量值: std::rc::Rc<RefCell<BTreeMap<String, crate::consts::Const>>>,
     
+    串字面量: BTreeMap<LocalId, String>,
+    
     语句体返回: bool,
     
     types: std::rc::Rc<Vec<StructType>>,
@@ -920,6 +1026,10 @@ struct Builder {
     mod_by_tail: std::rc::Rc<BTreeMap<String, Vec<String>>>,
     
     extra: Vec<Function>,
+    
+    共享序: Vec<(String, LocalId, Ty)>,
+    
+    任务上下文: Option<(LocalId, Vec<(String, Ty)>)>,
     
     externs: Vec<ExternFn>,
     blocks: Vec<Block>,
@@ -1052,6 +1162,7 @@ impl Builder {
             期望类型: None,
             语句体返回: false,
             常量值,
+            串字面量: BTreeMap::new(),
             cur_line: CUR_LINE.with(|c| c.get()),
             cur_col: 0,
             cur_len: 0,
@@ -1064,6 +1175,8 @@ impl Builder {
             type_idx,
             types,
             extra: Vec::new(),
+            共享序: Vec::new(),
+            任务上下文: None,
             externs: Vec::new(),
             blocks: vec![Block {
                 id: 0,
@@ -1098,10 +1211,50 @@ impl Builder {
     }
 
     fn emit(&mut self, s: Stmt) {
+        self.记录串字面量(&s);
         let c = self.cur;
         let sp = Span { line: self.cur_line, col: self.cur_col, len: self.cur_len };
         self.blocks[c].stmts.push(s);
         self.blocks[c].spans.push(sp);
+    }
+
+    
+    fn 记录串字面量(&mut self, s: &Stmt) {
+        let (lhs, rhs) = match s {
+            Stmt::Assign { lhs, rhs } | Stmt::AssignRelease { lhs, rhs } => (lhs, rhs),
+            _ => return,
+        };
+        if !lhs.proj.is_empty() {
+            return;
+        }
+        let 源 = match rhs {
+            Rvalue::Const(Value::Str(t)) => Some(t.clone()),
+            Rvalue::Use(Place { base, proj }) if proj.is_empty() => self.串字面量.get(base).cloned(),
+            _ => None,
+        };
+        match 源 {
+            Some(t) => {
+                self.串字面量.insert(lhs.base, t);
+            }
+            None => {
+                self.串字面量.remove(&lhs.base);
+            }
+        }
+    }
+
+    
+    fn 查串下标(&self, base: &Value, k: i64) -> Result<(), BuildError> {
+        let Value::Local(id) = *base else { return Ok(()) };
+        let Some(t) = self.串字面量.get(&id) else { return Ok(()) };
+        if k < 1 || (k as usize) > t.len() {
+            return Err(BuildError {
+                message: format!("下标 {} 越界——字面量「{}」只有 {} 字节", k, t, t.len()),
+                code: prion_error::Code::E302,
+                line: CUR_LINE.with(|c| c.get()),
+                file: String::new(),
+            });
+        }
+        Ok(())
     }
 
     fn set_exit(&mut self, e: Exit) {
@@ -1178,6 +1331,8 @@ impl Builder {
         while matches!(t.get(*i), Some(Token::Sym("."))) {
             let field = match t.get(*i + 1) {
                 Some(Token::Ident(f)) | Some(Token::Str(f)) => f.to_string(),
+
+                Some(Token::Int(n)) if *n >= 1 => n.to_string(),
                 _ => return err("字段访问后应是字段名"),
             };
             *i += 2;
@@ -1365,8 +1520,89 @@ impl Builder {
         dc_tmps
     }
 
+    fn take_复制(&mut self, v: Value) -> Result<Value, BuildError> {
+        let ty = self.ty_of_value(v.clone());
+        let n = ty.0.clone();
+        let 标量 = matches!(
+            n.as_str(),
+            "int" | "float" | "bool" | "null" | "int_8" | "int_16" | "int_32" | "int_64"
+                | "uint_8" | "uint_16" | "uint_32" | "uint_64"
+        );
+        if 标量 || n.ends_with('*') {
+            return Ok(v);
+        }
+        if n == "str" {
+            let t = self.temp(ty);
+            self.emit(Stmt::Assign {
+                lhs: Place::local(t),
+                rhs: Rvalue::Call { name: "#str_copy".into(), args: vec![v] },
+            });
+            return Ok(Value::Local(t));
+        }
+        let 内 = |p: &str| -> Option<String> {
+            n.strip_prefix(p)?.strip_suffix(')').map(|s| s.trim().to_string())
+        };
+        let mut dcn: Option<(&'static str, i64)> = None;
+        for 前 in ["list(", "que(", "stack("] {
+            if let Some(e) = 内(前) {
+                let 串元 = e == "str";
+                let 可 = 串元 || matches!(
+                    e.as_str(),
+                    "int" | "float" | "bool" | "int_8" | "int_16" | "int_32" | "int_64"
+                        | "uint_8" | "uint_16" | "uint_32" | "uint_64"
+                );
+                if 可 {
+                    dcn = Some(("#dc_list", if 串元 { 1 } else { 0 }));
+                }
+                break;
+            }
+        }
+        if dcn.is_none() {
+            if let Some(kv) = 内("map(") {
+                let vv = kv.rsplit(',').next().unwrap_or("").trim().to_string();
+                let 串值 = vv == "str";
+                let 可 = 串值 || matches!(
+                    vv.as_str(),
+                    "int" | "float" | "bool" | "int_8" | "int_16" | "int_32" | "int_64"
+                        | "uint_8" | "uint_16" | "uint_32" | "uint_64"
+                );
+                if 可 {
+                    dcn = Some(("#dc_map", if 串值 { 1 } else { 0 }));
+                }
+            }
+        }
+        if let Some((名, 旗)) = dcn {
+            let t = self.temp(ty);
+            self.emit(Stmt::Assign {
+                lhs: Place::local(t),
+                rhs: Rvalue::Call { name: 名.into(), args: vec![v, Value::Int(旗)] },
+            });
+            return Ok(Value::Local(t));
+        }
+        if 可深拷(&n, &self.types[..]) {
+            let t = self.temp(ty);
+            self.emit(Stmt::Assign {
+                lhs: Place::local(t),
+                rhs: Rvalue::Call { name: format!("#dcdeep_{}", n), args: vec![v] },
+            });
+            return Ok(Value::Local(t));
+        }
+        err(format!("take 还不能复制「{}」这种类型", n))
+    }
+
     fn bin(&mut self, op: BinOp, lhs: Value, rhs: Value) -> Value {
-        
+        if matches!(op, BinOp::Eq | BinOp::Ne) && (matches!(lhs, Value::Null) || matches!(rhs, Value::Null)) {
+            let other = if matches!(lhs, Value::Null) { &rhs } else { &lhs };
+            let ty = self.ty_of_value(other.clone());
+            if ty.0.starts_with('?') && self.type_idx.contains_key(&ty.0) {
+                let tag = self.temp(Ty("int".into()));
+                self.emit(Stmt::Assign {
+                    lhs: Place::local(tag),
+                    rhs: Rvalue::VariantTag(other.clone()),
+                });
+                return self.bin(op, Value::Local(tag), Value::Int(0));
+            }
+        }
         if op == BinOp::Add && matches!(rhs, Value::Int(0)) {
             let t0 = self.ty_of_value(lhs.clone());
             let n = t0.0.as_str();
@@ -1587,28 +1823,82 @@ impl Builder {
             ExprKind::Float(x) => Ok(Value::Float(*x)),
             ExprKind::Str(s) => Ok(Value::Str(s.clone())),
             ExprKind::Bool(b) => Ok(Value::Bool(*b)),
-            ExprKind::Null => Ok(Value::Null),
+            ExprKind::Null => {
+                if let Some(exp) = self.期望类型.clone() {
+                    if exp.starts_with('?') && self.type_idx.contains_key(&exp) {
+                        let tmp = self.temp(Ty(exp.clone()));
+                        self.emit(Stmt::Assign {
+                            lhs: Place::local(tmp),
+                            rhs: Rvalue::VariantLit { ty: exp, tag: 0, args: vec![], tys: vec![] },
+                        });
+                        return Ok(Value::Local(tmp));
+                    }
+                }
+                Ok(Value::Null)
+            }
             ExprKind::Name { target, name } => match target {
                 Target::Val => self.expr_tree_val(name),
                 Target::Fn => {
                     let key = format!("{}|{}|{}", self.module, self.block, name);
-                    let tmp = self.temp(Ty(format!("fn {}", name)));
+                    
+                    let letfty = self.fns.get(&key).or_else(|| self.global_fns.get(&key)).map(|sg| {
+                        let ps: Vec<String> = sg.params.iter().map(|t| t.0.clone()).collect();
+                        format!("fn({}) {}", ps.join(", "), sg.ret.0)
+                    }).unwrap_or_else(|| format!("fn {}", name));
+                    let tmp = self.temp(Ty(letfty));
                     self.emit(Stmt::Assign { lhs: Place::local(tmp), rhs: Rvalue::FnRef { name: key } });
                     Ok(Value::Local(tmp))
                 }
                 _ => err(format!("裸名「{}」在此处不可用", name)),
             },
-            ExprKind::Call { verb, target, module: _, block, name, args } => {
+            ExprKind::Call { verb, target, module, block, name, args } => {
                 if *verb == Verb::Delta {
                     return err("delta 不出现在表达式树");
                 }
+                if *verb == Verb::Take {
+                    let src = if let Some(tb) = block {
+                        let blk_mod = if let Some(m) = module {
+                            if self.mod_has(m) {
+                                m.clone()
+                            } else {
+                                match self.resolve_module(m)? {
+                                    Some(f) => f,
+                                    None => return err(format!("模块「{}」找不到", m)),
+                                }
+                            }
+                        } else {
+                            self.module.clone()
+                        };
+                        self.check_pub(&blk_mod, tb)?;
+                        let slot_key = format!("{}|{}#{}", blk_mod, tb, name);
+                        match self.槽或建(&slot_key) {
+                            Some(id) => Value::Local(id),
+                            None => return err(format!("块「{}」的 val「{}」不存在", tb, name)),
+                        }
+                    } else {
+                        self.expr_tree_val(name)?
+                    };
+                    return self.take_复制(src);
+                }
                 let vals: Vec<Value> = args.iter().map(|a| self.expr_tree(a)).collect::<Result<_, _>>()?;
                 match target {
-                    Target::Fn => self.expr_tree_call_fn(name, block.as_deref(), vals),
+                    Target::Fn => self.expr_tree_call_fn(name, block.as_deref(), vals, module.as_deref()),
                     Target::Val => {
                         if let Some(tb) = block {
-                            
-                            let slot_key = format!("{}|{}#{}", self.module, tb, name);
+                            let blk_mod = if let Some(m) = module {
+                                if self.mod_has(m) {
+                                    m.clone()
+                                } else {
+                                    match self.resolve_module(m)? {
+                                        Some(f) => f,
+                                        None => return err(format!("模块「{}」找不到", m)),
+                                    }
+                                }
+                            } else {
+                                self.module.clone()
+                            };
+                            self.check_pub(&blk_mod, tb)?;
+                            let slot_key = format!("{}|{}#{}", blk_mod, tb, name);
                             match self.槽或建(&slot_key) {
                                 Some(id) => Ok(Value::Local(id)),
                                 None => err(format!("块「{}」的 val「{}」不存在", tb, name)),
@@ -1637,10 +1927,14 @@ impl Builder {
             ExprKind::Index { base, index } => {
                 let b = self.expr_tree(base)?;
                 let i = self.expr_tree(index)?;
-                let bty = self.value_ty(&b);
+                
+                let bty = self.value_ty(&b).trim_end_matches('*').to_string();
                 if bty == "str" {
-                    let tmp = self.temp(Ty("str".into()));
-                    self.emit(Stmt::Assign { lhs: Place::local(tmp), rhs: Rvalue::Call { name: "nth_char".into(), args: vec![b, i] } });
+                    if let ExprKind::Int(k) = index.kind {
+                        self.查串下标(&b, k)?;
+                    }
+                    let tmp = self.temp(Ty("int".into()));
+                    self.emit(Stmt::Assign { lhs: Place::local(tmp), rhs: Rvalue::Call { name: "#str_byte_at".into(), args: vec![b, i] } });
                     return Ok(Value::Local(tmp));
                 }
                 let is_map = bty == "map" || bty.starts_with("map(");
@@ -1723,9 +2017,31 @@ impl Builder {
                 };
                 Ok(self.bin(ir_op, l, r))
             }
-            ExprKind::Ternary { cond, then, otherwise } => {
+            ExprKind::Try(inner) => {
+                let v = self.expr_tree(inner)?;
+                let tag = self.temp(Ty("int".into()));
+                self.emit(Stmt::Assign { lhs: Place::local(tag), rhs: Rvalue::VariantTag(v.clone()) });
+                let bb_fail = self.nb();
+                let bb_ok = self.nb();
+                let iszero = self.bin(BinOp::Eq, Value::Local(tag), Value::Int(0));
+                self.set_exit(Exit::Branch { cond: iszero, targets: vec![
+                    Succ { target: bb_fail, args: vec![] },
+                    Succ { target: bb_ok, args: vec![] },
+                ] });
+                self.switch_to(bb_fail);
+                self.set_exit(Exit::Return(Some(v.clone())));
+                let dead = self.nb();
+                self.switch_to(dead);
+                self.switch_to(bb_ok);
+                let payload = self.temp(Ty("int".into()));
+                self.emit(Stmt::Assign {
+                    lhs: Place::local(payload),
+                    rhs: Rvalue::VariantGet { value: v, idx: 0, ty: Ty("int".into()) },
+                });
+                Ok(Value::Local(payload))
+            }
+            ExprKind::IfExpr { cond, then, otherwise } => {
                 let c = self.expr_tree(cond)?;
-                let t2 = self.temp(Ty("int".into()));
                 let bb_then = self.nb();
                 let bb_else = self.nb();
                 let bb_done = self.nb();
@@ -1735,23 +2051,27 @@ impl Builder {
                 ] });
                 self.switch_to(bb_then);
                 let tv = self.expr_tree(then)?;
-                let real_ty = match &tv {
-                    Value::Local(id) => self.f.locals.get(*id).map(|l| l.ty.clone()),
-                    Value::Int(_) => Some(Ty("int".into())),
-                    Value::Float(_) => Some(Ty("float".into())),
-                    Value::Str(_) => Some(Ty("str".into())),
-                    _ => None,
-                };
+                let mut ty = self.ty_of_value(tv.clone());
+                if ty.0 == "null" {
+                    if let Some(exp) = self.期望类型.clone() {
+                        ty = Ty(exp);
+                    }
+                }
+                let t2 = self.temp(ty.clone());
                 self.emit(Stmt::Assign { lhs: Place::local(t2), rhs: Rvalue::Const(tv) });
                 self.goto(bb_done);
                 self.switch_to(bb_else);
                 let ev = self.expr_tree(otherwise)?;
+                let ety = self.ty_of_value(ev.clone());
+                if ety.0 != ty.0 && ety.0 != "null" {
+                    return err(format!(
+                        "if 表达式的两个分支类型要一致——一边是「{}」，另一边是「{}」",
+                        ty.0, ety.0
+                    ));
+                }
                 self.emit(Stmt::Assign { lhs: Place::local(t2), rhs: Rvalue::Const(ev) });
                 self.goto(bb_done);
                 self.switch_to(bb_done);
-                if let Some(t) = real_ty {
-                    if let Some(l) = self.f.locals.get_mut(t2) { l.ty = t; }
-                }
                 Ok(Value::Local(t2))
             }
             ExprKind::ListLit(elems) => {
@@ -1809,17 +2129,98 @@ impl Builder {
     }
 
     
-    fn expr_tree_call_fn(&mut self, name: &str, blk: Option<&str>, args: Vec<Value>) -> Result<Value, BuildError> {
-        if let Some(tb) = blk {
+    
+    fn 推泛型实参(&self, name: &str, args: &[Value], 带能力: &[(String, Vec<String>)], 形参: &[(String, Ty)]) -> Result<(String, Vec<String>, Vec<String>), BuildError> {
+        let 类型参数: Vec<String> = 带能力.iter().map(|(n, _)| n.clone()).collect();
+        let mut 绑定: Vec<Option<String>> = vec![None; 类型参数.len()];
+        for (k, a) in args.iter().enumerate() {
+            if k >= 形参.len() { break; }
+            let mut got = self.ty_of_value(a.clone()).0.clone();
             
-            self.check_pub(&self.module, tb)?;
-            let key = format!("{}|{}|{}", self.module, tb, name);
-            let sig = self.fns.get(&key).or_else(|| self.global_fns.get(&key)).cloned().ok_or_else(|| BuildError {
-                message: format!("还没建过 fn「{}」——先用 add fn 建", name),
+            if let Some(名) = got.strip_prefix("fn ") {
+                let fk = format!("{}|{}|{}", self.module, self.block, 名);
+                let fs = self.fns.get(&fk).or_else(|| self.global_fns.get(&fk));
+                if let Some(sig) = fs {
+                    let ps: Vec<String> = sig.params.iter().map(|t| t.0.clone()).collect();
+                    got = format!("fn({}) {}", ps.join(", "), sig.ret.0);
+                }
+            }
+            let pat = 形参[k].1 .0.clone();
+            let _ = 统一类型(&pat, &got, &类型参数, &mut 绑定);
+        }
+        if 绑定.iter().any(|x| x.is_none()) {
+            return Err(BuildError {
+                message: format!("调用泛型 fn「{}」时推不出类型参数——实参要写成字面量或带类型的 val", name),
                 code: prion_error::Code::E304,
                 line: CUR_LINE.with(|c| c.get()),
                 file: String::new(),
-            })?;
+            });
+        }
+        核能力(name, 带能力, &绑定.iter().map(|x| x.clone().unwrap()).collect::<Vec<_>>())?;
+        let 实参类型: Vec<String> = 绑定.into_iter().map(|x| x.unwrap()).collect();
+        Ok((format!("{}@{}", name, 实参类型.join(",")), 类型参数, 实参类型))
+    }
+
+    fn expr_tree_call_fn(&mut self, name: &str, blk: Option<&str>, args: Vec<Value>, mod_path: Option<&str>) -> Result<Value, BuildError> {
+        if let Some(tb) = blk {
+            
+            let 指定模 = mod_path.unwrap_or(&self.module);
+            
+            let 属模 = if mod_path.is_some() {
+                self.resolve_module(指定模)?.unwrap_or_else(|| 指定模.to_string())
+            } else {
+                指定模.to_string()
+            };
+            self.check_pub(&属模, tb)?;
+            let key = format!("{}|{}|{}", 属模, tb, name);
+            let sig = match self.fns.get(&key).or_else(|| self.global_fns.get(&key)).cloned() {
+                Some(s) => s,
+                None => {
+                    
+                    if let Some((带能力, 形参, 返回, 体, _, _)) = 泛型fn表.with(|g| g.borrow().get(name).cloned()) {
+                        let (实例名, 类型参数, 实参类型) = match self.推泛型实参(name, &args, &带能力, &形参) {
+                            Ok(v) => v,
+                            Err(e) => return Err(e),
+                        };
+                        let 实例键 = format!("{}|{}|{}", 属模, tb, 实例名);
+                        if self.fns.get(&实例键).is_none() && self.global_fns.get(&实例键).is_none() {
+                            let 旧模块 = self.module.clone();
+                            let 旧块 = self.block.clone();
+                            self.module = 属模.clone();
+                            self.block = tb.to_string();
+                            let r = 建fn实例(self, &实例名, &类型参数, &实参类型, &形参, &返回, &体);
+                            self.module = 旧模块;
+                            self.block = 旧块;
+                            r?;
+                        }
+                        return self.expr_tree_call_fn(&实例名, Some(tb), args, Some(&属模));
+                    }
+                    if let Some((带能力, 形参, 返回, 体, _, _)) = 泛型语句体fn表.with(|g| g.borrow().get(name).cloned()) {
+                        let (实例名, 类型参数, 实参类型) = match self.推泛型实参(name, &args, &带能力, &形参) {
+Ok(v) => v,
+                            Err(e) => return Err(e),
+                        };
+                        let 实例键 = format!("{}|{}|{}", 属模, tb, 实例名);
+                        if self.fns.get(&实例键).is_none() && self.global_fns.get(&实例键).is_none() {
+                            let 旧模块 = self.module.clone();
+                            let 旧块 = self.block.clone();
+                            self.module = 属模.clone();
+                            self.block = tb.to_string();
+                            let r = self.建语句体实例(&实例名, &类型参数, &实参类型, &形参, &返回, &体);
+                            self.module = 旧模块;
+                            self.block = 旧块;
+                            r?;
+                        }
+                        return self.expr_tree_call_fn(&实例名, Some(tb), args, Some(&属模));
+                    }
+                    return Err(BuildError {
+                        message: format!("还没建过 fn「{}」——先用 add fn 建", name),
+                        code: prion_error::Code::E304,
+                        line: CUR_LINE.with(|c| c.get()),
+                        file: String::new(),
+                    });
+                }
+            };
             let mut vals = args;
             let _dc = self.容器实参深拷(&mut vals, &sig);
             if !sig.hidden.is_empty() {
@@ -1859,7 +2260,7 @@ impl Builder {
                 {
                     建fn实例(self, &实例名, &类型参数, &实参类型, &形参, &返回, &体)?;
                 }
-                return self.expr_tree_call_fn(&实例名, None, args);
+                return self.expr_tree_call_fn(&实例名, None, args, None);
             }
             
             let 语句模板 = 泛型语句体fn表.with(|g| g.borrow().get(name).cloned());
@@ -1887,7 +2288,7 @@ impl Builder {
                 {
                     self.建语句体实例(&实例名, &类型参数, &实参类型, &形参, &返回, &体)?;
                 }
-                return self.expr_tree_call_fn(&实例名, None, args);
+                return self.expr_tree_call_fn(&实例名, None, args, None);
             }
         }
         let sig = self.fns.get(&key).or_else(|| self.global_fns.get(&key)).cloned().ok_or_else(|| BuildError {
@@ -1931,6 +2332,18 @@ impl Builder {
     fn expr_tree_builtin(&mut self, name: &str, vals: &[Value]) -> Result<Value, BuildError> {
         let vals = vals.to_vec();
         let mut name = name.to_string();
+        let mut join_all: Option<String> = None;
+        if name == "join" {
+            name = "prion_join".into();
+            let 内 = match vals.first() {
+                Some(Value::Local(id)) => self.f.locals.get(*id).and_then(|l| token容器载荷(&l.ty.0)),
+                _ => None,
+            };
+            if let Some(内) = 内 {
+                name = "prion_join_all".into();
+                join_all = Some(内);
+            }
+        }
         if name == "index" {
             let 首参串 = match vals.first() {
                 Some(Value::Local(id)) => self.f.locals.get(*id).map(|l| l.ty.0 == "str").unwrap_or(false),
@@ -1939,7 +2352,9 @@ impl Builder {
             };
             if 首参串 { name = "str_index".into(); }
         }
-        let 返型 = if name == "slice" {
+        let 返型 = if let Some(内) = &join_all {
+            format!("list({})", 内)
+        } else if name == "slice" {
             match vals.first() {
                 Some(Value::Local(id)) => self.f.locals.get(*id).map(|l| l.ty.0.clone()).unwrap_or_else(|| "int".into()),
                 _ => "int".into(),
@@ -2069,6 +2484,13 @@ impl Builder {
             return err("表达式是空的");
         }
         
+        if matches!(段.first(), Some(Token::Kw("take"))) {
+            let mut syn = 段.to_vec();
+            syn[0] = Token::Kw("call");
+            let v = self.expr(&syn)?;
+            return self.take_复制(v);
+        }
+        
         if matches!(段.first(), Some(Token::Kw("call")))
             && matches!(段.get(1), Some(Token::Kw("val")))
         {
@@ -2195,44 +2617,42 @@ impl Builder {
         let v = self.parse_or(段, &mut i)?;
         
         if matches!(段.get(i), Some(Token::Sym("?"))) {
-            let colon = 段
+            let colon_opt = 段
                 .iter()
                 .enumerate()
                 .skip(i + 1)
                 .find(|(_, t)| matches!(t, Token::Sym(":")))
-                .map(|(k, _)| k)
-                .ok_or_else(|| BuildError { message: "三元缺 `:`".into() , code: prion_error::Code::E301 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
-            let then_toks: Vec<Token> = 段[i + 1..colon].to_vec();
-            let else_toks: Vec<Token> = 段[colon + 1..].to_vec();
-            let tmp = self.temp(Ty("int".into()));
-            let bb_then = self.nb();
-            let bb_else = self.nb();
-            let bb_done = self.nb();
-            self.set_exit(Exit::Branch { cond: v, targets: vec![Succ::new(bb_then), Succ::new(bb_else)] });
-            self.switch_to(bb_then);
-            let tv = self.expr(&then_toks)?;
-            self.emit(Stmt::Assign { lhs: Place::local(tmp), rhs: Rvalue::Const(tv.clone()) });
-            self.goto(bb_done);
-            self.switch_to(bb_else);
-            let ev = self.expr(&else_toks)?;
-            self.emit(Stmt::Assign { lhs: Place::local(tmp), rhs: Rvalue::Const(ev) });
-            self.goto(bb_done);
-            self.switch_to(bb_done);
-            
-            let real_ty = match &tv {
-                Value::Local(id) => self.f.locals.get(*id).map(|l| l.ty.clone()),
-                Value::Int(_) => Some(Ty("int".into())),
-                Value::Float(_) => Some(Ty("float".into())),
-                Value::Bool(_) => Some(Ty("bool".into())),
-                Value::Str(_) => Some(Ty("str".into())),
-                _ => None,
-            };
-            if let Some(t) = real_ty {
-                if let Some(l) = self.f.locals.get_mut(tmp) {
-                    l.ty = t;
-                }
+                .map(|(k, _)| k);
+            if colon_opt.is_some() {
+                return Err(BuildError {
+                    message: "三元 `条件 ? 甲 : 乙` 已取消——改用 if 表达式：`if 条件 { 甲 } else { 乙 }`".into(),
+                    code: prion_error::Code::E301,
+                    line: CUR_LINE.with(|c| c.get()),
+                    file: String::new(),
+                });
             }
-            return Ok(Value::Local(tmp));
+            {
+                let tag = self.temp(Ty("int".into()));
+                self.emit(Stmt::Assign { lhs: Place::local(tag), rhs: Rvalue::VariantTag(v.clone()) });
+                let bb_fail = self.nb();
+                let bb_ok = self.nb();
+                let iszero = self.bin(BinOp::Eq, Value::Local(tag), Value::Int(0));
+                self.set_exit(Exit::Branch { cond: iszero, targets: vec![
+                    Succ { target: bb_fail, args: vec![] },
+                    Succ { target: bb_ok, args: vec![] },
+                ] });
+                self.switch_to(bb_fail);
+                self.set_exit(Exit::Return(Some(v.clone())));
+                let dead = self.nb();
+                self.switch_to(dead);
+                self.switch_to(bb_ok);
+                let payload = self.temp(Ty("int".into()));
+                self.emit(Stmt::Assign {
+                    lhs: Place::local(payload),
+                    rhs: Rvalue::VariantGet { value: v, idx: 0, ty: Ty("int".into()) },
+                });
+                return Ok(Value::Local(payload));
+            }
         }
         if i != 段.len() {
             return err(format!("表达式没读完（多余：{:?}）", &段[i..]));
@@ -2395,13 +2815,17 @@ impl Builder {
             });
             return Ok(Value::Local(st));
         }
-        let idx = self.expr(&t[*i + 1..close])?;
+        let 下标段 = &t[*i + 1..close];
+        let idx = self.expr(下标段)?;
         *i = close + 1;
         if vty == "str" {
-            let tmp = self.temp(Ty("str".into()));
+            if let [Token::Int(k)] = 下标段 {
+                self.查串下标(&Value::Local(id), *k)?;
+            }
+            let tmp = self.temp(Ty("int".into()));
             self.emit(Stmt::Assign {
                 lhs: Place::local(tmp),
-                rhs: Rvalue::Call { name: "nth_char".into(), args: vec![Value::Local(id), idx] },
+                rhs: Rvalue::Call { name: "#str_byte_at".into(), args: vec![Value::Local(id), idx] },
             });
             return Ok(Value::Local(tmp));
         }
@@ -2490,6 +2914,16 @@ impl Builder {
             }
             Some(Token::Kw("null")) => {
                 *i += 1;
+                if let Some(exp) = self.期望类型.clone() {
+                    if exp.starts_with('?') && self.type_idx.contains_key(&exp) {
+                        let tmp = self.temp(Ty(exp.clone()));
+                        self.emit(Stmt::Assign {
+                            lhs: Place::local(tmp),
+                            rhs: Rvalue::VariantLit { ty: exp, tag: 0, args: vec![], tys: vec![] },
+                        });
+                        return Ok(Value::Local(tmp));
+                    }
+                }
                 Ok(Value::Null)
             }
             
@@ -3604,7 +4038,7 @@ impl Builder {
                 }
                 
                 const BUILTIN_EXPRS: &[&str] = &[
-                    "len", "len_utf8", "empty", "has", "index", "concat",
+                    "len", "char_len", "nth_char", "empty", "has", "index", "concat",
                     "code", "char", "que", "stack", "args", "read_file", "keys", "vals", "slice",
                     "read_8", "read_16", "read_32", "read_64",
                     
@@ -3711,9 +4145,10 @@ impl Builder {
                         }
                         
                         let tmp = self.temp(sig.ret.clone());
+                        let call_name = if n.as_ref() == "join" { "prion_join".to_string() } else { n.to_string() };
                         self.emit(Stmt::Assign {
                             lhs: Place::local(tmp),
-                            rhs: Rvalue::Call { name: n.to_string(), args: vals },
+                            rhs: Rvalue::Call { name: call_name, args: vals },
                         });
                         return Ok(Value::Local(tmp));
                     }
@@ -3750,12 +4185,28 @@ impl Builder {
                         
                         
                         const BUILTIN_VALUE_NAMES: &[&str] = &[
-                            "len", "len_utf8", "index", "empty", "has", "pop", "run", "remove",
+                            "len", "char_len", "nth_char", "index", "empty", "has", "pop", "run", "remove",
                             
-                            "code", "char", "concat", "read_file", "str",
+                            "code", "char", "concat", "read_file", "str", "join",
                         ];
                         if BUILTIN_VALUE_NAMES.iter().any(|u| *u == n.as_ref()) {
                             let mut n = n.clone();
+                            let mut join_all: Option<String> = None;
+                            if n == "join" {
+                                n = "prion_join".into();
+                                let 内 = match vals.first() {
+                                    Some(Value::Local(id)) => self
+                                        .f
+                                        .locals
+                                        .get(*id)
+                                        .and_then(|l| token容器载荷(&l.ty.0)),
+                                    _ => None,
+                                };
+                                if let Some(内) = 内 {
+                                    n = "prion_join_all".into();
+                                    join_all = Some(内);
+                                }
+                            }
                             
                             if n == "index" {
                                 let 首参串 = match vals.first() {
@@ -3773,6 +4224,9 @@ impl Builder {
                                 }
                             }
                             let mut rt = builtin_ret_ty(&n);
+                            if let Some(内) = &join_all {
+                                rt = Ty(format!("list({})", 内));
+                            }
                             
                             if n == "pop" {
                                 if let Some(Value::Local(bid)) = vals.first() {
@@ -3869,6 +4323,7 @@ impl Builder {
             }
             
             Some(Token::Kw("match")) => self.match_expr(t, i),
+            Some(Token::Kw("if")) => self.if_expr(t, i),
             other => err(format!("表达式里不认识的 token：{:?}", other)),
         }
     }
@@ -3908,6 +4363,16 @@ impl Builder {
         if 段.is_empty() {
             return Ok(());
         }
+
+        
+        let 原始段 = 段;
+        let 规范;
+        let 段: &[Token] = if matches!(kind, prion_parser::LineKind::AddVal(_)) {
+            规范 = prion_parser::建val规范(段);
+            &规范
+        } else {
+            段
+        };
 
         
         if self.语句体返回 && matches!(kind, prion_parser::LineKind::Give(_)) {
@@ -4649,7 +5114,14 @@ impl Builder {
                 Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
                 _ => return err(format!("add val 后应是名字：{:?}", 段)),
             };
-            let explicit_ty: Option<Ty> = match container_ty_at(段, 3) {
+            let 可空前缀 = matches!(段.get(3), Some(Token::Sym("?")));
+            let explicit_ty: Option<Ty> = if 可空前缀 {
+                match 段.get(4) {
+                    Some(Token::Kw(t)) => Some(Ty(format!("?{}", t))),
+                    Some(Token::Ident(n)) | Some(Token::Str(n)) => Some(Ty(format!("?{}", n))),
+                    _ => None,
+                }
+            } else { match container_ty_at(段, 3) {
                 Some(t) => Some(Ty(t)),
                 None => match 段.get(3) {
                     Some(Token::Kw(t)) => {
@@ -4748,8 +5220,8 @@ impl Builder {
                     
                     _ => None,
                 },
-            }
-            .map(|t| Ty(代换类型(&t.0)));
+            } };
+            let explicit_ty = explicit_ty.map(|t| Ty(代换类型(&t.0)));
             let eq0 = 段.iter().position(|t| *t == Token::Sym("="));
             let pre = match (&explicit_ty, eq0) {
                 (None, Some(e)) => Some(self.expr(&段[e + 1..])?),
@@ -4821,6 +5293,14 @@ impl Builder {
             if !是常量声明 {
                 self.names.insert(name.to_string(), id);
             }
+            let (是share, 是send) = prion_parser::建val修饰(原始段);
+            if 是share && 是send {
+                return err(format!("val「{}」不能既是 share 又标 (send)——一个数据要么共享、要么移交", name));
+            }
+            if (是share || 是send) && !is_exposed {
+                let t = self.f.locals[id].ty.clone();
+                self.共享序.push((name.to_string(), id, t));
+            }
             if fn自有 {
                 if let Some(l) = self.f.locals.get_mut(id) {
                     l.fn_owned = true;
@@ -4888,7 +5368,7 @@ impl Builder {
                         Some(v) => v,
                         None => {
                             let 旧 = self.期望类型.take();
-                            self.期望类型 = 期望;
+                            self.期望类型 = 期望.clone();
                             
                             let r = match exprs.first() {
                                 Some(e) => self.expr_tree(e),
@@ -4900,7 +5380,29 @@ impl Builder {
                     },
                 };
                 self.lit_ty = None;
-                
+
+                let v = if let Some(exp) = 期望.as_ref() {
+                    if exp.starts_with('?') && self.type_idx.contains_key(exp) {
+                        match v {
+                            Value::Local(id)
+                                if self.f.locals.get(id).map(|l| l.ty.0 == *exp).unwrap_or(false) => v,
+                            other => {
+                                let inner_ty = exp.trim_start_matches('?').to_string();
+                                let args = vec![other];
+                                let tmp = self.temp(Ty(exp.clone()));
+                                self.emit(Stmt::Assign {
+                                    lhs: Place::local(tmp),
+                                    rhs: Rvalue::VariantLit {
+                                        ty: exp.clone(), tag: 1,
+                                        args, tys: vec![Ty(inner_ty)],
+                                    },
+                                });
+                                Value::Local(tmp)
+                            }
+                        }
+                    } else { v }
+                } else { v };
+
                 let lhs = if is_exposed {
                     Place { base: id, proj: vec![Proj::Deref] }
                 } else {
@@ -5248,7 +5750,8 @@ impl Builder {
         }
 
         for (h, cb) in &cases {
-            let ht = Self::head_expr_tokens(h).to_vec();
+            let ht_all = Self::head_expr_tokens(h).to_vec();
+            let (ht, guard) = split_case_guard(&ht_all);
             
             if let Some(Token::Ident(vname)) | Some(Token::Str(vname)) = ht.first() {
                 if let Some((_, tag, ftypes)) = self.sum_variants.get(vname.as_ref()).cloned() {
@@ -5295,6 +5798,15 @@ impl Builder {
                             }
                         }
                     }
+                    if let Some(g) = guard {
+                        let gv = self.expr(g)?;
+                        let arm_id = self.nb();
+                        self.set_exit(Exit::Branch {
+                            cond: gv,
+                            targets: vec![Succ::new(arm_id), Succ::new(next_check)],
+                        });
+                        self.switch_to(arm_id);
+                    }
                     self.body(cb)?;
                     self.goto(exit_id);
                     self.switch_to(next_check);
@@ -5303,17 +5815,40 @@ impl Builder {
             }
             
             if ht.len() == 1 && matches!(ht[0], Token::Ident(ref n) if n == "_") {
+                if let Some(g) = guard {
+                    let gv = self.expr(g)?;
+                    let body_id = self.nb();
+                    let next_check = self.nb();
+                    self.set_exit(Exit::Branch {
+                        cond: gv,
+                        targets: vec![Succ::new(body_id), Succ::new(next_check)],
+                    });
+                    self.switch_to(body_id);
+                    self.body(cb)?;
+                    self.goto(exit_id);
+                    self.switch_to(next_check);
+                    continue;
+                }
                 self.body(cb)?;
                 self.goto(exit_id);
                 continue;
             }
-            let cv = self.expr(Self::head_expr_tokens(h))?;
+            let cv = self.expr(ht)?;
             let t = self.bin(BinOp::Eq, v.clone(), cv);
             let body_id = self.nb();
             let next_check = self.nb();
             self.set_exit(Exit::Branch { cond: t, targets: vec![Succ::new(body_id), Succ::new(next_check)] });
 
             self.switch_to(body_id);
+            if let Some(g) = guard {
+                let gv = self.expr(g)?;
+                let arm_id = self.nb();
+                self.set_exit(Exit::Branch {
+                    cond: gv,
+                    targets: vec![Succ::new(arm_id), Succ::new(next_check)],
+                });
+                self.switch_to(arm_id);
+            }
             self.body(cb)?;
             self.goto(exit_id);
 
@@ -5327,6 +5862,93 @@ impl Builder {
 
     
     
+    fn if_expr(&mut self, t: &[Token], i: &mut usize) -> Result<Value, BuildError> {
+        *i += 1;
+        let mut depth = 0i32;
+        let mut brace = None;
+        let mut j = *i;
+        while j < t.len() {
+            match &t[j] {
+                Token::Sym("(") | Token::Sym("[") => depth += 1,
+                Token::Sym(")") | Token::Sym("]") => depth -= 1,
+                Token::Sym("{") if depth == 0 => { brace = Some(j); break; }
+                _ => {}
+            }
+            j += 1;
+        }
+        let brace = match brace { Some(b) => b, None => return err("if 表达式缺 {") };
+        let cond_toks = &t[*i..brace];
+        if cond_toks.is_empty() { return err("if 后要跟条件"); }
+        let mut k = brace + 1;
+        let mut d2 = 0i32;
+        let then_end;
+        loop {
+            if k >= t.len() { return err("if 表达式的 } 没闭合"); }
+            match &t[k] {
+                Token::Sym("{") => d2 += 1,
+                Token::Sym("}") if d2 == 0 => { then_end = k; break; }
+                Token::Sym("}") => d2 -= 1,
+                _ => {}
+            }
+            k += 1;
+        }
+        let then_toks = &t[brace + 1..then_end];
+        k = then_end + 1;
+        if !matches!(t.get(k), Some(Token::Kw("else"))) { return err("if 表达式必须写 else"); }
+        k += 1;
+        if !matches!(t.get(k), Some(Token::Sym("{"))) { return err("else 后要跟 {"); }
+        let else_start = k + 1;
+        let mut k2 = else_start;
+        d2 = 0;
+        let else_end;
+        loop {
+            if k2 >= t.len() { return err("else 的 } 没闭合"); }
+            match &t[k2] {
+                Token::Sym("{") => d2 += 1,
+                Token::Sym("}") if d2 == 0 => { else_end = k2; break; }
+                Token::Sym("}") => d2 -= 1,
+                _ => {}
+            }
+            k2 += 1;
+        }
+        k = else_end;
+        let else_toks = &t[else_start..else_end];
+        *i = else_end + 1;
+
+        let c = self.expr(cond_toks)?;
+        let bb_then = self.nb();
+        let bb_else = self.nb();
+        let bb_done = self.nb();
+        self.set_exit(Exit::Branch { cond: c, targets: vec![
+            Succ { target: bb_then, args: vec![] },
+            Succ { target: bb_else, args: vec![] },
+        ] });
+        self.switch_to(bb_then);
+        let tv = self.expr(then_toks)?;
+        let mut ty = self.ty_of_value(tv.clone());
+        if ty.0 == "null" {
+            if let Some(exp) = self.期望类型.clone() {
+                ty = Ty(exp);
+            }
+        }
+        let tmp = self.temp(ty.clone());
+        self.emit(Stmt::Assign { lhs: Place::local(tmp), rhs: Rvalue::Const(tv) });
+        self.goto(bb_done);
+        self.switch_to(bb_else);
+        let ev = self.expr(else_toks)?;
+        let ety = self.ty_of_value(ev.clone());
+        if ety.0 != ty.0 && ety.0 != "null" {
+            return err(format!(
+                "if 表达式的两个分支类型要一致——一边是「{}」，另一边是「{}」",
+                ty.0, ety.0
+            ));
+        }
+        self.emit(Stmt::Assign { lhs: Place::local(tmp), rhs: Rvalue::Const(ev) });
+        self.goto(bb_done);
+        self.switch_to(bb_done);
+        Ok(Value::Local(tmp))
+    }
+
     fn match_expr(&mut self, t: &[Token], i: &mut usize) -> Result<Value, BuildError> {
         *i += 1; 
         
@@ -5639,6 +6261,87 @@ impl Builder {
     }
 
     
+    fn 任务体(
+        &mut self,
+        name: &str,
+        ret: Ty,
+        body: &[AstStmt],
+        捕获: &[(String, Ty)],
+    ) -> Result<(Function, bool), BuildError> {
+        let mut init: &[AstStmt] = body;
+        let mut give_toks: Option<Vec<Token>> = None;
+        let mut 自结束 = false;
+        if let Some((last, rest)) = body.split_last() {
+            if let AstStmt::Line { kind, .. } = last {
+                let toks = kind.tokens();
+                if matches!(toks.first(), Some(Token::Kw("give"))) {
+                    give_toks = Some(toks[1..].to_vec());
+                    init = rest;
+                } else if toks.len() == 1 && 是裸join(toks.first()) {
+                    自结束 = true;
+                    init = rest;
+                }
+            }
+        }
+        if !自结束 && give_toks.is_none() {
+            return Err(BuildError {
+                message: "spawn 任务体最后要写 `give 值`（要返回值）或单独一行 `join`（自结束、不等）".into(),
+                code: prion_error::Code::E301,
+                line: CUR_LINE.with(|c| c.get()),
+                file: String::new(),
+            });
+        }
+        let mut fb = Builder::new(
+            format!("{}|{}|{}", self.module, self.block, name),
+            self.f.file.clone(),
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            Vec::new(),
+            self.block.clone(),
+            self.module.clone(),
+            std::rc::Rc::clone(&self.types),
+            std::rc::Rc::clone(&self.type_idx),
+            std::rc::Rc::clone(&self.mod_by_tail),
+            std::rc::Rc::clone(&self.global_fns),
+            std::rc::Rc::clone(&self.cross_vals),
+            std::rc::Rc::clone(&self.sum_variants),
+            std::rc::Rc::clone(&self.pub_blocks),
+            std::rc::Rc::clone(&self.hidden_items),
+            std::rc::Rc::clone(&self.block_types),
+            std::rc::Rc::clone(&self.常量值),
+        );
+        fb.cur_col = self.cur_col;
+        fb.cur_len = self.cur_len;
+        let ctx_id = fb.new_local(Some("__ctx".into()), Ty("ctx".into()), true, false);
+        fb.names.insert("__ctx".into(), ctx_id);
+        fb.任务上下文 = Some((ctx_id, 捕获.to_vec()));
+        for (i, (n, ty)) in 捕获.iter().enumerate() {
+            let lid = fb.new_local(Some(n.clone()), ty.clone(), false, false);
+            fb.emit(Stmt::Assign {
+                lhs: Place::local(lid),
+                rhs: Rvalue::CtxGet { ctx: ctx_id, idx: i, ty: ty.clone() },
+            });
+            fb.names.insert(n.clone(), lid);
+        }
+        fb.语句体返回 = true;
+        fb.body(init)?;
+        match give_toks {
+            Some(g) => {
+                let v = fb.expr(&g)?;
+                fb.set_exit(Exit::Return(Some(v)));
+            }
+            None => fb.set_exit(Exit::Return(Some(Value::Int(0)))),
+        }
+        let mut f = fb.finish()?;
+        f.ret = Some(if 自结束 { Ty("int".into()) } else { ret });
+        Ok((f, 自结束))
+    }
+
+    
     fn body(&mut self, stmts: &[AstStmt]) -> Result<(), BuildError> {
         let mut j = 0usize;
         while j < stmts.len() {
@@ -5675,6 +6378,47 @@ impl Builder {
                         prion_parser::StructKind::Match => Kind::Match,
                         prion_parser::StructKind::For => Kind::For,
                         prion_parser::StructKind::Case => return err("case 不能单独出现"),
+                        prion_parser::StructKind::Spawn => {
+                            if let Some(Token::Ident(n) | Token::Str(n)) = head.get(2) {
+                                let payload = 解析token载荷(head);
+                                if payload != "int" && payload != "bool" && payload != "void" {
+                                    return err(format!(
+                                        "token 载荷「{}」本期还不支持——先只做 int / bool / void（自结束）",
+                                        payload
+                                    ));
+                                }
+                                let task_name = format!("{}|{}|__task_{}", self.module, self.block, n);
+                                let 捕获: Vec<(String, Ty)> =
+                                    self.共享序.iter().map(|(nm, _, t)| (nm.clone(), t.clone())).collect();
+                                let 实参: Vec<Value> =
+                                    self.共享序.iter().map(|(_, lid, _)| Value::Local(*lid)).collect();
+                                let (tf, 自结束) =
+                                    self.任务体(&format!("__task_{}", n), Ty(payload), body, &捕获)?;
+                                self.extra.push(tf);
+                                let id = self.new_local(Some(n.to_string()), Ty("token".into()), false, false);
+                                let fnref = self.temp(Ty("fn".into()));
+                                self.emit(Stmt::Assign {
+                                    lhs: Place::local(fnref),
+                                    rhs: Rvalue::FnRef { name: task_name },
+                                });
+                                let ctx = self.temp(Ty("ctx".into()));
+                                self.emit(Stmt::Assign {
+                                    lhs: Place::local(ctx),
+                                    rhs: Rvalue::CtxArray { args: 实参 },
+                                });
+                                let n捕获 = self.共享序.len() as i64;
+                                self.emit(Stmt::Assign {
+                                    lhs: Place::local(id),
+                                    rhs: Rvalue::Call {
+                                        name: if 自结束 { "prion_spawn_detached" } else { "prion_spawn" }.into(),
+                                        args: vec![Value::Local(fnref), Value::Local(ctx), Value::Int(n捕获)],
+                                    },
+                                });
+                                self.names.insert(n.to_string(), id);
+                            }
+                            j += 1;
+                            continue;
+                        },
                     };
                     match kind {
                         Kind::For => {
@@ -5733,10 +6477,16 @@ impl Builder {
 
 
 fn 代换类型(s: &str) -> String {
+    let base = if s.ends_with(')') {
+        s.find('(')
+            .filter(|&i| matches!(s.as_bytes().get(i + 1), Some(b'>') | Some(b'<')))
+            .map(|i| &s[..i])
+            .unwrap_or(s)
+    } else { s };
     let m = 类型代换表.with(|c| c.borrow().clone());
     match m {
-        Some((参数, 实参)) => 替换参数(s, &参数, &实参),
-        None => s.to_string(),
+        Some((参数, 实参)) => 替换参数(base, &参数, &实参),
+        None => base.to_string(),
     }
 }
 
@@ -6008,6 +6758,19 @@ fn between_parens(段: &[Token]) -> Result<Vec<Token>, BuildError> {
     err("括号没闭合")
 }
 
+fn split_case_guard(t: &[Token]) -> (&[Token], Option<&[Token]>) {
+    let mut d = 0i32;
+    for (i, tk) in t.iter().enumerate() {
+        match tk {
+            Token::Sym("(") | Token::Sym("[") | Token::Sym("{") => d += 1,
+            Token::Sym(")") | Token::Sym("]") | Token::Sym("}") => d -= 1,
+            Token::Kw("if") if d == 0 => return (&t[..i], Some(&t[i + 1..])),
+            _ => {}
+        }
+    }
+    (t, None)
+}
+
 fn split_args(inner: &[Token]) -> Vec<Vec<Token>> {
     let mut out: Vec<Vec<Token>> = Vec::new();
     let mut cur = Vec::new();
@@ -6040,7 +6803,7 @@ fn is_add_type(段: &[Token]) -> bool {
 }
 
 
-fn parse_type_def(段: &[Token]) -> Result<StructType, BuildError> {
+fn parse_type_def(段: &[Token]) -> Result<Option<StructType>, BuildError> {
     let name = match 段.get(2) {
         Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
         _ => return err("add type 后应是类型名"),
@@ -6104,7 +6867,12 @@ fn parse_type_def(段: &[Token]) -> Result<StructType, BuildError> {
     
     if matches!(段.get(eq + 1), Some(Token::Sym("("))) {
         let fields = parse_field_list(&段[eq + 2..])?;
-        return Ok(StructType { name: name.to_string(), params, fields, variants: Vec::new() });
+        return Ok(Some(StructType { name: name.to_string(), params, fields, variants: Vec::new() }));
+    }
+
+    if matches!(段.get(eq + 1), Some(Token::Kw(_)) | Some(Token::Ident(_))) {
+        let has_bar = 段[eq + 1..].iter().any(|t| *t == Token::Sym("|"));
+        if !has_bar { return Ok(None); }
     }
     
     let mut variants = Vec::new();
@@ -6126,7 +6894,7 @@ fn parse_type_def(段: &[Token]) -> Result<StructType, BuildError> {
     if variants.is_empty() {
         return err("和类型至少要有一个变体");
     }
-    Ok(StructType { name: name.to_string(), params, fields: Vec::new(), variants })
+    Ok(Some(StructType { name: name.to_string(), params, fields: Vec::new(), variants }))
 }
 
 
@@ -6134,12 +6902,14 @@ fn parse_field_list(段: &[Token]) -> Result<Vec<(String, Ty)>, BuildError> {
     let end = matching_close(段)?;
     let mut fields = Vec::new();
     for a in split_args(&段[..end]) {
-        let fname = match a.first() {
-            Some(Token::Ident(n)) | Some(Token::Str(n)) => n.to_string(),
+        let (fname, 尾) = match a.first() {
+            Some(Token::Ident(n)) | Some(Token::Str(n)) => (n.to_string(), &a[1..]),
+
+            Some(Token::Kw(_)) | Some(Token::Int(_)) => ((fields.len() + 1).to_string(), &a[..]),
             _ => return err("字段缺名字"),
         };
         
-        let 尾 = &a[1..];
+        
         if 尾.is_empty() {
             return err(format!("字段「{}」缺类型", fname));
         }
@@ -6462,6 +7232,39 @@ fn 注入槽参数_prep(fb: &mut Builder, key: &str) -> Vec<(String, Ty)> {
 }
 
 
+fn 是裸join(t: Option<&Token>) -> bool {
+    match t {
+        Some(Token::Kw("join")) => true,
+        Some(Token::Ident(n)) => n.as_ref() == "join",
+        _ => false,
+    }
+}
+
+fn 解析token载荷(head: &[Token]) -> String {
+    let mut i = 0usize;
+    while let Some(t) = head.get(i) {
+        let 是token = matches!(t, Token::Ident(n) if n.as_ref() == "token") || matches!(t, Token::Kw("token"));
+        if 是token && matches!(head.get(i + 1), Some(Token::Sym("("))) {
+            let mut s = String::new();
+            let mut j = i + 2;
+            while let Some(tk) = head.get(j) {
+                match tk {
+                    Token::Sym(")") => return if s.is_empty() { "int".into() } else { s },
+                    Token::Kw(k) => s.push_str(k),
+                    Token::Ident(n) | Token::Str(n) => s.push_str(n),
+                    Token::Sym("*") => s.push('*'),
+                    Token::Sym(",") => s.push_str(", "),
+                    _ => {}
+                }
+                j += 1;
+            }
+        }
+        i += 1;
+    }
+    "int".into()
+}
+
+
 fn head_tokens_name(head: &TokStream) -> Option<String> {
     let mut i = 0usize;
     while let Some(tk) = head.get(i) {
@@ -6488,6 +7291,8 @@ fn 扫行引用(
     fn_calls: &mut BTreeMap<String, BTreeSet<String>>,
 ) {
     let key = format!("{}|{}|{}", module, block, fname);
+    let 规范 = prion_parser::建val规范(段);
+    let 段: &[Token] = &规范;
     let mut i = 0usize;
     while let Some(tk) = 段.get(i) {
         match tk {
@@ -6672,7 +7477,7 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
                         }
                         type_first.insert(n.to_string(), (b.file.clone(), line));
                     }
-                    let st = parse_type_def(段)?;
+                    let Some(st) = parse_type_def(段)? else { continue };
                     for v in &st.variants {
                         if let Some((f0, l0)) = type_first.get(&v.name) {
                             return Err(BuildError {
@@ -6761,6 +7566,8 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
         let mut flat_lines: Vec<&TokStream> = Vec::new();
         collect_ast_lines(&b.stmts, &mut flat_lines);
         for 段 in flat_lines {
+                let 规范 = prion_parser::建val规范(段);
+                let 段 = &规范[..];
                 if matches!(段.first(), Some(Token::Kw("add")))
                     && matches!(段.get(1), Some(Token::Kw("val")))
                 {
@@ -7154,7 +7961,42 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
     }
     let 预 = INST_TODO.with(|q| std::mem::take(&mut *q.borrow_mut()));
     展开实例(&mut types, 预);
-    
+
+    {
+        let mut 可空名: BTreeSet<String> = BTreeSet::new();
+        for b in &ast.blocks {
+            let mut flat: Vec<(usize, &TokStream)> = Vec::new();
+            collect_ast_lines_ln(&b.stmts, &mut flat);
+            for (_ln, 段) in flat {
+                for k in 0..段.len().saturating_sub(1) {
+                    if matches!(段.get(k), Some(Token::Sym("?"))) {
+                        let inner = match 段.get(k + 1) {
+                            Some(Token::Kw(t)) => Some((*t).to_string()),
+                            Some(Token::Ident(t)) => Some(t.to_string()),
+                            _ => None,
+                        };
+                        if let Some(inner) = inner {
+                            可空名.insert(format!("?{}", inner));
+                        }
+                    }
+                }
+            }
+        }
+        for name in 可空名 {
+            if types.iter().any(|st| st.name == name) { continue; }
+            let inner = name.trim_start_matches('?').to_string();
+            types.push(StructType {
+                name: name.clone(),
+                params: Vec::new(),
+                fields: Vec::new(),
+                variants: vec![
+                    Variant { name: "None".into(), fields: Vec::new() },
+                    Variant { name: "Some".into(), fields: vec![("v".into(), Ty(inner))] },
+                ],
+            });
+        }
+    }
+
     let type_idx: std::rc::Rc<std::collections::HashMap<String, usize>> = std::rc::Rc::new(
         types.iter().enumerate().map(|(i, t)| (t.name.clone(), i)).collect(),
     );
@@ -7188,6 +8030,9 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
         if let Some(短) = f.name.rsplit('|').next() {
             名集.insert(短.to_string());
         }
+    }
+    for f in functions.iter_mut() {
+        临时直通(f);
     }
     let 区域 = 区型表(&types);
     for f in functions.iter_mut() {

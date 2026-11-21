@@ -182,6 +182,7 @@ pub fn line_kind(toks: &TokStream) -> LineKind {
     match toks.first() {
         Some(Token::Kw("give")) => LineKind::Give(own),
         Some(Token::Kw("add")) => match toks.get(1) {
+            Some(Token::Kw("share")) if matches!(toks.get(2), Some(Token::Kw("val"))) => LineKind::AddVal(own),
             Some(Token::Kw("val")) | Some(Token::Kw("fix")) => LineKind::AddVal(own),
             Some(Token::Kw("type")) => LineKind::AddType(own),
             Some(Token::Kw("hide")) => match toks.get(2) {
@@ -205,6 +206,74 @@ pub fn line_kind(toks: &TokStream) -> LineKind {
 }
 
 
+pub fn 建val修饰(段: &[Token]) -> (bool, bool) {
+    let mut i = 0usize;
+    if matches!(段.first(), Some(Token::Kw("add"))) {
+        i = 1;
+    }
+    let share = matches!(段.get(i), Some(Token::Kw("share")));
+    if share {
+        i += 1;
+    }
+    if !matches!(段.get(i), Some(Token::Kw("val")) | Some(Token::Kw("fix"))) {
+        return (false, false);
+    }
+    let send = matches!(段.get(i + 1), Some(Token::Sym("(")))
+        && matches!(段.get(i + 2), Some(Token::Kw("send")))
+        && matches!(段.get(i + 3), Some(Token::Sym(")")));
+    (share, send)
+}
+
+pub fn 建val规范(段: &[Token]) -> Vec<Token> {
+    let (out, _) = 建val规范带位(段, None);
+    out
+}
+
+pub fn 建val规范流(段: &TokStream) -> TokStream {
+    let (out, idx) = 建val规范带位(段, Some(段.spans()));
+    let spans = idx.unwrap_or_else(|| vec![(0, 0); out.len()]);
+    let 三元组 = out
+        .into_iter()
+        .zip(spans)
+        .map(|(t, (c, l))| (t, c, l))
+        .collect();
+    TokStream::new(三元组)
+}
+
+fn 建val规范带位(段: &[Token], 源位: Option<&[(usize, usize)]>) -> (Vec<Token>, Option<Vec<(usize, usize)>>) {
+    let mut out: Vec<Token> = Vec::with_capacity(段.len());
+    let mut keep: Vec<usize> = Vec::with_capacity(段.len());
+    let mut i = 0usize;
+    let mut push = |k: usize, out: &mut Vec<Token>, keep: &mut Vec<usize>| {
+        out.push(段[k].clone());
+        keep.push(k);
+    };
+    if matches!(段.first(), Some(Token::Kw("add"))) {
+        push(0, &mut out, &mut keep);
+        i = 1;
+    }
+    if matches!(段.get(i), Some(Token::Kw("share"))) {
+        i += 1;
+    }
+    if matches!(段.get(i), Some(Token::Kw("val")) | Some(Token::Kw("fix"))) {
+        push(i, &mut out, &mut keep);
+        i += 1;
+    }
+    if matches!(段.get(i), Some(Token::Sym("(")))
+        && matches!(段.get(i + 1), Some(Token::Kw("send")))
+        && matches!(段.get(i + 2), Some(Token::Sym(")")))
+    {
+        i += 3;
+    }
+    while i < 段.len() {
+        push(i, &mut out, &mut keep);
+        i += 1;
+    }
+    let spans = 源位.map(|sp| keep.iter().map(|&k| sp.get(k).copied().unwrap_or((0, 0))).collect());
+    (out, spans)
+}
+
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StructKind {
     If,
@@ -214,10 +283,14 @@ pub enum StructKind {
     For,
     
     Case,
+    Spawn,
 }
 
 
 pub fn struct_kind(head: &[Token]) -> StructKind {
+    if head.iter().any(|t| matches!(t, Token::Kw("spawn"))) {
+        return StructKind::Spawn;
+    }
     match head.first() {
         Some(Token::Kw("else")) => StructKind::Else,
         Some(Token::Kw("while")) => StructKind::While,

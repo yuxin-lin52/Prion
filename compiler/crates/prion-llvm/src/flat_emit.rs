@@ -16,6 +16,7 @@ use inkwell::targets::{CodeModel, FileType, InitializationConfig, RelocMode, Tar
 use inkwell::values::BasicValueEnum;
 use inkwell::AddressSpace;
 use inkwell::OptimizationLevel;
+use inkwell::IntPredicate;
 use std::path::Path;
 
 
@@ -39,6 +40,7 @@ fn elem_esz_sgn(t: &str) -> (i64, i64) {
         "uint_32" => (4, 0),
         "int_64" => (8, 1),
         "uint_64" => (8, 0),
+        "str" => (16, 1),
         _ => (8, 1),
     }
 }
@@ -121,9 +123,10 @@ pub fn emit_flat_object(
         _ => OptimizationLevel::Aggressive,
     };
     let ctx = Context::create();
-    let module = ctx.create_module("anle");
+    let module = ctx.create_module("prion");
     Target::initialize_all(&InitializationConfig::default());
     let triple = TargetMachine::get_default_triple();
+    let 视窗 = triple.as_str().to_string_lossy().contains("windows");
     let target = Target::from_triple(&triple).map_err(|e| e.to_string())?;
     let tm = target
         .create_target_machine(&triple, "generic", "", opt, RelocMode::PIC, CodeModel::Default)
@@ -140,7 +143,7 @@ pub fn emit_flat_object(
             DWARFSourceLanguage::C,
             file,
             "",
-            "anle",
+            "prion",
             opt != OptimizationLevel::None,
             "",
             0,
@@ -189,6 +192,7 @@ pub fn emit_flat_object(
         块参数phi: std::cell::RefCell::new(std::collections::BTreeMap::new()),
         列表型: None,
         cur_line: 0,
+        cur_file: file.to_string(),
         entry_file: file.to_string(),
         src_lines,
         dbg,
@@ -198,6 +202,7 @@ pub fn emit_flat_object(
     };
     lo.declare_types(p)?;
     lo.declare(p)?;
+    crate::rt_emit::发射(&lo.ctx, &lo.module, 视窗, !debug, file)?;
     for (i, f) in p.functions.iter().enumerate() {
         let ffn = flat.fns.get(i).ok_or_else(|| format!("扁平体缺函数 {}", f.name))?;
         lo.lower_fn_flat(f, ffn, p)?;
@@ -221,7 +226,8 @@ pub fn emit_flat_object(
     lo.挂循环元数据()?;
     
     let _ = std::fs::write(path.with_extension("ll"), lo.module.print_to_string().to_string());
-    tm.write_to_file(&lo.module, FileType::Object, path).map_err(|e| e.to_string())
+    tm.write_to_file(&lo.module, FileType::Object, path).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 impl<'ctx> Lower<'ctx> {
@@ -304,14 +310,12 @@ impl<'ctx> Lower<'ctx> {
         self.builder.position_at_end(entry);
         self.builder.unset_current_debug_location();
         
-        let fg = self.ptr_global("prion_cur_file");
         let 文件名 = f.file.rsplit(['/', '\\']).next().unwrap_or("");
-        let fval = if 文件名.is_empty() {
-            self.ctx.ptr_type(AddressSpace::default()).const_null()
+        self.cur_file = if f.file.is_empty() {
+            self.entry_file.clone()
         } else {
-            self.fmt(文件名)
+            文件名.to_string()
         };
-        self.builder.build_store(fg.as_pointer_value(), fval).map_err(|e| e.to_string())?;
         let mut allocas: Vec<Option<inkwell::values::PointerValue<'ctx>>> = vec![None; f.locals.len()];
         
         let mut 塊參數集: std::collections::BTreeSet<usize> = std::collections::BTreeSet::new();
@@ -353,6 +357,9 @@ impl<'ctx> Lower<'ctx> {
                 self.builder
                     .build_store(a, t.into_pointer_type().const_null())
                     .map_err(|e| e.to_string())?;
+            } else if matches!(t, inkwell::types::BasicTypeEnum::StructType(st) if st == self.pstr_ty()) {
+                let z = self.null_str();
+                self.builder.build_store(a, z).map_err(|e| e.to_string())?;
             }
             allocas[i] = Some(a);
         }
@@ -421,7 +428,7 @@ impl<'ctx> Lower<'ctx> {
         
         let mut want_of: Vec<Option<Ty>> = vec![None; ffn.insts.len()];
         for (iid, inst) in ffn.insts.iter().enumerate() {
-            if inst.tag != Tag::Nop {
+            if !matches!(inst.tag, Tag::Nop | Tag::NopRel) {
                 continue;
             }
             if let Some(pl) = ffn.places.get(iid).and_then(|x| x.clone()) {
@@ -445,7 +452,10 @@ impl<'ctx> Lower<'ctx> {
                 .unwrap_or(ffn.insts.len());
             for iid in 起..止 {
                 let inst = ffn.insts[iid];
-                self.cur_line = ffn.lines.get(iid).copied().unwrap_or(0) as usize;
+                let 行 = ffn.lines.get(iid).copied().unwrap_or(0) as usize;
+                if 行 > 0 {
+                    self.cur_line = 行;
+                }
                 self.want = want_of[iid].clone();
                 
                 if let Some(d) = self.dbg.as_ref() {
@@ -461,47 +471,6 @@ impl<'ctx> Lower<'ctx> {
                             self.builder.set_current_debug_location(loc);
                         }
                     }
-                    
-                    let ln = self.cur_line as u64;
-                    let g = self.line_global();
-                    self.builder
-                        .build_store(g.as_pointer_value(), self.ctx.i64_type().const_int(ln, false))
-                        .map_err(|e| e.to_string())?;
-                    let gc = self.i64_global("prion_col");
-                    self.builder
-                        .build_store(
-                            gc.as_pointer_value(),
-                            self.ctx
-                                .i64_type()
-                                .const_int(ffn.cols.get(iid).copied().unwrap_or(0) as u64, false),
-                        )
-                        .map_err(|e| e.to_string())?;
-                    let gl = self.i64_global("prion_len");
-                    self.builder
-                        .build_store(
-                            gl.as_pointer_value(),
-                            self.ctx
-                                .i64_type()
-                                .const_int(ffn.lens.get(iid).copied().unwrap_or(0) as u64, false),
-                        )
-                        .map_err(|e| e.to_string())?;
-                    
-                    let key = if f.file.is_empty() { self.entry_file.clone() } else { f.file.clone() };
-                    let 行文本 = self
-                        .src_lines
-                        .get(&key)
-                        .and_then(|ls| ls.get(self.cur_line.saturating_sub(1)))
-                        .cloned()
-                        .unwrap_or_default();
-                    let sv = if 行文本.is_empty() {
-                        self.ctx.ptr_type(AddressSpace::default()).const_null()
-                    } else {
-                        self.fmt(&行文本)
-                    };
-                    let gs = self.ptr_global("prion_src");
-                    self.builder
-                        .build_store(gs.as_pointer_value(), sv)
-                        .map_err(|e| e.to_string())?;
                 }
                 self.解释一条(f, ffn, p, iid, &allocas, &mut 迹)?;
                 self.want = None;
@@ -543,6 +512,10 @@ impl<'ctx> Lower<'ctx> {
                                     }
                                 }
                             }
+                        }
+                        if let Some(rt) = f.ret.as_ref() {
+                            let vv = x;
+                            x = self.coerce_ty(rt, vv);
                         }
                         self.builder.build_return(Some(&x)).map_err(|e| e.to_string())?;
                     } else {
@@ -672,6 +645,24 @@ impl<'ctx> Lower<'ctx> {
                 } else {
                     let mut vals = Vec::new();
                     for &id in &ids {
+                        
+                        if let Some(ins) = ffn.insts.get(id as usize) {
+                            if ins.tag == Tag::ReadLocal {
+                                let lid = ins.b as usize;
+                                let 槽 = f.locals.get(lid).map(|l| l.is_param && l.ty.0.ends_with('*')).unwrap_or(false);
+                                if 槽 {
+                                    if let Some(a) = allocas.get(lid).and_then(|x| *x) {
+                                        let pt = self.ctx.ptr_type(AddressSpace::default());
+                                        vals.push(
+                                            self.builder
+                                                .build_load(pt, a, "slotarg")
+                                                .map_err(|e| e.to_string())?,
+                                        );
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
                         vals.push(迹.取(id)?);
                     }
                     let r = self.call(f, name.as_str(), &vals)?;
@@ -789,14 +780,25 @@ impl<'ctx> Lower<'ctx> {
                 let raw = self.value(f, allocas, &mv)?;
                 let kraw = self.value(f, allocas, &kv)?;
                 let kvv = self.key_ll(kraw)?;
-                let out = self.call_rt(
-                    "prion_map_at",
-                    &[self.pty(), self.ity()],
-                    Some(self.ity()),
-                    &[raw, kvv],
-                )?;
-                let r = self.from_slot(out, &vt)?;
-                记(迹, Some(r));
+                if vt == "str" {
+                    let kty = Self::map_kty(&mt);
+                    let r = self.call_rt(
+                        "prion_map_at_s",
+                        &[self.pty(), self.ity(), self.ity()],
+                        Some(self.str_ty()),
+                        &[raw, kvv, self.ci(kty)],
+                    )?;
+                    记(迹, Some(r));
+                } else {
+                    let out = self.call_rt(
+                        "prion_map_at",
+                        &[self.pty(), self.ity()],
+                        Some(self.ity()),
+                        &[raw, kvv],
+                    )?;
+                    let r = self.from_slot(out, &vt)?;
+                    记(迹, Some(r));
+                }
             }
             
             Tag::GetField | Tag::GetIndex | Tag::Deref => {
@@ -815,6 +817,94 @@ impl<'ctx> Lower<'ctx> {
                     .ok_or_else(|| "取址没有位置".to_string())?;
                 let a = self.place_ptr(allocas, &pl, f)?;
                 记(迹, Some(a.into()));
+            }
+            Tag::CtxArray => {
+                let ids: Vec<u32> = (0..inst.b)
+                    .filter_map(|k| ffn.extra.get(inst.a as usize + k as usize).copied())
+                    .collect();
+                let n = ids.len().max(1) as u32;
+                let blob = self.ctx.i64_type().array_type(2);
+                let at = blob.array_type(n);
+                let a = self.alloca(at, "ctxarr")?;
+                let z = self.ctx.i64_type().const_int(0, false);
+                for (k, &id) in ids.iter().enumerate() {
+                    let v = 迹.取(id)?;
+                    let ix = self.ctx.i64_type().const_int(k as u64, false);
+                    let bp = unsafe { self.builder.build_gep(at, a, &[z, ix], "ctxe") }
+                        .map_err(|e| e.to_string())?;
+                    let i0 = self.ctx.i64_type().const_int(0, false);
+                    let e0 = unsafe { self.builder.build_gep(blob, bp, &[i0, i0], "b0") }
+                        .map_err(|e| e.to_string())?;
+                    let 型 = self
+                        .flat值2(迹, ffn, id)
+                        .map(|x| self.arg_ty(f, &x))
+                        .unwrap_or_default();
+                    if 型 == "str" {
+                        let p = self.str_p(v)?;
+                        let nn = self.str_n(v)?;
+                        self.builder.build_store(e0, p).map_err(|e| e.to_string())?;
+                        let e1 = unsafe {
+                            self.builder.build_gep(
+                                blob,
+                                bp,
+                                &[i0, self.ctx.i64_type().const_int(1, false)],
+                                "b1",
+                            )
+                        }
+                        .map_err(|e| e.to_string())?;
+                        self.builder.build_store(e1, nn).map_err(|e| e.to_string())?;
+                    } else {
+                        let slot = self.to_slot(v)?;
+                        self.builder.build_store(e0, slot).map_err(|e| e.to_string())?;
+                    }
+                }
+                记(迹, Some(a.into()));
+            }
+            Tag::CtxGet => {
+                let raw = 迹.取(inst.a)?;
+                let base = match raw {
+                    BasicValueEnum::PointerValue(p) => p,
+                    BasicValueEnum::IntValue(i) => self
+                        .builder
+                        .build_int_to_ptr(i, self.ctx.ptr_type(AddressSpace::default()), "ctxp")
+                        .map_err(|e| e.to_string())?,
+                    _ => return Err("任务上下文不是指针".into()),
+                };
+                let tid = ffn
+                    .extra
+                    .get(inst.b as usize)
+                    .copied()
+                    .ok_or_else(|| "缺上下文槽类型".to_string())?;
+                let tyname = ffn.strings.get(tid as usize).cloned().unwrap_or_default();
+                let ix = self.ctx.i64_type().const_int(inst.c as u64, false);
+                let blob = self.ctx.i64_type().array_type(2);
+                let bp = unsafe { self.builder.build_gep(blob, base, &[ix], "ctxg") }
+                    .map_err(|e| e.to_string())?;
+                let i0 = self.ctx.i64_type().const_int(0, false);
+                let e0 = unsafe { self.builder.build_gep(blob, bp, &[i0, i0], "b0") }
+                    .map_err(|e| e.to_string())?;
+                if tyname == "str" {
+                    let p = self.builder.build_load(self.pty(), e0, "cp").map_err(|e| e.to_string())?;
+                    let e1 = unsafe {
+                        self.builder.build_gep(
+                            blob,
+                            bp,
+                            &[i0, self.ctx.i64_type().const_int(1, false)],
+                            "b1",
+                        )
+                    }
+                    .map_err(|e| e.to_string())?;
+                    let n = self.builder.build_load(self.ity(), e1, "cn").map_err(|e| e.to_string())?;
+                    let ni = match n {
+                        BasicValueEnum::IntValue(i) => i,
+                        _ => return Err("上下文串长度不是整数".into()),
+                    };
+                    记(迹, Some(self.mk_str(p, ni)));
+                } else {
+                    let v = self.builder.build_load(self.ity(), e0, "ctxv").map_err(|e| e.to_string())?;
+                    let x = self.from_slot(v, &tyname)?;
+                    记(迹, Some(x));
+                }
             }
             Tag::VariantLit => {
                 let tyname = ffn
@@ -867,12 +957,39 @@ impl<'ctx> Lower<'ctx> {
                     .ok_or_else(|| "缺载荷下标".to_string())?;
                 let tyname = ffn.strings.get(tyid as usize).cloned().unwrap_or_default();
                 let sv = self.struct_value(f, allocas, &v)?;
-                let raw = self
+                let st = sv.get_type();
+                let a = self.alloca(st, "vget")?;
+                self.builder.build_store(a, sv).map_err(|e| e.to_string())?;
+                let fp = self
                     .builder
-                    .build_extract_value(sv, idx + 1, "pay")
+                    .build_struct_gep(st, a, idx + 1, "pay")
                     .map_err(|e| e.to_string())?;
-                let r = self.from_slot(raw, &tyname)?;
-                记(迹, Some(r));
+                let blob = self.ctx.i64_type().array_type(2);
+                let i0 = self.ctx.i64_type().const_int(0, false);
+                let e0 = unsafe { self.builder.build_gep(blob, fp, &[i0, i0], "b0") }
+                    .map_err(|e| e.to_string())?;
+                if tyname == "str" {
+                    let p = self.builder.build_load(self.pty(), e0, "vp").map_err(|e| e.to_string())?;
+                    let e1 = unsafe {
+                        self.builder.build_gep(
+                            blob,
+                            fp,
+                            &[i0, self.ctx.i64_type().const_int(1, false)],
+                            "b1",
+                        )
+                    }
+                    .map_err(|e| e.to_string())?;
+                    let n = self.builder.build_load(self.ity(), e1, "vn").map_err(|e| e.to_string())?;
+                    let ni = match n {
+                        BasicValueEnum::IntValue(i) => i,
+                        _ => return Err("变体串长度不是整数".into()),
+                    };
+                    记(迹, Some(self.mk_str(p, ni)));
+                } else {
+                    let raw = self.builder.build_load(self.ity(), e0, "vp").map_err(|e| e.to_string())?;
+                    let r = self.from_slot(raw, &tyname)?;
+                    记(迹, Some(r));
+                }
             }
             Tag::Nop => {
                 let lhs = ffn
@@ -884,7 +1001,7 @@ impl<'ctx> Lower<'ctx> {
                 let mut v = 迹.取(vi)?;
                 
                 if self.place_ty(f, &lhs).0 == "str" && inst.c != 0 {
-                    v = self.call_rt("prion_str_copy", &[self.pty()], Some(self.pty()), &[v])?;
+                    v = self.call_rt("prion_str_copy", &[self.str_ty()], Some(self.str_ty()), &[v])?;
                 }
                 self.store_place(f, allocas, &lhs, v)?;
                 self.容器移交flat(f, allocas, &lhs, ffn, iid, 迹)?;
@@ -899,6 +1016,50 @@ impl<'ctx> Lower<'ctx> {
                     let cur = self.load_place(f, allocas, &Place::local(lhs.base))?;
                     迹.存(dv, cur);
                 }
+            }
+            Tag::NopRel => {
+                let lhs = ffn
+                    .places
+                    .get(iid)
+                    .and_then(|x| x.clone())
+                    .ok_or_else(|| "赋值收口没有位置".to_string())?;
+                let old = self.load_place(f, allocas, &Place::local(lhs.base))?;
+                let vi = inst.a;
+                let mut v = 迹.取(vi)?;
+                if self.place_ty(f, &lhs).0 == "str" && inst.c != 0 {
+                    v = self.call_rt("prion_str_copy", &[self.str_ty()], Some(self.str_ty()), &[v])?;
+                }
+                self.store_place(f, allocas, &lhs, v)?;
+                if let BasicValueEnum::PointerValue(p) = old {
+                    let pi = self
+                        .builder
+                        .build_ptr_to_int(p, self.ctx.i64_type(), "relp")
+                        .map_err(|e| e.to_string())?;
+                    let is_null = self
+                        .builder
+                        .build_int_compare(IntPredicate::EQ, pi, self.ctx.i64_type().const_zero(), "isnull")
+                        .map_err(|e| e.to_string())?;
+                    let fnv = self
+                        .builder
+                        .get_insert_block()
+                        .and_then(|x| x.get_parent())
+                        .ok_or_else(|| "释放点不在函数里".to_string())?;
+                    let 空 = self.ctx.append_basic_block(fnv, "rel.null");
+                    let 有 = self.ctx.append_basic_block(fnv, "rel.has");
+                    let 出 = self.ctx.append_basic_block(fnv, "rel.exit");
+                    self.builder.build_conditional_branch(is_null, 空, 有).map_err(|e| e.to_string())?;
+                    self.builder.position_at_end(空);
+                    self.builder.build_unconditional_branch(出).map_err(|e| e.to_string())?;
+                    self.builder.position_at_end(有);
+                    let free = self.rt_str_free();
+                    self.builder.build_call(free, &[p.into()], "").map_err(|e| e.to_string())?;
+                    self.builder.build_unconditional_branch(出).map_err(|e| e.to_string())?;
+                    self.builder.position_at_end(出);
+                }
+                let cur = self.load_place(f, allocas, &Place::local(lhs.base))?;
+                迹.存(vi, cur);
+                记(迹, Some(cur));
+                迹.记(lhs.base, vi);
             }
             Tag::ListSetStmt => {
                 let lid = ffn.extra.get(inst.a as usize).copied().ok_or_else(|| "缺列表".to_string())?;
@@ -928,13 +1089,16 @@ impl<'ctx> Lower<'ctx> {
                         None,
                         &[lraw, iraw, a.into()],
                     )?;
+                } else if et == "str" {
+                    let d = self.str_ref(vraw)?;
+                    self.call_rt(
+                        "prion_list_setat_s",
+                        &[self.pty(), self.ity(), self.pty()],
+                        None,
+                        &[lraw, iraw, d.into()],
+                    )?;
                 } else {
-                    let slot = if et == "str" {
-                        let c = self.call_rt("prion_str_copy", &[self.pty()], Some(self.pty()), &[vraw])?;
-                        self.to_slot(c)?
-                    } else {
-                        self.to_slot(vraw)?
-                    };
+                    let slot = self.to_slot(vraw)?;
                     self.call_rt(
                         "prion_list_setat",
                         &[self.pty(), self.ity(), self.ity()],
@@ -962,18 +1126,24 @@ impl<'ctx> Lower<'ctx> {
                 let kraw = self.value(f, allocas, &kv)?;
                 let kraw = self.key_ll(kraw)?;
                 let vraw = self.value(f, allocas, &vv)?;
-                let slot = if vt == "str" {
-                    let c = self.call_rt("prion_str_copy", &[self.pty()], Some(self.pty()), &[vraw])?;
-                    self.to_slot(c)?
+                let kty = crate::Lower::map_kty(&mt);
+                if vt == "str" {
+                    let d = self.str_ref(vraw)?;
+                    self.call_rt(
+                        "prion_map_set_s",
+                        &[self.pty(), self.ity(), self.pty(), self.ity()],
+                        None,
+                        &[mraw, kraw, d.into(), self.ci(kty)],
+                    )?;
                 } else {
-                    self.to_slot(vraw)?
-                };
-                self.call_rt(
-                    "prion_map_set",
-                    &[self.pty(), self.ity(), self.ity()],
-                    None,
-                    &[mraw, kraw, slot.into()],
-                )?;
+                    let slot = self.to_slot(vraw)?;
+                    self.call_rt(
+                        "prion_map_set",
+                        &[self.pty(), self.ity(), self.ity()],
+                        None,
+                        &[mraw, kraw, slot.into()],
+                    )?;
+                }
             }
             Tag::Drop => {
                 let obj = inst.a;
@@ -1012,13 +1182,42 @@ impl<'ctx> Lower<'ctx> {
                     let code = if msg.contains("空引用") { 1 } else { 7 };
                     let m = self.fmt(&msg);
                     let fx = self.fmt(&fix);
+                    let fname = self.cur_file.clone();
+                    let fp = if fname.is_empty() {
+                        self.ctx.ptr_type(AddressSpace::default()).const_null()
+                    } else {
+                        self.fmt(&fname)
+                    };
+                    let key = if f.file.is_empty() { self.entry_file.clone() } else { f.file.clone() };
+                    let 行文本 = self
+                        .src_lines
+                        .get(&key)
+                        .and_then(|ls| ls.get(self.cur_line.saturating_sub(1)))
+                        .cloned()
+                        .unwrap_or_default();
+                    let srcv = if 行文本.is_empty() {
+                        self.ctx.ptr_type(AddressSpace::default()).const_null()
+                    } else {
+                        self.fmt(&行文本)
+                    };
                     self.call_rt(
-                        "prion_die",
-                        &[self.ctx.i32_type().into(), self.ity(), self.pty(), self.pty()],
+                        "prion_die_at",
+                        &[
+                            self.pty(),
+                            self.ity(),
+                            self.ity(),
+                            self.pty(),
+                            self.ctx.i32_type().into(),
+                            self.pty(),
+                            self.pty(),
+                        ],
                         None,
                         &[
+                            fp.into(),
+                            self.ci(self.cur_line as i64).into(),
+                            self.ci(ffn.cols.get(iid).copied().unwrap_or(0) as i64).into(),
+                            srcv.into(),
                             self.ctx.i32_type().const_int(code, false).into(),
-                            self.ci(self.cur_line as i64),
                             m.into(),
                             fx.into(),
                         ],
@@ -1080,7 +1279,8 @@ impl<'ctx> Lower<'ctx> {
         迹: &mut 迹<'ctx>,
     ) -> Result<(), String> {
         let ty = self.local_ty(f, lhs.base).0;
-        if !prion_ir::is_container_ty(&ty) {
+        let 基 = ty.trim_end_matches('*');
+        if !prion_ir::is_container_ty(基) && !matches!(基, "list" | "map" | "que" | "stack") {
             return Ok(());
         }
         
@@ -1117,6 +1317,14 @@ impl<'ctx> Lower<'ctx> {
     ) -> Result<BasicValueEnum<'ctx>, String> {
         let wty = self.want.clone().map(|t| t.0).unwrap_or_default();
         let et = seq_elem_ty(&wty).unwrap_or_else(|| "int".into());
+        let et = if et != "str"
+            && !elems.is_empty()
+            && elems.iter().all(|e| self.arg_ty(f, e) == "str")
+        {
+            "str".to_string()
+        } else {
+            et
+        };
         let (esz, sgn) = elem_esz_sgn(&et);
         let 宽 = self.聚合宽(&et);
         if elems.is_empty() {
@@ -1152,19 +1360,21 @@ impl<'ctx> Lower<'ctx> {
             );
         }
         if et == "str" {
-            let mut ptrs = Vec::new();
-            for e in elems {
-                match self.value(f, allocas, e)? {
-                    BasicValueEnum::PointerValue(pp) => ptrs.push(pp),
-                    _ => return Err("str 列表元素不是指针".into()),
-                }
+            let at = self.pstr_ty().array_type(elems.len() as u32);
+            let a = self.alloca(at, "sarr").map_err(|e| e.to_string())?;
+            let z = self.ctx.i64_type().const_int(0, false);
+            for (i, e) in elems.iter().enumerate() {
+                let v = self.value(f, allocas, e)?;
+                let ix = self.ctx.i64_type().const_int(i as u64, false);
+                let ep = unsafe { self.builder.build_gep(at, a, &[z, ix], "se") }
+                    .map_err(|e| e.to_string())?;
+                self.builder.build_store(ep, v).map_err(|e| e.to_string())?;
             }
-            let arr = self.stack_ptr_arr(&ptrs)?;
             return self.call_rt(
                 "prion_list_lit_s",
                 &[self.ity(), self.pty()],
                 Some(self.pty()),
-                &[self.ci(elems.len() as i64), arr.into()],
+                &[self.ci(elems.len() as i64), a.into()],
             );
         }
         let mut vals = Vec::new();
@@ -1205,6 +1415,40 @@ impl<'ctx> Lower<'ctx> {
             return self.builder.build_load(st, a, "av").map_err(|e| e.to_string());
         }
         
+        if et == "str" {
+            if self.dbg.is_some() {
+                return self.call_rt(
+                    "prion_list_at_s",
+                    &[self.pty(), self.ity()],
+                    Some(self.str_ty()),
+                    &[lv, iv],
+                );
+            }
+            let 位 = self
+                .builder
+                .build_int_sub(iv.into_int_value(), self.ity().into_int_type().const_int(1, false), "idx")
+                .map_err(|e| e.to_string())?;
+            let 数据 = match self.列表字段(lv.into_pointer_value(), 4)? {
+                BasicValueEnum::PointerValue(pp) => pp,
+                _ => return Err("列表数据指针类型不对".into()),
+            };
+            let 偏 = self
+                .builder
+                .build_int_mul(位, self.ity().into_int_type().const_int(16, false), "off")
+                .map_err(|e| e.to_string())?;
+            let 偏64 = self
+                .builder
+                .build_int_s_extend(偏, self.ctx.i64_type(), "sext")
+                .map_err(|e| e.to_string())?;
+            let 址 = unsafe {
+                self.builder.build_gep(self.ctx.i8_type(), 数据, &[偏64], "at")
+            }
+            .map_err(|e| e.to_string())?;
+            return self
+                .builder
+                .build_load(self.pstr_ty(), 址, "scell")
+                .map_err(|e| e.to_string());
+        }
         if self.dbg.is_some() {
             let c = self.call_rt(
                 "prion_list_at",
@@ -1255,42 +1499,44 @@ impl<'ctx> Lower<'ctx> {
             0
         };
         let (esz, sgn) = elem_esz_sgn(&vt);
-        let mut ks = Vec::new();
-        let mut vs = Vec::new();
+        let mv = self.call_rt(
+            "prion_map_new",
+            &[self.ity(), self.ity(), self.ity()],
+            Some(self.pty()),
+            &[self.ci(esz), self.ci(sgn), self.ci(kty)],
+        )?;
         for (k, v) in pairs {
-            let g: inkwell::values::IntValue<'ctx> = match k {
-                MapKey::Int(n) => self.ctx.i64_type().const_int(*n as u64, false),
+            let kv: BasicValueEnum<'ctx> = match k {
+                MapKey::Int(n) => self.ctx.i64_type().const_int(*n as u64, false).into(),
                 MapKey::Str(s) => {
-                    let g = self.builder.build_global_string_ptr(&s, "mk").map_err(|e| e.to_string())?;
+                    let lit = self.value(f, allocas, &Value::Str(s.clone()))?;
+                    let d = self.str_ref(lit)?;
                     self.builder
-                        .build_ptr_to_int(g.as_pointer_value(), self.ctx.i64_type(), "k2i")
+                        .build_ptr_to_int(d, self.ctx.i64_type(), "k2i")
                         .map_err(|e| e.to_string())?
+                        .into()
                 }
             };
-            ks.push(g);
             let vv = self.value(f, allocas, v)?;
-            let vv = if vt == "str" {
-                self.call_rt("prion_str_copy", &[self.pty()], Some(self.pty()), &[vv])?
+            if vt == "str" {
+                let d = self.str_ref(vv)?;
+                self.call_rt(
+                    "prion_map_put_s",
+                    &[self.pty(), self.ity(), self.pty(), self.ity()],
+                    None,
+                    &[mv, kv, d.into(), self.ci(kty)],
+                )?;
             } else {
-                vv
-            };
-            vs.push(self.to_slot(vv)?);
+                let slot = self.to_slot(vv)?;
+                self.call_rt(
+                    "prion_map_put_n",
+                    &[self.pty(), self.ity(), self.ity(), self.ity(), self.ity()],
+                    None,
+                    &[mv, kv, slot.into(), self.ci(kty), self.ci(esz)],
+                )?;
+            }
         }
-        let karr = self.stack_i64_arr(&ks)?;
-        let varr = self.stack_i64_arr(&vs)?;
-        self.call_rt(
-            "prion_map_lit",
-            &[self.ity(), self.pty(), self.pty(), self.ity(), self.ity(), self.ity()],
-            Some(self.pty()),
-            &[
-                self.ci(pairs.len() as i64),
-                karr.into(),
-                varr.into(),
-                self.ci(esz),
-                self.ci(sgn),
-                self.ci(kty),
-            ],
-        )
+        Ok(mv)
     }
 
     
@@ -1315,9 +1561,31 @@ impl<'ctx> Lower<'ctx> {
         for (i, a) in args.iter().enumerate() {
             let v = self.value(f, allocas, a)?;
             let want = tys.get(i).map(|t| t.0.clone()).unwrap_or_default();
-            let iv = if want == "str" {
-                self.to_slot(v)?
-            } else if want.ends_with('*') {
+            let fp = self
+                .builder
+                .build_struct_gep(st, slot, (i + 1) as u32, "pay")
+                .map_err(|e| e.to_string())?;
+            let blob = self.ctx.i64_type().array_type(2);
+            let i0 = self.ctx.i64_type().const_int(0, false);
+            if want == "str" {
+                let p = self.str_p(v)?;
+                let nn = self.str_n(v)?;
+                let e0 = unsafe { self.builder.build_gep(blob, fp, &[i0, i0], "b0") }
+                    .map_err(|e| e.to_string())?;
+                self.builder.build_store(e0, p).map_err(|e| e.to_string())?;
+                let e1 = unsafe {
+                    self.builder.build_gep(
+                        blob,
+                        fp,
+                        &[i0, self.ctx.i64_type().const_int(1, false)],
+                        "b1",
+                    )
+                }
+                .map_err(|e| e.to_string())?;
+                self.builder.build_store(e1, nn).map_err(|e| e.to_string())?;
+                continue;
+            }
+            let iv = if want.ends_with('*') {
                 match v {
                     BasicValueEnum::PointerValue(pp) => self
                         .builder
@@ -1339,11 +1607,9 @@ impl<'ctx> Lower<'ctx> {
             } else {
                 self.to_slot(v)?
             };
-            let fp = self
-                .builder
-                .build_struct_gep(st, slot, (i + 1) as u32, "pay")
+            let e0 = unsafe { self.builder.build_gep(blob, fp, &[i0, i0], "b0") }
                 .map_err(|e| e.to_string())?;
-            self.builder.build_store(fp, iv).map_err(|e| e.to_string())?;
+            self.builder.build_store(e0, iv).map_err(|e| e.to_string())?;
         }
         self.builder.build_load(st, slot, "vlit").map_err(|e| e.to_string())
     }

@@ -4,7 +4,11 @@ use prion_ir::{is_container_ty, Exit, Function, Local, LocalId, ObjId, ObjEnt, P
 use std::collections::{BTreeMap, BTreeSet};
 
 fn 是堆型(t: &str) -> bool {
-    t == "str" || t.ends_with('*') || is_container_ty(t)
+    let n = t.trim_end_matches('*');
+    t == "str"
+        || t.ends_with('*')
+        || is_container_ty(n)
+        || matches!(n, "list" | "map" | "que" | "stack")
 }
 
 fn 语句读(s: &Stmt, out: &mut std::collections::BTreeSet<LocalId>) {
@@ -39,6 +43,10 @@ fn 语句读(s: &Stmt, out: &mut std::collections::BTreeSet<LocalId>) {
                 值用(map, out);
                 值用(key, out);
             }
+            Rvalue::CtxArray { args } => args.iter().for_each(|a| 值用(a, out)),
+            Rvalue::CtxGet { ctx, .. } => {
+                out.insert(*ctx);
+            }
             Rvalue::VariantLit { args, .. } => args.iter().for_each(|a| 值用(a, out)),
             Rvalue::VariantTag(v) => 值用(v, out),
             Rvalue::VariantGet { value, .. } => 值用(value, out),
@@ -46,7 +54,7 @@ fn 语句读(s: &Stmt, out: &mut std::collections::BTreeSet<LocalId>) {
         }
     }
     match s {
-        Stmt::Assign { lhs, rhs } => {
+        Stmt::Assign { lhs, rhs } | Stmt::AssignRelease { lhs, rhs } => {
             右用(rhs, out);
             if !lhs.proj.is_empty() {
                 out.insert(lhs.base);
@@ -145,6 +153,34 @@ pub fn 对象挂名(prog: &mut Program) {
             }
         }
         
+        loop {
+            let mut 变 = false;
+            for b in &f.blocks {
+                for st in &b.stmts {
+                    if let Stmt::Assign { lhs, rhs } = st {
+                        if !lhs.proj.is_empty() || !死.contains(&lhs.base) {
+                            continue;
+                        }
+                        let 源 = match rhs {
+                            Rvalue::Const(Value::Local(u)) => Some(*u),
+                            Rvalue::Use(Place { base: u, proj }) if proj.is_empty() => Some(*u),
+                            _ => None,
+                        };
+                        if let Some(u) = 源 {
+                            if f.locals.get(u).map(|l| l.name.is_none()).unwrap_or(false)
+                                && 死.insert(u)
+                            {
+                                变 = true;
+                            }
+                        }
+                    }
+                }
+            }
+            if !变 {
+                break;
+            }
+        }
+        
         let 基id = f.locals.len();
         let mut 新locals: Vec<Local> = Vec::new();
         
@@ -162,6 +198,7 @@ pub fn 对象挂名(prog: &mut Program) {
         }
         
         let mut 杀obj: BTreeMap<LocalId, ObjId> = BTreeMap::new();
+        let mut 借obj: BTreeSet<ObjId> = BTreeSet::new();
         for b in &mut f.blocks {
             let mut 出: Vec<Stmt> = Vec::with_capacity(b.stmts.len() + 8);
             for st in std::mem::take(&mut b.stmts) {
@@ -198,7 +235,8 @@ pub fn 对象挂名(prog: &mut Program) {
                     }
                     continue;
                 }
-                if let Stmt::Assign { lhs, rhs } = &st {
+                if let Stmt::Assign { lhs, rhs } = st.clone() {
+                    let mut 语句 = st.clone();
                     if std::env::var("PRION_OWN_DEBUG").is_ok() {
                         eprintln!(
                             "assign L{} proj{} 块{} 堆={}",
@@ -222,8 +260,23 @@ pub fn 对象挂名(prog: &mut Program) {
                                     
                                     
                                     if 循环内.contains(&b.id) {
-                                        if !活别名 {
+                                        
+                                        let mut 读 = BTreeSet::new();
+                                        语句读(&st, &mut 读);
+                                        let 读自 = 读.contains(&lhs.base);
+                                        if !活别名 && 待放.contains(&o_old) {
                                             待放.remove(&o_old);
+                                            
+                                            if ty.0 == "str" {
+                                                if 读自 {
+                                                    语句 = Stmt::AssignRelease {
+                                                        lhs: lhs.clone(),
+                                                        rhs: rhs.clone(),
+                                                    };
+                                                } else {
+                                                    出.push(Stmt::DropVar { lid: lhs.base });
+                                                }
+                                            }
                                         }
                                     } else if !活别名 {
                                         
@@ -265,7 +318,7 @@ pub fn 对象挂名(prog: &mut Program) {
                             ) {
                                 
                                 绑.remove(&lhs.base);
-                                出.push(st.clone());
+                                出.push(语句.clone());
                                 if let Some(o) = 后放 {
                                     出.push(Stmt::Drop { obj: o });
                                 }
@@ -274,22 +327,30 @@ pub fn 对象挂名(prog: &mut Program) {
                             if 置零 {
                                 
                                 绑.remove(&lhs.base);
-                                出.push(st.clone());
+                                出.push(语句.clone());
                                 continue;
                             }
                             let 别名源: Option<LocalId> = match rhs {
-                                Rvalue::Const(Value::Local(s)) => Some(*s),
+                                Rvalue::Const(Value::Local(s)) => Some(s),
                                 
-                                Rvalue::Use(Place { base: s, .. }) => Some(*s),
+                                Rvalue::Use(Place { base: s, .. }) => Some(s),
+                                
+                                Rvalue::Call { ref name, ref args }
+                                    if (name == "que" || name == "stack") && args.len() == 1 =>
+                                {
+                                    match args[0] {
+                                        Value::Local(s) => Some(s),
+                                        _ => None,
+                                    }
+                                }
                                 _ => None,
                             };
-                            
                             let 别名源 = if ty.0 == "str" { None } else { 别名源 };
                             match 别名源.and_then(|s| 绑.get(&s).copied()) {
                                 Some(o) => {
                                     
                                     绑.insert(lhs.base, o);
-                                    出.push(st.clone());
+                                    出.push(语句.clone());
                                     出.push(Stmt::Bind { var: lhs.base, obj: o });
                                     if let Some(o) = 后放 {
                                         出.push(Stmt::Drop { obj: o });
@@ -307,7 +368,7 @@ pub fn 对象挂名(prog: &mut Program) {
                                         if !聚合构造 {
                                             
                                             绑.remove(&lhs.base);
-                                            出.push(st.clone());
+                                            出.push(语句.clone());
                                             if let Some(o) = 后放 {
                                                 出.push(Stmt::Drop { obj: o });
                                             }
@@ -318,11 +379,14 @@ pub fn 对象挂名(prog: &mut Program) {
                                     let obj = prog.objects.len() as ObjId;
                                     prog.objects.push(ObjEnt { class: StorageClass::Tmp, ty: ty.clone() });
                                     绑.insert(lhs.base, obj);
+                                    if matches!(rhs, Rvalue::CtxGet { .. }) {
+                                        借obj.insert(obj);
+                                    }
                                     
                                     if !matches!(rhs, Rvalue::Call { .. }) || ty.0 == "str" {
                                         待放.insert(obj);
                                     }
-                                    出.push(st.clone());
+                                    出.push(语句.clone());
                                     出.push(Stmt::Alloc { obj, class: StorageClass::Tmp, ty });
                                     出.push(Stmt::Bind { var: lhs.base, obj });
                                     if let Some(o) = 后放 {
@@ -341,11 +405,13 @@ pub fn 对象挂名(prog: &mut Program) {
         
         let mut 逃: BTreeSet<ObjId> = BTreeSet::new();
         let mut 返: BTreeSet<ObjId> = BTreeSet::new();
+        let mut 捕获: BTreeSet<ObjId> = BTreeSet::new();
+        逃.extend(借obj);
         
         let mut 借: BTreeMap<LocalId, LocalId> = BTreeMap::new();
         for b in f.blocks.iter() {
             for st in b.stmts.iter() {
-                if let Stmt::Assign { lhs, rhs } = st {
+                if let Some((lhs, rhs)) = st.赋值体() {
                     if !lhs.proj.is_empty() {
                         continue;
                     }
@@ -374,7 +440,7 @@ pub fn 对象挂名(prog: &mut Program) {
         let mut 定义: BTreeMap<LocalId, 源类> = BTreeMap::new();
         for b in f.blocks.iter() {
             for st in b.stmts.iter() {
-                if let Stmt::Assign { lhs, rhs } = st {
+                if let Some((lhs, rhs)) = st.赋值体() {
                     if !lhs.proj.is_empty() || 定义.contains_key(&lhs.base) {
                         continue;
                     }
@@ -491,6 +557,18 @@ pub fn 对象挂名(prog: &mut Program) {
                 
                 let mut 读: BTreeSet<LocalId> = BTreeSet::new();
                 语句读(st, &mut 读);
+                if let Stmt::Assign { rhs: Rvalue::CtxArray { args }, .. } = st {
+                    for a in args {
+                        if let Value::Local(lid) = a {
+                            if f.locals.get(*lid).map(|l| 是堆型(&l.ty.0)).unwrap_or(false) {
+                                if let Some(&o) = 绑.get(lid) {
+                                    捕获.insert(o);
+                                    逃.insert(o);
+                                }
+                            }
+                        }
+                    }
+                }
                 if let Stmt::Assign { rhs: Rvalue::Call { name, args }, .. } | Stmt::Call { name, args } = st {
                     if 真函数.contains(name) {
                         for (k, a) in args.iter().enumerate() {
@@ -532,7 +610,9 @@ pub fn 对象挂名(prog: &mut Program) {
         }
         
         复印点.sort_by(|a, b| b.0.cmp(&a.0).then(b.1.cmp(&a.1)));
+        let mut 复印件: BTreeSet<ObjId> = BTreeSet::new();
         for (bi, si, o, lid, 副) in 复印点 {
+            复印件.insert(o);
             let 旧id = 基id + 新locals.len();
             let 旧ty = f
                 .locals
@@ -598,9 +678,17 @@ pub fn 对象挂名(prog: &mut Program) {
             let mut 延: Vec<(ObjId, LocalId)> = Vec::new();
             for b in f.blocks.iter() {
                 for st in b.stmts.iter() {
-                    if let Stmt::Assign { lhs, rhs: Rvalue::ListGet { list: Value::Local(源), .. } } = st {
-                        if let Some(&容器o) = 绑.get(源) {
-                            延.push((容器o, lhs.base));
+                    if let Some((lhs, rhs)) = st.赋值体() {
+                        
+                        let 源 = match rhs {
+                            Rvalue::ListGet { list: Value::Local(源), .. } => Some(*源),
+                            Rvalue::Ref(p) => Some(p.base),
+                            _ => None,
+                        };
+                        if let Some(源) = 源 {
+                            if let Some(&容器o) = 绑.get(&源) {
+                                延.push((容器o, lhs.base));
+                            }
                         }
                     }
                 }
@@ -655,6 +743,10 @@ pub fn 对象挂名(prog: &mut Program) {
             
             let 绑定 = 活.get(obj).map(|v| v.as_slice()).unwrap_or(&[]);
             if 绑定.len() != 1 {
+                
+                if !绑定.is_empty() && 待放.contains(obj) && !复印件.contains(obj) {
+                    drop_map.entry(*obj).or_insert(绑定[0]);
+                }
                 continue;
             }
             let 活lid = 绑定[0];
@@ -716,8 +808,11 @@ pub fn 对象挂名(prog: &mut Program) {
         
         for b in f.blocks.iter_mut() {
             if matches!(b.exit, Exit::Return(_)) {
-                for obj in drop_map.keys() {
+                for obj in &捕获 {
                     b.stmts.push(Stmt::Drop { obj: *obj });
+                }
+                for (_obj, lid) in drop_map.iter() {
+                    b.stmts.push(Stmt::DropVar { lid: *lid });
                 }
             }
         }
@@ -728,8 +823,8 @@ pub fn 对象挂名(prog: &mut Program) {
         for ((bi, si), 项) in 插入点 {
             if let Some(b) = f.blocks.get_mut(bi) {
                 let mut at = (si + 1).min(b.stmts.len());
-                for (o, _lid) in 项 {
-                    b.stmts.insert(at, Stmt::Drop { obj: o });
+                for (_o, lid) in 项 {
+                    b.stmts.insert(at, Stmt::DropVar { lid });
                     at += 1;
                 }
             }

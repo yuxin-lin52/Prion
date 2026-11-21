@@ -213,6 +213,16 @@ fn 换右值(r: &mut Rvalue, 版: &BTreeMap<prion_ir::LocalId, prion_ir::LocalId
         }
         Rvalue::VariantTag(v) => 换值(v, 版),
         Rvalue::VariantGet { value, .. } => 换值(value, 版),
+        Rvalue::CtxArray { args } => {
+            for a in args {
+                换值(a, 版);
+            }
+        }
+        Rvalue::CtxGet { ctx, .. } => {
+            if let Some(n) = 版.get(ctx) {
+                *ctx = *n;
+            }
+        }
         Rvalue::FnRef { .. } => {}
     }
 }
@@ -220,7 +230,7 @@ fn 换右值(r: &mut Rvalue, 版: &BTreeMap<prion_ir::LocalId, prion_ir::LocalId
 
 fn 换语句(s: &mut Stmt, 版: &BTreeMap<prion_ir::LocalId, prion_ir::LocalId>) {
     match s {
-        Stmt::Assign { lhs, rhs } => {
+        Stmt::Assign { lhs, rhs } | Stmt::AssignRelease { lhs, rhs } => {
             换右值(rhs, 版);
             换位(lhs, 版);
         }
@@ -570,6 +580,12 @@ fn 走右值<F: FnMut(&mut prion_ir::LocalId)>(r: &mut Rvalue, g: &mut F) {
         }
         Rvalue::VariantTag(v) => 走值(v, g),
         Rvalue::VariantGet { value, .. } => 走值(value, g),
+        Rvalue::CtxArray { args } => {
+            for a in args {
+                走值(a, g);
+            }
+        }
+        Rvalue::CtxGet { ctx, .. } => g(ctx),
         Rvalue::FnRef { .. } => {}
     }
 }
@@ -577,7 +593,7 @@ fn 走右值<F: FnMut(&mut prion_ir::LocalId)>(r: &mut Rvalue, g: &mut F) {
 
 fn 走语句<F: FnMut(&mut prion_ir::LocalId)>(s: &mut Stmt, g: &mut F) {
     match s {
-        Stmt::Assign { lhs, rhs } => {
+        Stmt::Assign { lhs, rhs } | Stmt::AssignRelease { lhs, rhs } => {
             走位(lhs, g);
             走右值(rhs, g);
         }

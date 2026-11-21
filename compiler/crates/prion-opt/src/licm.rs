@@ -150,7 +150,7 @@ fn 纯(r: &Rvalue) -> bool {
         Rvalue::Use(p) => p.proj.is_empty(),
         Rvalue::BinOp { op, .. } => !matches!(op, BinOp::Div | BinOp::Mod),
         
-        Rvalue::Call { name, .. } => name == "len" || name == "len_utf8",
+        Rvalue::Call { name, .. } => name == "len",
         _ => false,
     }
 }

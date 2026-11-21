@@ -3,107 +3,6 @@
 version = 4
 
 [[package]]
-name = "anle-check"
-version = "0.2.0"
-dependencies = [
- "anle-error",
- "anle-lexer",
- "anle-parser",
- "anle-types",
-]
-
-[[package]]
-name = "anle-codegen"
-version = "0.2.0"
-dependencies = [
- "anle-error",
- "anle-ir",
- "anle-walk",
-]
-
-[[package]]
-name = "anle-error"
-version = "0.2.0"
-
-[[package]]
-name = "anle-ir"
-version = "0.2.0"
-dependencies = [
- "anle-error",
- "anle-types",
-]
-
-[[package]]
-name = "anle-lexer"
-version = "0.2.0"
-dependencies = [
- "anle-error",
-]
-
-[[package]]
-name = "anle-llvm"
-version = "0.2.0"
-dependencies = [
- "anle-ir",
- "anle-walk",
- "inkwell",
-]
-
-[[package]]
-name = "anle-lower"
-version = "0.2.0"
-dependencies = [
- "anle-error",
- "anle-ir",
- "anle-lexer",
- "anle-parser",
- "anle-types",
-]
-
-[[package]]
-name = "anle-opt"
-version = "0.2.0"
-dependencies = [
- "anle-ir",
-]
-
-[[package]]
-name = "anle-parser"
-version = "0.2.0"
-dependencies = [
- "anle-error",
- "anle-lexer",
-]
-
-[[package]]
-name = "anle-types"
-version = "0.2.0"
-
-[[package]]
-name = "anle-walk"
-version = "0.2.0"
-dependencies = [
- "anle-ir",
-]
-
-[[package]]
-name = "anlec"
-version = "0.2.0"
-dependencies = [
- "anle-check",
- "anle-codegen",
- "anle-error",
- "anle-ir",
- "anle-lexer",
- "anle-llvm",
- "anle-lower",
- "anle-opt",
- "anle-parser",
- "anle-walk",
- "serde_json",
-]
-
-[[package]]
 name = "anyhow"
 version = "1.0.104"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -192,6 +91,106 @@ name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
+
+[[package]]
+name = "prion-check"
+version = "0.2.0"
+dependencies = [
+ "prion-error",
+ "prion-lexer",
+ "prion-parser",
+ "prion-types",
+]
+
+[[package]]
+name = "prion-codegen"
+version = "0.2.0"
+dependencies = [
+ "prion-error",
+ "prion-ir",
+ "prion-walk",
+]
+
+[[package]]
+name = "prion-error"
+version = "0.2.0"
+
+[[package]]
+name = "prion-ir"
+version = "0.2.0"
+dependencies = [
+ "prion-error",
+ "prion-types",
+]
+
+[[package]]
+name = "prion-lexer"
+version = "0.2.0"
+dependencies = [
+ "prion-error",
+]
+
+[[package]]
+name = "prion-llvm"
+version = "0.2.0"
+dependencies = [
+ "inkwell",
+ "prion-ir",
+ "prion-walk",
+]
+
+[[package]]
+name = "prion-lower"
+version = "0.2.0"
+dependencies = [
+ "prion-error",
+ "prion-ir",
+ "prion-lexer",
+ "prion-parser",
+ "prion-types",
+]
+
+[[package]]
+name = "prion-opt"
+version = "0.2.0"
+dependencies = [
+ "prion-ir",
+]
+
+[[package]]
+name = "prion-parser"
+version = "0.2.0"
+dependencies = [
+ "prion-error",
+ "prion-lexer",
+]
+
+[[package]]
+name = "prion-types"
+version = "0.2.0"
+
+[[package]]
+name = "prion-walk"
+version = "0.2.0"
+dependencies = [
+ "prion-ir",
+]
+
+[[package]]
+name = "prionc"
+version = "0.2.0"
+dependencies = [
+ "prion-check",
+ "prion-error",
+ "prion-ir",
+ "prion-lexer",
+ "prion-llvm",
+ "prion-lower",
+ "prion-opt",
+ "prion-parser",
+ "prion-walk",
+ "serde_json",
+]
 
 [[package]]
 name = "proc-macro2"

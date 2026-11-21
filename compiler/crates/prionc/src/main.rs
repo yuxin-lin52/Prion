@@ -31,8 +31,6 @@ mod lsp;
 static ALLOC: alloc_stat::计数 = alloc_stat::计数;
 
 use prion_check::check;
-#[cfg(feature = "backend")]
-use prion_codegen::lower_to_c;
 #[cfg(feature = "llvm")]
 use prion_llvm::emit_object;
 #[cfg(feature = "backend")]
@@ -96,22 +94,21 @@ const USAGE: &str = "\
 prionc —— Prion 编译器
 
 用法：
-  prionc build [名] [--mode debug|release] [--opt 0-3] [--backend c|llvm]
-  prionc run   [名] [--mode …] [--opt …] [--backend …] [-- 参数…]
+  prionc build [名] [--mode debug|release] [--opt 0-3]
+  prionc run   [名] [--mode …] [--opt …] [-- 参数…]
   prionc check [名]
   prionc fmt   [路径] [--check]
   prionc clean [名]
   prionc -V | prionc -h
 
 说明：
-  [名]     可省：省略 = 当前目录的项目（有 lib.anle）或目录下唯一的 .an；
-           给了 = 按名字找（lib.anle 的包名，或 <名>.an 文件）。
+  [名]     可省：省略 = 当前目录的项目（有 lib.prion）或目录下唯一的 .an；
+           给了 = 按名字找（lib.prion 的包名，或 <名>.an 文件）。
   --mode   debug（全护栏）/ release（优化，护栏全抽——越界等成为未定义行为）。决定产物目录。
   --opt    优化力度 0-3；缺省随模式（debug→0，release→3）。
-  --backend  llvm（缺省；产物链接用 clang，编译器自身不依赖 LLVM 运行库）/ c（C 文本后端，环境最省）。
   --const-depth N  编译期求值最大嵌套层数，缺省 256；0 = 不设上限。
   --const-steps N  编译期求值最大步数，缺省 1280000；0 = 不设上限。
-  产物     build/<模式>/<名>.exe，中间产物 <名>.c 同目录（llvm 为 <名>.ll/<名>.o）。
+  产物     build/<模式>/<名>.exe，中间产物 <名>.ll/<名>.o 同目录。
   退出码   0 成功 / 101 失败 / 1 用法错误；run 透传被运行程序的退出码。";
 
 const COMMAND_HELP: &[(&str, &str)] = &[
@@ -231,12 +228,10 @@ struct Opts {
     name: Option<String>,
     mode: Option<String>,
     opt: Option<u32>,
-    incremental: Option<bool>,
     
     debug_info: Option<bool>,
     
     march_native: Option<bool>,
-    backend: Option<String>,
     
     const_depth: Option<usize>,
     const_steps: Option<usize>,
@@ -256,9 +251,7 @@ impl Opts {
             mode: None,
             opt: None,
             march_native: None,
-            incremental: None,
             debug_info: None,
-            backend: None,
             const_depth: None,
             const_steps: None,
             pass_args: Vec::new(),
@@ -315,10 +308,8 @@ fn parse_opts(rest: &[String]) -> Result<Opts, String> {
                     }
                     o.mode = Some(v);
                 }
-                "incremental" => { o.incremental = Some(true); }
                 "debug-info" | "g" => { o.debug_info = Some(true); }
                 "march-native" => { o.march_native = Some(true); }
-                "no-cache" => { o.incremental = Some(false); }
                 "const-depth" | "const-steps" => {
                     let v = val!();
                     let n: usize = v.parse().map_err(|_| {
@@ -353,16 +344,13 @@ fn parse_opts(rest: &[String]) -> Result<Opts, String> {
                     o.opt = Some(n);
                 }
                 "backend" => {
-                    let v = val!();
-                    if v != "c" && v != "llvm" {
-                        return Err(render_nofile(
-                            prion_error::CliCode::E503.number(),
-                            "写选项",
-                            &format!("`--backend` 只收 c|llvm，给了 {}", v),
-                            "改成 `--backend llvm`（缺省）或 `--backend c`",
-                        ));
-                    }
-                    o.backend = Some(v);
+                    let _ = val!();
+                    return Err(render_nofile(
+                        prion_error::CliCode::E503.number(),
+                        "写选项",
+                        "`--backend` 已移除：LLVM 是唯一后端",
+                        "去掉 `--backend` 参数即可",
+                    ));
                 }
                 "dump-ir" => o.dump_ir = true,
                 "dump-tokens" => o.dump_tokens = true,
@@ -449,7 +437,7 @@ fn resolve(name: Option<&str>) -> Result<Target, String> {
                     .unwrap_or_else(|| n.to_string());
                 return Ok(Target { root: as_dir.clone(), name: base, src: as_dir });
             }
-            if as_dir.join("lib.anle").is_file() {
+            if as_dir.join("lib.prion").is_file() {
                 return project(as_dir, n.to_string());
             }
             return Err(render_nofile(
@@ -460,8 +448,8 @@ fn resolve(name: Option<&str>) -> Result<Target, String> {
             ));
         }
         
-        if cwd.join("lib.anle").is_file() {
-            let kv = read_kv(&cwd.join("lib.anle"));
+        if cwd.join("lib.prion").is_file() {
+            let kv = read_kv(&cwd.join("lib.prion"));
             if kv_get(&kv, "name") == Some(n) {
                 return project(cwd.clone(), n.to_string());
             }
@@ -475,8 +463,8 @@ fn resolve(name: Option<&str>) -> Result<Target, String> {
     }
 
     
-    if cwd.join("lib.anle").is_file() {
-        let kv = read_kv(&cwd.join("lib.anle"));
+    if cwd.join("lib.prion").is_file() {
+        let kv = read_kv(&cwd.join("lib.prion"));
         let pkg = kv_get(&kv, "name")
             .map(String::from)
             .unwrap_or_else(|| file_name_of(&cwd));
@@ -488,7 +476,7 @@ fn resolve(name: Option<&str>) -> Result<Target, String> {
         0 => Err(render_nofile(
             prion_error::CliCode::E505.number(),
             "找源文件",
-            "当前目录既没有 lib.anle，也没有 .an 源文件——不知道要编什么",
+            "当前目录既没有 lib.prion，也没有 .an 源文件——不知道要编什么",
             "给个名字（如 `prionc build hello`），或先建一个 .an",
         )),
         _ => Err(render_nofile(
@@ -594,18 +582,17 @@ fn kv_get<'a>(kv: &'a [(String, String)], k: &str) -> Option<&'a str> {
 }
 
 
-fn resolve_config(t: &Target, o: &Opts) -> Result<(String, u32, String), ExitCode> {
-    let kv = read_kv(&t.root.join("build.anle"));
+fn resolve_config(t: &Target, o: &Opts) -> Result<(String, u32), ExitCode> {
+    let kv = read_kv(&t.root.join("build.prion"));
     let f_mode = kv_get(&kv, "mode").map(String::from);
     let f_opt = kv_get(&kv, "opt").and_then(|v| v.parse::<u32>().ok());
-    let f_backend = kv_get(&kv, "backend").map(String::from);
 
     let mode = o.mode.clone().or(f_mode).unwrap_or_else(|| "debug".into());
     if mode != "debug" && mode != "release" {
         return Err(usage_err(render_nofile(
             prion_error::CliCode::E503.number(),
             "写选项",
-            &format!("`--mode` 只收 debug|release，给了 {}（`build.anle` 里也一样）", mode),
+            &format!("`--mode` 只收 debug|release，给了 {}（`build.prion` 里也一样）", mode),
             "改成 `--mode debug` 或 `--mode release`",
         )));
     }
@@ -618,8 +605,7 @@ fn resolve_config(t: &Target, o: &Opts) -> Result<(String, u32, String), ExitCod
             "改成 0-3 之间的数",
         )));
     }
-    let backend = o.backend.clone().or(f_backend).unwrap_or_else(|| "llvm".into());
-    Ok((mode, opt, backend))
+    Ok((mode, opt))
 }
 
 
@@ -709,13 +695,12 @@ fn run_command(cmd: &str, rest: &[String]) -> ExitCode {
         "frontend" => do_frontend(&t),
         "clean" => do_clean(&t),
         "build" | "run" => {
-            let (mode, opt, backend) = match resolve_config(&t, &o) {
+            let (mode, opt) = match resolve_config(&t, &o) {
                 Ok(v) => v,
                 Err(e) => return e,
             };
             
-            let incr = o.incremental; 
-            let exe = match do_build(&t, &mode, opt, o.dump_ir, incr, &backend, o.debug_info.unwrap_or(false), o.march_native.unwrap_or(false)) {
+            let exe = match do_build(&t, &mode, opt, o.dump_ir, o.debug_info.unwrap_or(false), o.march_native.unwrap_or(false)) {
                 Ok((_, exe)) => exe,
                 Err(e) => return e,
             };
@@ -827,7 +812,7 @@ fn std_root() -> Option<PathBuf> {
     let exe = env::current_exe().ok()?;
     let dir = exe.parent()?;
     for p in [
-        dir.join("..").join("lib").join("anle"),
+        dir.join("..").join("lib").join("prion"),
         dir.join("..").join("..").join("std"),
     ] {
         if p.join("strings.an").is_file() {
@@ -894,7 +879,7 @@ fn load_project(dir: &Path) -> Result<AstProgram, ExitCode> {
                     fail101(render_nofile(
                         prion_error::CliCode::E505.number(),
                         "找标准库",
-                        "找不到标准库根——设 `PRION_STD`，或按 SDK 布局放 `<SDK>/lib/anle`",
+                        "找不到标准库根——设 `PRION_STD`，或按 SDK 布局放 `<SDK>/lib/prion`",
                         "把标准库目录放到上述位置，或设 PRION_STD",
                     ))
                 })?;
@@ -1341,43 +1326,7 @@ fn do_build_llvm(
     name: &str,
 ) -> Result<(), ExitCode> {
     let cc = 找cc();
-    let rt_c = dir.join("prion_rt.c");
-    let rt_o = dir.join("prion_rt.o");
-    if let Err(e) = fs::write(&rt_c, prion_codegen::runtime_c_for(src_file, src_text)) {
-        return Err(fail101(render_nofile(
-            prion_error::EnvCode::E602.number(),
-            "写运行时",
-            &format!("写不出 {}：{}", rt_c.display(), e),
-            "检查路径是否有写权限",
-        )));
-    }
-    let st = Command::new(&cc)
-        
-        .args(cc_opt_args(mode, opt, false).iter().filter(|a| a.as_str().starts_with("-O")))
-        
-        .args(if mode == "release" { vec!["-DPRION_NOGUARD".to_string()] } else { vec![] })
-        .arg("-c")
-        .arg(&rt_c)
-        .arg("-o")
-        .arg(&rt_o)
-        .status();
-    match st {
-        Ok(s) if s.success() => {}
-        Ok(_) => return Err(fail101(render_nofile(
-            prion_error::GenCode::E401.number(),
-            "编译运行时",
-            "C 运行时编译失败",
-            "检查 clang 是否可用",
-        ))),
-        Err(e) => return Err(fail101(render_nofile(
-            prion_error::EnvCode::E601.number(),
-            "调编译器",
-            &format!("调不起编译器「{}」：{}", cc, e),
-            "设 PRION_CC 指向可用的 clang",
-        ))),
-    }
     let obj = dir.join(format!("{}.o", name));
-    
     let 发射 = if std::env::var("PRION_TREE_LLVM").as_deref() == Ok("1") {
         prion_llvm::emit_object(ir, &obj, opt, mode == "debug", src_file)
     } else {
@@ -1389,10 +1338,10 @@ fn do_build_llvm(
             prion_error::GenCode::E401.number(),
             "LLVM 后端",
             &e,
-            "修正源码或改用 --backend c",
+            "修正源码后重试",
         )));
     }
-    let st = Command::new(&cc).arg(&obj).arg(&rt_o).arg("-o").arg(exe).status();
+    let st = Command::new(&cc).arg(&obj).arg("-o").arg(exe).status();
     match st {
         Ok(s) if s.success() => Ok(()),
         Ok(_) => Err(fail101(render_nofile(
@@ -1418,8 +1367,6 @@ fn do_build(
     _mode: &str,
     _opt: u32,
     _dump_ir: bool,
-    _incr: Option<bool>,
-    _backend: &str,
     _dbg: bool,
     _native: bool,
 ) -> Result<(PathBuf, PathBuf), ExitCode> {
@@ -1429,7 +1376,7 @@ fn do_build(
 }
 
 #[cfg(feature = "backend")]
-fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, incr: Option<bool>, backend: &str, dbg: bool, native: bool) -> Result<(PathBuf, PathBuf), ExitCode> {
+fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, dbg: bool, native: bool) -> Result<(PathBuf, PathBuf), ExitCode> {
     let ast = front(t)?;
     
     let src_file = if t.src.is_dir() { t.src.join("main.an") } else { t.src.clone() };
@@ -1460,317 +1407,25 @@ fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, incr: Option<bool>,
             "检查路径是否有写权限",
         )));
     }
-    let c_path = dir.join(format!("{}.c", t.name));
     let mut exe = dir.join(&t.name);
     if cfg!(windows) {
         exe.set_extension("exe");
     }
 
-    if backend == "llvm" {
-        #[cfg(feature = "llvm")]
-        {
-            let fname = src_file.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-            do_build_llvm(&ir, &src_text, &fname, mode, opt, &dir, &exe, &t.name)?;
-            return Ok((dir, exe));
-        }
-        #[cfg(not(feature = "llvm"))]
-        {
-            return Err(fail101(
-                "这个 prionc 构建未启用 LLVM 后端——请改用 --backend c，或用默认特性重新构建",
-            ));
-        }
-    }
-
-    
-    let flat_ir = prion_ir::flat::from_program(&ir);
-    let ir_c = prion_ir::flat::to_program(&flat_ir, &ir);
-    let c_src = match lower_to_c(
-        &ir_c,
-        &src_file.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default(),
-        &src_text,
-        mode == "debug",
-    ) {
-        Ok(s) => s,
-        Err(e) => return Err(fail101(render_coded(&e.code, &e.message, e.line, std::path::Path::new(""), &src_text))),
-    };
-
-    
-    let 语句数: usize = ir
-        .functions
-        .iter()
-        .map(|f| f.blocks.iter().map(|b| b.stmts.len()).sum::<usize>())
-        .sum();
-    let incr = match incr {
-        Some(v) => v,
-        None => 语句数 >= 20000,
-    };
-    if incr {
-        let (prelude, units) = prion_codegen::split_parts(&c_src);
-        if units.is_empty() {
-            
-            if let Err(e) = fs::write(&c_path, &c_src) {
-                return Err(fail101(render_nofile(
-                    prion_error::EnvCode::E602.number(),
-                    "写中间产物",
-                    &format!("写不出 {}：{}", c_path.display(), e),
-                    "检查路径是否有写权限、文件是否被占用",
-                )));
-            }
-            let cc = 找cc();
-            let st = match Command::new(&cc).args(cc_opt_args(mode, opt, native)).arg(&c_path).arg("-o").arg(&exe).status() {
-                Ok(s) => s,
-                Err(e) => {
-                    return Err(fail101(render_nofile(
-                        prion_error::EnvCode::E601.number(),
-                        "调编译器",
-                        &format!("调不起编译器「{}」：{}", cc, e),
-                        "设 `PRION_CC` 指向可用的 clang",
-                    )))
-                }
-            };
-            if !st.success() {
-                return Err(fail101(render_nofile(
-                    prion_error::GenCode::E403.number(),
-                    "编译产物",
-                    "编译失败",
-                    "把源码与 C 报错一起提交到项目 issue",
-                )));
-            }
-            println!("可执行：{}", exe.display());
-            return Ok((c_path, exe));
-        }
-        
-        let (hdr, defs) = match prion_codegen::split_prelude(&prelude) {
-            Ok(v) => v,
-            Err(e) => {
-                return Err(fail101(render_nofile(
-                    prion_error::GenCode::E403.number(),
-                    "拆前置段",
-                    &e,
-                    "把源码与这条消息一起提交到项目 issue",
-                )))
-            }
-        };
-        let cache = dir.join(".cache");
-        if let Err(e) = fs::create_dir_all(&cache) {
-            return Err(fail101(render_nofile(
-                prion_error::EnvCode::E602.number(),
-                "建缓存目录",
-                &format!("建不了 {}：{}", cache.display(), e),
-                "检查路径是否有写权限",
-            )));
-        }
-        let cc = 找cc();
-        let ver = env!("CARGO_PKG_VERSION");
-        let 参 = cc_opt_args(mode, opt, native);
-        let 优化 = opt.to_string();
-
-        
-        let mut 任务: Vec<(PathBuf, PathBuf)> = Vec::new();
-        let mut objs: Vec<PathBuf> = Vec::new();
-        let mut hit = 0usize;
-
-        let rt_key = cache_unit_key(&[&hdr, &defs, &优化, ver]);
-        let rt_obj = cache.join(format!("rt-{}.o", rt_key));
-        if rt_obj.exists() {
-            hit += 1;
-        } else {
-            let rt_c = cache.join(format!("rt-{}.c", rt_key));
-            if let Err(e) = fs::write(&rt_c, &defs) {
-                return Err(fail101(render_nofile(
-                    prion_error::EnvCode::E602.number(),
-                    "写运行时单元",
-                    &format!("写不出 {}：{}", rt_c.display(), e),
-                    "检查路径是否有写权限",
-                )));
-            }
-            任务.push((rt_c, rt_obj.clone()));
-        }
-        objs.push(rt_obj);
-
-        
-        let 每批 = 64usize;
-        let mut 批: Vec<(usize, String)> = Vec::new();
-        let mut acc: Vec<(usize, String)> = Vec::new();
-        for (idx, code) in &units {
-            acc.push((*idx, code.clone()));
-            if acc.len() >= 每批 {
-                let 组: Vec<_> = acc.drain(..).collect();
-                let 拼码: String = 组.iter().map(|(_, c)| c.as_str()).collect();
-                批.push((组[0].0, 拼码));
-            }
-        }
-        if !acc.is_empty() {
-            let 组: Vec<_> = acc.drain(..).collect();
-            let 拼码: String = 组.iter().map(|(_, c)| c.as_str()).collect();
-            批.push((组[0].0, 拼码));
-        }
-        for (idx, code) in &批 {
-            let key = cache_unit_key(&[&hdr, code, &优化, ver]);
-            let obj = cache.join(format!("u{}-{}.o", idx, key));
-            if obj.exists() {
-                hit += 1;
-            } else {
-                let uc = cache.join(format!("u{}-{}.c", idx, key));
-                if let Err(e) = fs::write(&uc, format!("{}{}", hdr, code)) {
-                    return Err(fail101(render_nofile(
-                        prion_error::EnvCode::E602.number(),
-                        "写编译单元",
-                        &format!("写不出 {}：{}", uc.display(), e),
-                        "检查路径是否有写权限",
-                    )));
-                }
-                任务.push((uc, obj.clone()));
-            }
-            objs.push(obj);
-        }
-
-        
-        let 总 = objs.len();
-        let 新 = 任务.len();
-        if 新 > 0 {
-            use std::sync::atomic::{AtomicUsize, Ordering};
-            let 核 = std::thread::available_parallelism().map(|v| v.get()).unwrap_or(1);
-            let 线 = 核.min(新).max(1);
-            let 游 = AtomicUsize::new(0);
-            let 错: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
-            std::thread::scope(|sc| {
-                for _ in 0..线 {
-                    sc.spawn(|| loop {
-                        let k = 游.fetch_add(1, Ordering::Relaxed);
-                        if k >= 任务.len() {
-                            break;
-                        }
-                        if 错.lock().map(|g| g.is_some()).unwrap_or(true) {
-                            break;
-                        }
-                        let (src, dst) = &任务[k];
-                        let r = Command::new(&cc)
-                            .args(&参)
-                            .arg("-c")
-                            .arg(src)
-                            .arg("-o")
-                            .arg(dst)
-                            .status();
-                        match r {
-                            Ok(st) if st.success() => {}
-                            Ok(_) => {
-                                if let Ok(mut g) = 错.lock() {
-                                    *g = Some(format!("编译单元 {} 失败", src.display()));
-                                }
-                                break;
-                            }
-                            Err(e) => {
-                                if let Ok(mut g) = 错.lock() {
-                                    *g = Some(format!("调不起编译器「{}」：{}", cc, e));
-                                }
-                                break;
-                            }
-                        }
-                    });
-                }
-            });
-            let 失 = 错.into_inner().unwrap_or(None);
-            if let Some(m) = 失 {
-                return Err(fail101(render_nofile(
-                    prion_error::GenCode::E403.number(),
-                    "编编译单元",
-                    &m,
-                    "把源码与 C 报错一起提交到项目 issue",
-                )));
-            }
-        }
-        println!("[增量] 单元 {} 个｜缓存命中 {}｜新编译 {}｜并行 {}", 总, hit, 新, {
-            std::thread::available_parallelism().map(|v| v.get()).unwrap_or(1)
-        });
-
-        let mut cmd = Command::new(&cc);
-        
-        let 总长: usize = objs.iter().map(|o| o.as_os_str().len() + 1).sum();
-        if 总长 > 16000 {
-            let rsp = dir.join(format!("{}.rsp", t.name));
-            let mut 行 = String::new();
-            for o in &objs {
-                
-                let 斜 = o.display().to_string().replace(std::path::MAIN_SEPARATOR, "/");
-                行.push_str(&format!("\"{}\"\n", 斜));
-            }
-            if let Err(e) = fs::write(&rsp, 行) {
-                return Err(fail101(render_nofile(
-                    prion_error::EnvCode::E602.number(),
-                    "写响应文件",
-                    &format!("写不出 {}：{}", rsp.display(), e),
-                    "检查路径是否有写权限",
-                )));
-            }
-            cmd.arg(format!("@{}", rsp.display()));
-        } else {
-            for o in &objs {
-                cmd.arg(o);
-            }
-        }
-        let st = match cmd.arg("-o").arg(&exe).status() {
-            Ok(s) => s,
-            Err(e) => {
-                return Err(fail101(render_nofile(
-                    prion_error::EnvCode::E601.number(),
-                    "链接",
-                    &format!("调不起链接器「{}」：{}", cc, e),
-                    "设 `PRION_CC` 指向可用的 clang（装了 SDK 的 clang 组件会自动用上）",
-                )))
-            }
-        };
-        if !st.success() {
-            return Err(fail101(render_nofile(
-                prion_error::GenCode::E403.number(),
-                "链接产物",
-                "链接失败",
-                "把源码与上面的 C 报错一起提交到项目 issue",
-            )));
-        }
-        println!("可执行：{}", exe.display());
-        return Ok((c_path, exe));
-    }
-    if let Err(e) = fs::write(&c_path, &c_src) {
-        return Err(fail101(render_nofile(
-            prion_error::EnvCode::E602.number(),
-            "写中间产物",
-            &format!("写不出 {}：{}", c_path.display(), e),
-            "检查路径是否有写权限、文件是否被占用",
-        )));
-    }
-    println!("中间产物：{}", c_path.display());
-
-    let cc = 找cc();
-    let status = match Command::new(&cc)
-        .args(cc_opt_args(mode, opt, native))
-        .arg(&c_path)
-        .arg("-o")
-        .arg(&exe)
-        .status()
+    #[cfg(feature = "llvm")]
     {
-        Ok(s) => s,
-        Err(e) => {
-            return Err(fail101(render_nofile(
-                prion_error::EnvCode::E601.number(),
-                "调编译器",
-            &format!("调不起编译器「{}」：{}", cc, e),
-            "设 `PRION_CC` 指向可用的 clang（MSVC target 与 GNU target 均可；装了 SDK 的 clang 组件会自动用上）",
-        )))
-        }
-    };
-    if !status.success() {
-        return Err(fail101(render_nofile(
-            prion_error::GenCode::E403.number(),
-            "编产物",
-            &format!("编译器失败（退出码 {:?}）", status.code()),
-            "把源码与上面的 C 报错一起提交到项目 issue",
-        )));
+        let fname = src_file.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+        do_build_llvm(&ir, &src_text, &fname, mode, opt, &dir, &exe, &t.name)?;
+        return Ok((dir, exe));
     }
-    println!("可执行：{}", exe.display());
-    Ok((c_path, exe))
+    #[cfg(not(feature = "llvm"))]
+    {
+        let _ = (mode, opt, dir, exe);
+        return Err(fail101(
+            "这个 prionc 构建未启用 LLVM 后端——请用默认特性重新构建",
+        ));
+    }
 }
-
 
 fn do_run(exe: &Path, args: &[String]) -> ExitCode {
     let st = match Command::new(exe).args(args).status() {
@@ -1803,34 +1458,6 @@ fn do_run(exe: &Path, args: &[String]) -> ExitCode {
 }
 
 
-
-fn prelude_iface(prelude: &str) -> String {
-    const MARK: &str = "PRION_SRC[] = {";
-    match prelude.find(MARK) {
-        None => prelude.to_string(),
-        Some(i) => {
-            let start = prelude[..i].rfind('\n').map(|x| x).unwrap_or(i);
-            match prelude[i..].find("};") {
-                None => prelude.to_string(),
-                Some(j) => {
-                    let end = i + j + 2;
-                    format!("{}{}", &prelude[..start], &prelude[end..])
-                }
-            }
-        }
-    }
-}
-
-
-fn cache_unit_key(parts: &[&str]) -> String {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-    let mut h = DefaultHasher::new();
-    for p in parts {
-        p.hash(&mut h);
-    }
-    format!("{:016x}", h.finish())
-}
 
 fn do_clean(t: &Target) -> ExitCode {
     let bd = t.root.join("build");

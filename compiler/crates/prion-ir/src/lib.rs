@@ -116,6 +116,10 @@ pub enum Rvalue {
     VariantGet { value: Value, idx: usize, ty: Ty },
     
     Ref(Place),
+    
+    CtxArray { args: Vec<Value> },
+    
+    CtxGet { ctx: LocalId, idx: usize, ty: Ty },
 }
 
 
@@ -183,6 +187,8 @@ impl BinOp {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
     Assign { lhs: Place, rhs: Rvalue },
+
+    AssignRelease { lhs: Place, rhs: Rvalue },
     
     Call { name: String, args: Vec<Value> },
     
@@ -205,6 +211,15 @@ pub enum Stmt {
     Assert { cond: Value, msg: String, fix: String },
     
     Asm(AsmForm),
+}
+
+impl Stmt {
+    pub fn 赋值体(&self) -> Option<(&Place, &Rvalue)> {
+        match self {
+            Stmt::Assign { lhs, rhs } | Stmt::AssignRelease { lhs, rhs } => Some((lhs, rhs)),
+            _ => None,
+        }
+    }
 }
 
 
@@ -345,6 +360,11 @@ pub fn is_container_ty(t: &str) -> bool {
 }
 
 
+pub fn 返回自有串(名: &str) -> bool {
+    matches!(名, "concat" | "#str_copy" | "read_file" | "str_from_c")
+}
+
+
 
 
 
@@ -461,12 +481,22 @@ fn rvalue_str(f: &Function, r: &Rvalue) -> String {
         Rvalue::MapGet { map, key } => {
             format!("map_get({}, {})", value_str(f, map), value_str(f, key))
         }
+        Rvalue::CtxArray { args } => format!(
+            "ctx[{}]",
+            args.iter().map(|a| value_str(f, a)).collect::<Vec<_>>().join(", ")
+        ),
+        Rvalue::CtxGet { idx, ty, .. } => format!("ctx_get({}; {})", idx, ty.0),
     }
 }
 
 fn stmt_str(f: &Function, s: &Stmt) -> String {
     match s {
         Stmt::Assign { lhs, rhs } => format!("assign {}, {}", place_str(f, lhs), rvalue_str(f, rhs)),
+        Stmt::AssignRelease { lhs, rhs } => format!(
+            "assign_release {}, {}",
+            place_str(f, lhs),
+            rvalue_str(f, rhs)
+        ),
         Stmt::Call { name, args } => format!(
             "call {}({})",
             name,

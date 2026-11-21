@@ -158,7 +158,7 @@ add fn "判动量"() float:
     add val "mq" float = 0.0
     add val "mh" float = 0.0
     while call val "mk" < 20:
-        val "mv" = (call val "mk" % 2 == 0) ? 0.1 : 0 - 0.1
+        val "mv" = if call val "mk" % 2 == 0 { 0.1 } else { 0 - 0.1 }
         call fn "造粒"(3.0 + call val "mk" * 2.0, 0.0, call val "mv", 0.0)
         val "mk" = call val "mk" + 1
     ;

@@ -43,6 +43,8 @@ fn 右值含局部(r: &Rvalue, t: prion_ir::LocalId) -> bool {
         Rvalue::VariantLit { args, .. } => args.iter().any(|a| 值含(a, t)),
         Rvalue::VariantTag(v) => 值含(v, t),
         Rvalue::VariantGet { value, .. } => 值含(value, t),
+        Rvalue::CtxArray { args } => args.iter().any(|a| 值含(a, t)),
+        Rvalue::CtxGet { ctx, .. } => *ctx == t,
         Rvalue::FnRef { .. } => false,
     }
 }

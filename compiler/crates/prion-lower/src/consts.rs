@@ -47,7 +47,7 @@ impl Const {
 
 pub fn 折叠(段: &[Token]) -> Option<Const> {
     let mut p = 解 { t: 段, i: 0 };
-    let v = p.三元()?;
+    let v = p.或()?;
     if p.i != 段.len() {
         return None;
     }
@@ -69,20 +69,6 @@ struct 解<'a> {
 
 impl<'a> 解<'a> {
     
-    fn 三元(&mut self) -> Option<Const> {
-        let 条 = self.或()?;
-        if matches!(self.t.get(self.i), Some(Token::Sym("?"))) {
-            { crate::quota::记步(1); self.i += 1; }
-            let 甲 = self.三元()?;
-            if !matches!(self.t.get(self.i), Some(Token::Sym(":"))) {
-                return None;
-            }
-            { crate::quota::记步(1); self.i += 1; }
-            let 乙 = self.三元()?;
-            return Some(if 作真(&条) { 甲 } else { 乙 });
-        }
-        Some(条)
-    }
 
     fn 或(&mut self) -> Option<Const> {
         let mut l = self.与()?;
@@ -178,7 +164,7 @@ impl<'a> 解<'a> {
                 let mut 实参: Vec<Const> = Vec::new();
                 if !matches!(self.t.get(self.i), Some(Token::Sym(")"))) {
                     loop {
-                        let a = self.三元()?;
+                        let a = self.或()?;
                         实参.push(a);
                         match self.t.get(self.i) {
                             Some(Token::Sym(",")) => { crate::quota::记步(1); self.i += 1; }
@@ -353,7 +339,7 @@ pub fn 折叠带环境(
     调函数: &mut dyn FnMut(&str, &[Const]) -> Option<Const>,
 ) -> Option<Const> {
     let mut p = 解带环境 { t: 段, i: 0, 取变量, 调函数 };
-    let v = p.三元()?;
+    let v = p.或()?;
     if p.i != 段.len() {
         return None;
     }
@@ -369,20 +355,6 @@ struct 解带环境<'a> {
 
 impl<'a> 解带环境<'a> {
     
-    fn 三元(&mut self) -> Option<Const> {
-        let 条 = self.或()?;
-        if matches!(self.t.get(self.i), Some(Token::Sym("?"))) {
-            { crate::quota::记步(1); self.i += 1; }
-            let 甲 = self.三元()?;
-            if !matches!(self.t.get(self.i), Some(Token::Sym(":"))) {
-                return None;
-            }
-            { crate::quota::记步(1); self.i += 1; }
-            let 乙 = self.三元()?;
-            return Some(if 作真(&条) { 甲 } else { 乙 });
-        }
-        Some(条)
-    }
 
     fn 或(&mut self) -> Option<Const> {
         let mut l = self.与()?;
@@ -476,7 +448,7 @@ impl<'a> 解带环境<'a> {
                 let mut 实参: Vec<Const> = Vec::new();
                 if !matches!(self.t.get(self.i), Some(Token::Sym(")"))) {
                     loop {
-                        let a = self.三元()?;
+                        let a = self.或()?;
                         实参.push(a);
                         match self.t.get(self.i) {
                             Some(Token::Sym(",")) => { crate::quota::记步(1); self.i += 1; }

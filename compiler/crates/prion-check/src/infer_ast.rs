@@ -10,6 +10,18 @@ use prion_parser::expr::{BinOp as EBinOp, Expr, ExprKind, Target, UnOp, Verb};
 thread_local! {
     static TYPECK: std::cell::RefCell<std::collections::BTreeMap<u32, String>> =
         std::cell::RefCell::new(std::collections::BTreeMap::new());
+    static 藏字段违规: std::cell::RefCell<Vec<(prion_error::Span, String, String)>> =
+        std::cell::RefCell::new(Vec::new());
+}
+
+
+pub fn 藏字段清空() {
+    藏字段违规.with(|v| v.borrow_mut().clear());
+}
+
+
+pub fn 藏字段取() -> Vec<(prion_error::Span, String, String)> {
+    藏字段违规.with(|v| v.borrow().clone())
 }
 
 
@@ -59,7 +71,18 @@ fn 推断节点(e: &Expr, cx: &Ctx, block: &str) -> Option<String> {
         ExprKind::Index { base, .. } => 推断(base, cx, block).and_then(|t| 元素型(&t)),
         ExprKind::Slice { base, .. } => 推断(base, cx, block),
         ExprKind::Field { base, name } => {
-            推断(base, cx, block).and_then(|t| 字段型(&cx.types, &t, name))
+            let bt = 推断(base, cx, block);
+            if let Some(t) = &bt {
+                let plain = t.trim_end_matches('*');
+                if let Some((_, df, fs)) = cx.types.get(plain) {
+                    if df != &cx.cur_file {
+                        if let Some((_, _, true)) = fs.iter().find(|(n, _, _)| n == name) {
+                            藏字段违规.with(|v| v.borrow_mut().push((e.span, plain.to_string(), name.clone())));
+                        }
+                    }
+                }
+            }
+            bt.and_then(|t| 字段型(&cx.types, &t, name))
         }
         ExprKind::Deref(inner) => 推断(inner, cx, block).and_then(|t| Some(t.trim_end_matches('*').to_string())),
 
@@ -72,9 +95,10 @@ fn 推断节点(e: &Expr, cx: &Ctx, block: &str) -> Option<String> {
             | EBinOp::And | EBinOp::Or => Some("bool".into()),
             _ => 推断(lhs, cx, block).or_else(|| 推断(rhs, cx, block)),
         },
-        ExprKind::Ternary { then, otherwise, .. } => {
+        ExprKind::IfExpr { then, otherwise, .. } => {
             推断(then, cx, block).or_else(|| 推断(otherwise, cx, block))
         }
+        ExprKind::Try(e) => 推断(e, cx, block),
 
         ExprKind::ListLit(xs) => {
             
@@ -132,6 +156,8 @@ fn 推断调用(
         (Verb::Call, Target::Val) => 查值(cx, 用块, name).and_then(|t| 函数返回(&t)),
         
         (Verb::Call, Target::Fn) => 查函数(cx, 用块, name).map(|(r, _)| r),
+        
+        (Verb::Take, Target::Val) => 查值(cx, 用块, name),
         
         (Verb::Delta, Target::Val) => 查值(cx, 用块, name),
         
@@ -256,7 +282,7 @@ fn 走(stmts: &[prion_parser::Stmt], cx: &Ctx, block: &str) {
 
 fn 内置返回(name: &str, args: &[Expr], cx: &Ctx, block: &str) -> Option<String> {
     match name {
-        "len" | "len_utf8" | "index" | "char_code" | "int" | "time_now" => Some("int".into()),
+        "len" | "char_len" | "index" | "char_code" | "int" | "time_now" => Some("int".into()),
         "has" | "empty" | "contains" => Some("bool".into()),
         "float" | "floor" | "ceil" | "round" => Some("float".into()),
         "str" | "str_f" | "concat" | "sub_str" | "nth_char" | "char" | "read_file" | "read_line"

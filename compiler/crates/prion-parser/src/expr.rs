@@ -14,6 +14,8 @@ pub enum Verb {
     
     Call,
     
+    Take,
+    
     Delta,
     
     None,
@@ -140,8 +142,10 @@ pub enum ExprKind {
     
     Unary { op: UnOp, operand: ExprRef },
     Binary { op: BinOp, lhs: ExprRef, rhs: ExprRef },
-    
-    Ternary { cond: ExprRef, then: ExprRef, otherwise: ExprRef },
+
+    IfExpr { cond: ExprRef, then: ExprRef, otherwise: ExprRef },
+
+    Try(ExprRef),
 
     
     ListLit(Vec<Expr>),
@@ -182,6 +186,7 @@ impl std::fmt::Display for Expr {
                 let mut s = String::new();
                 match verb {
                     Verb::Call => s.push_str("call "),
+                    Verb::Take => s.push_str("take "),
                     Verb::Delta => s.push_str("delta "),
                     Verb::None => {}
                 }
@@ -204,9 +209,10 @@ impl std::fmt::Display for Expr {
             ExprKind::Deref(e) => write!(f, "*{}", e),
             ExprKind::Unary { op, operand } => write!(f, "({:?} {})", op, operand),
             ExprKind::Binary { op, lhs, rhs } => write!(f, "({:?} {} {})", op, lhs, rhs),
-            ExprKind::Ternary { cond, then, otherwise } => {
-                write!(f, "({} ? {} : {})", cond, then, otherwise)
+            ExprKind::IfExpr { cond, then, otherwise } => {
+                write!(f, "(if {} {{{}}} else {{{}}})", cond, then, otherwise)
             }
+            ExprKind::Try(e) => write!(f, "{}?", e),
             ExprKind::ListLit(xs) => {
                 let a: Vec<String> = xs.iter().map(|x| x.to_string()).collect();
                 write!(f, "[{}]", a.join(", "))
@@ -255,29 +261,11 @@ impl<'a> Parser<'a> {
 
     
     pub fn parse(&mut self) -> Result<Expr, String> {
-        let e = self.ternary()?;
+        let e = self.or()?;
         if !self.done() {
             return Err(format!("表达式没读完，剩余 {:?}", &self.toks[self.i..]));
         }
         Ok(e)
-    }
-
-    
-    fn ternary(&mut self) -> Result<Expr, String> {
-        let cond = self.or()?;
-        if matches!(self.peek(), Some(Token::Sym("?"))) {
-            self.i += 1;
-            let a = self.ternary()?;
-            self.expect(Token::Sym(":"))?;
-            let b = self.ternary()?;
-            let span = cond.span;
-            return Ok(Expr::new(ExprKind::Ternary {
-                cond: Box::new(cond),
-                then: Box::new(a),
-                otherwise: Box::new(b),
-            }, span));
-        }
-        Ok(cond)
     }
 
     
@@ -460,6 +448,10 @@ impl<'a> Parser<'a> {
                     self.i += 1;
                     e = Expr::new(ExprKind::Field { base: Box::new(e), name: n.to_string() }, span);
                 }
+                Some(Token::Sym("?")) => {
+                    self.i += 1;
+                    e = Expr::new(ExprKind::Try(Box::new(e)), span);
+                }
                 _ => return Ok(e),
             }
         }
@@ -573,6 +565,44 @@ impl<'a> Parser<'a> {
     }
 
     
+    fn take_expr(&mut self, span: Span) -> Result<Expr, String> {
+        self.i += 1;
+        let mut module = None;
+        let mut block = None;
+        if matches!(self.peek(), Some(Token::HashHashColon)) {
+            self.i += 1;
+            let mut m = self.take_name()?;
+            while matches!(self.peek(), Some(Token::Sym("."))) {
+                self.i += 1;
+                m.push('.');
+                m.push_str(&self.take_name()?);
+            }
+            self.expect(Token::HashColon)?;
+            block = Some(self.take_name()?);
+            module = Some(m);
+        } else if matches!(self.peek(), Some(Token::HashColon)) {
+            self.i += 1;
+            block = Some(self.take_name()?);
+        }
+        match self.peek() {
+            Some(Token::Kw("val")) => {
+                self.i += 1;
+            }
+            Some(Token::Kw("fn")) => return Err("take 只复制 val——fn 不占数据".into()),
+            _ => return Err("take 后应接 val".into()),
+        }
+        let name = self.take_name()?;
+        Ok(Expr::new(ExprKind::Call {
+            verb: Verb::Take,
+            target: Target::Val,
+            module,
+            block,
+            name,
+            args: Vec::new(),
+        }, span))
+    }
+
+    
     fn take_name(&mut self) -> Result<String, String> {
         match self.peek().cloned() {
             Some(Token::Ident(n)) | Some(Token::Str(n)) => {
@@ -646,6 +676,20 @@ impl<'a> Parser<'a> {
                 self.expect(Token::Sym("]"))?;
                 Ok(Expr::new(ExprKind::ListLit(xs), span))
             }
+            Some(Token::Kw("if")) => {
+                self.i += 1;
+                let cond = self.or()?;
+                self.expect(Token::Sym("{"))?;
+                let then = self.or()?;
+                self.expect(Token::Sym("}"))?;
+                self.expect(Token::Kw("else"))?;
+                self.expect(Token::Sym("{"))?;
+                let otherwise = self.or()?;
+                self.expect(Token::Sym("}"))?;
+                Ok(Expr::new(ExprKind::IfExpr {
+                    cond: Box::new(cond), then: Box::new(then), otherwise: Box::new(otherwise),
+                }, span))
+            }
             Some(Token::Sym("{")) => {
                 self.i += 1;
                 let mut ps = Vec::new();
@@ -662,6 +706,7 @@ impl<'a> Parser<'a> {
                 Ok(Expr::new(ExprKind::MapLit(ps), span))
             }
             Some(Token::Kw("call")) => self.call_expr(span),
+            Some(Token::Kw("take")) => self.take_expr(span),
             Some(Token::Kw("fn")) => {
                 self.i += 1;
                 let n = self.take_name()?;
@@ -793,7 +838,7 @@ mod 覆盖 {
     #[ignore]
     fn 真实文件覆盖率() {
         let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../..");
-        for f in ["_验收检查/全特性.an", "anle/std/strings.an", "anle/std/collections.an"] {
+        for f in ["_验收检查/全特性.an", "prion/std/strings.an", "prion/std/collections.an"] {
             let p = format!("{}/{}", root, f);
             let Ok(src) = std::fs::read_to_string(&p) else { continue };
             let Ok(toks) = lex(&src) else { continue };
