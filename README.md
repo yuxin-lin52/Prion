@@ -1,5 +1,3 @@
-<p align="center"><img src="assets/icon.png" width="112" height="112" alt="Prion"></p>
-
 <h1 align="center">Prion</h1>
 
 <p align="center"><a href="https://github.com/yuxin-lin52/Prion/actions/workflows/build.yml"><img src="https://github.com/yuxin-lin52/Prion/actions/workflows/build.yml/badge.svg" alt="build"></a></p>
@@ -53,19 +51,18 @@ The model gives every programmer the same simple default: put the code in blocks
 
 ## Download
 
-A prebuilt Windows x64 binary of the C backend is attached to the [latest release](https://github.com/yuxin-lin52/Prion/releases). It still needs a C toolchain: `clang` on `PATH`, or `PRION_CC` pointing at one. The LLVM backend is not included in the prebuilt binary — build from source for that (see below).
+A prebuilt Windows x64 compiler is published on the [releases page](https://github.com/yuxin-lin52/Prion/releases). It uses the LLVM backend, so compiling a program additionally needs a linker toolchain: `clang` on `PATH`, or `PRION_CC` pointing at one. LLVM itself is linked into the compiler and does not need to be installed separately.
 
 ## Building
 
-The compiler source is in [`compiler/`](compiler) — a Rust workspace of twelve crates.
+The compiler source is in [`compiler/`](compiler) — a Rust workspace. LLVM is the only backend.
 
 ```
 cd compiler
-cargo build --release -p prionc --no-default-features --features backend   # C backend only, no LLVM needed
-cargo build --release -p prionc                                   # both backends, needs LLVM 22.1
+cargo build --release -p prionc
 ```
 
-The C backend lowers the intermediate representation to C source text and hands it to `clang` (path from `PRION_CC`, otherwise `clang` on `PATH`). The LLVM backend links LLVM 22.1 statically: set `LLVM_SYS_221_PREFIX` to an LLVM 22.1 installation, and add that installation's `deps` directory to the link search path with `RUSTFLAGS="-L native=<prefix>\deps"` — it holds the zlib, zstd and libxml2 import libraries. LLVM is not redistributed here — get it from the upstream release page: <https://github.com/llvm/llvm-project/releases>.
+The LLVM backend links LLVM 22.1 statically: set `LLVM_SYS_221_PREFIX` to an LLVM 22.1 installation, and add that installation's `deps` directory to the link search path with `RUSTFLAGS="-L native=<prefix>\deps"` — it holds the zlib, zstd and libxml2 import libraries. LLVM is not redistributed here; get it from the upstream release page: <https://github.com/llvm/llvm-project/releases>.
 
 ```
 ./target/release/prionc build demos/en/physics-engine/physics-engine
@@ -74,7 +71,7 @@ The C backend lowers the intermediate representation to C source text and hands 
 ## Implementation status
 
 * The compiler is implemented in Rust; the source is included in this repository. Self-hosting is in an early stage: the lexer of the self-hosted front end is complete and passes token-for-token comparison against the host implementation.
-* Two backends are implemented, **C** and **LLVM**; both are compiled through clang, and the same source compiled through both backends produces byte-identical program output.
+* A single backend is implemented: **LLVM**, which compiles through `clang` for linking.
 * Generated code is slower than a hand-written C program. The measured costs are per-statement source-position bookkeeping and handle indirection.
 * Known gaps: parameter parsing for generic functions is incomplete; some diagnostic wording does not match the actual cause.
 * The syntax is **not frozen**. Breaking changes are expected; anything written against this language will need updating.
@@ -96,23 +93,19 @@ benchmark done, collisions: 7343
 ```
 
 * The collision count, 7343, matches reference implementations written in C and Rust exactly.
-* Both compiler backends produce byte-identical output; three consecutive runs are identical.
+* Three consecutive runs produce identical output.
 
 ## Diagnostics
 
-Diagnostics carry four parts: what happened, the source line, what the compiler expected, and how to fix it. They are currently emitted in Chinese; localization is on the roadmap. A real example:
+Diagnostics carry four parts: what happened, the source line, what the compiler expected, and how to fix it. They are emitted in English. A real example:
 
 ```
-\[E202] 位于 例.an 第 2 行第 1 列的「赋值」发生错误，
-源码为：add val "v" float = 0 - 5，
-错误为：「v」声明是 float，右边是 int，
-编译器预期为：右边的值应当是 float 型（左边声明说了算）。
-改法：改成 float 的值，或把声明改成 int。
+[E202] error at example.an line 2, column 5, in assignment: "v" is declared as float, the assigned value is int; source: add val "v" float = 0 - 5. Expected: the assigned value must be of type float (the declaration decides). Fix: change it to a float value, or change the declaration to int. Details: Prion does not convert types silently: int does not become str automatically. To change the type, convert explicitly with int(value) / str(value) / float(value) / bool(value); if the declaration is wrong, change the declared type to match the value.
 ```
 
 ## Feedback
 
-The repository is public to collect design feedback. Issues are open — design questions, rough edges in the examples, and disagreements with the choices above are all welcome. The [design documentation](docs/README.md#english) covers the decisions behind this overview.
+The repository is public to collect design feedback. Issues are open — design questions, rough edges in the examples, and disagreements with the choices above are all welcome. The [documentation](docs/README.md#english) is a hands-on tutorial for the language.
 
 ## License
 

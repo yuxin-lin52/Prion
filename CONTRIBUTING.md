@@ -39,11 +39,11 @@ Merging a pull request changes exactly one thing for its author: their later pul
 
 
 
-See the Building section of the README:
+See the Building section of the README. LLVM is the only backend and is linked statically:
 
 ```
 cd compiler
-cargo build --release --no-default-features --features backend
+cargo build --release -p prionc
 ```
 
 Run the demo before and after a change:

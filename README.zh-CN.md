@@ -1,5 +1,3 @@
-<p align="center"><img src="assets/icon.png" width="112" height="112" alt="Prion"></p>
-
 <h1 align="center">Prion</h1>
 
 <p align="center"><a href="https://github.com/yuxin-lin52/Prion/actions/workflows/build.yml"><img src="https://github.com/yuxin-lin52/Prion/actions/workflows/build.yml/badge.svg" alt="build"></a></p>
@@ -53,19 +51,18 @@ Prion 三种取舍都不取。程序按块结构化，值长在声明它的块�
 
 ## 下载
 
-[最新 release](https://github.com/yuxin-lin52/Prion/releases) 附带 Windows x64 的预构建二进制（仅 C 后端）。它仍需要一个 C 工具链：`PATH` 里有 `clang`，或用 `PRION_CC` 指向一个。预构建二进制不含 LLVM 后端，需要它请从源码构建（见下）。
+[releases 页](https://github.com/yuxin-lin52/Prion/releases) 提供 Windows x64 的预构建编译器。它使用 LLVM 后端，因此编译程序时还需要一个链接工具链：`PATH` 里有 `clang`，或用 `PRION_CC` 指向一个。LLVM 本身已链接进编译器，无需单独安装。
 
 ## 构建
 
-编译器源码在 [`compiler/`](compiler)，是十二个 crate 的 Rust 工作区。
+编译器源码在 [`compiler/`](compiler)，是一个 Rust 工作区。LLVM 是唯一后端。
 
 ```
 cd compiler
-cargo build --release -p prionc --no-default-features --features backend   # 仅 C 后端，不需要 LLVM
-cargo build --release -p prionc                                   # 两条后端，需要 LLVM 22.1
+cargo build --release -p prionc
 ```
 
-C 后端把中间表示翻成 C 源码文本，交给 `clang`（路径取 `PRION_CC`，未设则用 `PATH` 里的 `clang`）。LLVM 后端静态链接 LLVM 22.1：把 `LLVM_SYS_221_PREFIX` 指向 LLVM 22.1 安装目录，再用 `RUSTFLAGS="-L native=<前缀>\deps"` 把该目录下的 `deps` 加进链接搜索路径——zlib、zstd、libxml2 的导入库在那里。本仓库不随附 LLVM，请从上游发布页获取：<https://github.com/llvm/llvm-project/releases>。
+LLVM 后端静态链接 LLVM 22.1：把 `LLVM_SYS_221_PREFIX` 指向 LLVM 22.1 安装目录，再用 `RUSTFLAGS="-L native=<前缀>\deps"` 把该目录下的 `deps` 加进链接搜索路径——zlib、zstd、libxml2 的导入库在那里。本仓库不随附 LLVM，请从上游发布页获取：<https://github.com/llvm/llvm-project/releases>。
 
 ```
 ./target/release/prionc build demos/zh/物理引擎/物理引擎
@@ -74,7 +71,7 @@ C 后端把中间表示翻成 C 源码文本，交给 `clang`（路径取 `PRION
 ## 实现状态
 
 - 编译器由 Rust 实现，源码随仓提供。自举处于早期：自举前端的词法器已完成，与宿主实现通过逐 token 对拍。
-- 两条后端已实现：**C** 与 **LLVM**；两者都经 clang 编译，同一份源码经两条后端编译，程序输出逐字节一致。
+- 后端只有一条：**LLVM**，经 `clang` 链接。
 - 生成的代码比手写 C 慢。已定位的开销在两处：逐语句的源码位置记账、句柄间接寻址。
 - 已知缺陷：泛型函数的形参解析不完整；部分诊断文案与实际原因不符。
 - 语法**未冻结**。破坏性变更随时可能；针对本语言写的代码需要跟着更新。
@@ -96,23 +93,19 @@ C 后端把中间表示翻成 C 源码文本，交给 `clang`（路径取 `PRION
 ```
 
 - 碰撞次数 7343 与 C、Rust 参照实现完全一致。
-- 两条编译后端产出逐字节一致的输出；连续三次运行结果相同。
+- 连续三次运行结果相同。
 
 ## 诊断格式
 
-诊断带四段：发生了什么、源码原文、编译器预期、改法。当前以中文输出；本地化在路线图上。真实样例：
+诊断带四段：发生了什么、源码原文、编译器预期、改法。以英文输出。真实样例：
 
 ```
-[E202] 位于 例.an 第 2 行第 1 列的「赋值」发生错误，
-源码为：add val "v" float = 0 - 5，
-错误为：「v」声明是 float，右边是 int，
-编译器预期为：右边的值应当是 float 型（左边声明说了算）。
-改法：改成 float 的值，或把声明改成 int。
+[E202] error at example.an line 2, column 5, in assignment: "v" is declared as float, the assigned value is int; source: add val "v" float = 0 - 5. Expected: the assigned value must be of type float (the declaration decides). Fix: change it to a float value, or change the declaration to int. Details: Prion does not convert types silently: int does not become str automatically. To change the type, convert explicitly with int(value) / str(value) / float(value) / bool(value); if the declaration is wrong, change the declared type to match the value.
 ```
 
 ## 征集反馈
 
-本仓库公开的目的是征集设计反馈。issue 入口开放——设计问题、示例中的粗糙之处、对上述取舍的异议都欢迎。这篇概览背后的决策见[设计文档](docs/README.md#%E4%B8%AD%E6%96%87)。
+本仓库公开的目的是征集设计反馈。issue 入口开放——设计问题、示例中的粗糙之处、对上述取舍的异议都欢迎。[文档](docs/README.md#%E4%B8%AD%E6%96%87)是一份上手教程。
 
 ## License
 

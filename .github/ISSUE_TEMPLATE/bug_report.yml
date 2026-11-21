@@ -10,17 +10,8 @@ body:
     id: version
     attributes:
       label: Version
-      description: Output of `anlec --version`
-      placeholder: compiler=0.2.0
-    validations:
-      required: true
-  - type: dropdown
-    id: backend
-    attributes:
-      label: Backend
-      options:
-        - C
-        - LLVM
+      description: Output of `prionc --version`
+      placeholder: compiler=0.3.0
     validations:
       required: true
   - type: textarea
@@ -49,6 +40,6 @@ body:
     id: environment
     attributes:
       label: Environment
-      description: Operating system, and the C toolchain in use (`clang --version`)
+      description: Operating system, and the linker toolchain in use (`clang --version`)
     validations:
       required: false
