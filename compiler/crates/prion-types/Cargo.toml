@@ -1,6 +1,6 @@
 [package]
 name = "prion-types"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 description = "Prion 类型驻留表与泛型实例身份"
 

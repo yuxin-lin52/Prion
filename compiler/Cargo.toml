@@ -4,4 +4,4 @@ members = ["crates/prion-error", "crates/prion-lexer", "crates/prion-parser", "c
 
 [workspace.package]
 edition = "2021"
-version = "0.2.0"
+version = "0.3.0"

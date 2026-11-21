@@ -94,7 +94,7 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
 name = "prion-check"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "prion-error",
  "prion-lexer",
@@ -104,7 +104,7 @@ dependencies = [
 
 [[package]]
 name = "prion-codegen"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "prion-error",
  "prion-ir",
@@ -113,11 +113,11 @@ dependencies = [
 
 [[package]]
 name = "prion-error"
-version = "0.2.0"
+version = "0.3.0"
 
 [[package]]
 name = "prion-ir"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "prion-error",
  "prion-types",
@@ -125,14 +125,14 @@ dependencies = [
 
 [[package]]
 name = "prion-lexer"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "prion-error",
 ]
 
 [[package]]
 name = "prion-llvm"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "inkwell",
  "prion-ir",
@@ -141,7 +141,7 @@ dependencies = [
 
 [[package]]
 name = "prion-lower"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "prion-error",
  "prion-ir",
@@ -152,14 +152,14 @@ dependencies = [
 
 [[package]]
 name = "prion-opt"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "prion-ir",
 ]
 
 [[package]]
 name = "prion-parser"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "prion-error",
  "prion-lexer",
@@ -167,18 +167,18 @@ dependencies = [
 
 [[package]]
 name = "prion-types"
-version = "0.2.0"
+version = "0.3.0"
 
 [[package]]
 name = "prion-walk"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "prion-ir",
 ]
 
 [[package]]
 name = "prionc"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "prion-check",
  "prion-error",
