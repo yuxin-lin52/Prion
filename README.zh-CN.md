@@ -83,6 +83,10 @@ LLVM 后端静态链接 LLVM 22.1：把 `LLVM_SYS_221_PREFIX` 指向 LLVM 22.1 �
 [E202] error at example.an line 2, column 5, in assignment: "v" is declared as float, the assigned value is int; source: add val "v" float = 0 - 5. Expected: the assigned value must be of type float (the declaration decides). Fix: change it to a float value, or change the declaration to int. Details: Prion does not convert types silently: int does not become str automatically. To change the type, convert explicitly with int(value) / str(value) / float(value) / bool(value); if the declaration is wrong, change the declared type to match the value.
 ```
 
+## 性能
+
+与 C++、Rust、Zig、Go、Java、C#、Swift 的微基准对比见 [16 · 性能](docs/zh/16-性能.md)，源码与运行脚本在 [`bench/`](bench/)。这些是微基准测试，不代表实际生产体验。
+
 ## 征集反馈
 
 本仓库公开的目的是征集设计反馈。issue 入口开放——设计问题、示例中的粗糙之处、对上述取舍的异议都欢迎。[文档](docs/README.md#%E4%B8%AD%E6%96%87)是一份上手教程。

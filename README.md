@@ -83,6 +83,10 @@ Diagnostics carry four parts: what happened, the source line, what the compiler 
 [E202] error at example.an line 2, column 5, in assignment: "v" is declared as float, the assigned value is int; source: add val "v" float = 0 - 5. Expected: the assigned value must be of type float (the declaration decides). Fix: change it to a float value, or change the declaration to int. Details: Prion does not convert types silently: int does not become str automatically. To change the type, convert explicitly with int(value) / str(value) / float(value) / bool(value); if the declaration is wrong, change the declared type to match the value.
 ```
 
+## Performance
+
+Micro-benchmarks against C++, Rust, Zig, Go, Java, C# and Swift are in [16 · Performance](docs/en/16-performance.md); the sources and the runner are in [`bench/`](bench/). These are micro-benchmarks — they do not represent production performance.
+
 ## Feedback
 
 The repository is public to collect design feedback. Issues are open — design questions, rough edges in the examples, and disagreements with the choices above are all welcome. The [documentation](docs/README.md#english) is a hands-on tutorial for the language.
