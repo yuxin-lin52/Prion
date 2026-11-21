@@ -332,10 +332,8 @@ impl<'ctx> Lower<'ctx> {
                             
                             let init: BasicValueEnum = if et == "str" {
                                 self.fmt("").into()
-                            } else if t.is_pointer_type() {
-                                t.into_pointer_type().const_null().into()
                             } else {
-                                t.into_int_type().const_zero().into()
+                                t.const_zero()
                             };
                             self.builder.build_store(a, init).map_err(|e| e.to_string())?;
                             args.push(a.into());
