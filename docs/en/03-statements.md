@@ -87,6 +87,6 @@ val "list"[1] = 7      // index write
 
 The delta form `(+1)` takes the current value as the left operand. A write position (`list[1] = …`, `head.next = …`) is written explicitly, e.g. `val "list"[1] = 7`.
 
-## kill
+## Reclamation
 
-Inside an `unsafe` block, `kill #:block` reclaims another block's live regions early, and `#: block d kill` cleans the block on exit. The compiler tracks every live handle at the kill point; a live reference there is a compile error. See [08](08-memory.md).
+Memory is released when the owning block ends; there is no statement that frees memory early. See [08](08-memory.md).

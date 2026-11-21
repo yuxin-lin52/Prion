@@ -5,15 +5,18 @@ Reference tables for keywords, builtins, operators and error codes.
 ## Keywords
 
 ```
-add call fn val type fix give take outs
-if else for while in max match case
-unsafe pub sle ABI hide kill asm
+add call take fn val type hide give outs
+if else for while match case
+unsafe pub sle ABI asm fix
+trait impl spawn share send
 and or not null re fa
 int float bool str
 int_8 int_16 int_32 int_64
 uint_8 uint_16 uint_32 uint_64
 list map que stack
 ```
+
+`in` and `max` are contextual words used inside `for` and `while`, not reserved keywords.
 
 ## Builtin functions
 

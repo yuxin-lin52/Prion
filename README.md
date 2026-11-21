@@ -14,7 +14,7 @@ Every language must answer one question: who is responsible for memory? Manual m
 
 Prion takes none of these trade-offs. The program is structured as blocks; values live in the block that declares them; all data crossing a block boundary goes through an explicit channel. Given that structure, the compiler computes the lifetime and reclamation point of every value. The programmer writes blocks and states data flow; the compiler does the rest.
 
-The same division runs through the whole language. The syntax is small and regular. Direct memory access and explicit early reclamation (`kill`) exist only inside `unsafe` blocks. There is no manual memory allocation. The compiler computes where memory is released from the block structure: each block runs in its own region, and when the block's chain finishes, its segments are handed back to the platform allocator in one step. Prion also provides inline assembly and C ABI interoperability for environments that need their own.
+The same division runs through the whole language. The syntax is small and regular. Direct memory access, C interoperability and inline assembly exist only inside `unsafe` blocks. There is no manual memory allocation. The compiler computes where memory is released from the block structure: each block runs in its own region, and when the block's chain finishes, its segments are handed back to the platform allocator in one step.
 
 ## Language overview
 
@@ -47,7 +47,7 @@ This prints `5050`. The rules visible in this example:
 * Data crossing a block boundary takes one of two explicit forms: a **reference slot** (`call #:block val "name"` — reads see the freshest value, writes go through) or a **deep copy** (`take #:block val "name"` — the value at that moment belongs to the caller).
 * Reference cycles do not leak, because nothing is reclaimed object-by-object.
 
-The model gives every programmer the same simple default: put the code in blocks, and memory takes care of itself — a beginner can write an entire program in one block with zero memory burden. The block layout never affects correctness, only memory footprint. For memory- or performance-sensitive projects, advanced developers can tune it: one step per block, plus `kill` inside `unsafe`, to keep the memory peak low.
+The model gives every programmer the same simple default: put the code in blocks, and memory takes care of itself — a beginner can write an entire program in one block with zero memory burden. The block layout never affects correctness, only memory footprint. For memory- or performance-sensitive projects, advanced developers can tune it: splitting the program into more blocks releases each block's memory earlier and keeps the peak lower.
 
 ## Download
 

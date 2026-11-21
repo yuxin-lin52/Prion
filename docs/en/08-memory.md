@@ -19,16 +19,9 @@ add val "b" list(int) = take val "a"   // b is an independent copy
 
 `take` copies `val`; it does not apply to `fn` (a function value holds no data).
 
-## Early reclamation with `kill`
+## When memory is released
 
-Normally you let blocks release their memory at block end. Inside an `unsafe` block you can reclaim another block's live regions early:
-
-```anle
-kill #:block
-#: block d kill
-```
-
-The compiler tracks every live handle at the kill point. If any reference to the target is still live, it is a **compile error** listing each violation — so `kill` can never silently free memory that is still in use.
+A block's values are released when the block finishes; the reclamation point is fixed at compile time from the block reference graph. There is no statement that frees memory early — to shorten a value's lifetime, move its work into a smaller block that finishes sooner.
 
 ## unsafe blocks
 
@@ -40,7 +33,7 @@ Some capabilities are only available in a block marked `unsafe`:
 #: raw d
 ```
 
-Inside such a block you may use raw address read/write (`read_8`/`write_8` …), C interop (`str_to_c`/`str_from_c`), `asm`, and `kill`. In an ordinary block these words are **blocked by the mode**, which is a different error from "undefined name".
+Inside such a block you may use raw address read/write (`read_8`/`write_8` …), C interop (`str_to_c`/`str_from_c`) and `asm`. In an ordinary block these words are **blocked by the mode**, which is a different error from "undefined name".
 
 ## Cross-block access
 
@@ -50,4 +43,4 @@ Values you need from another block are read explicitly:
 call #:tools val "constant"
 ```
 
-See [12](12-modules.md) for modules and [03](03-statements.md) for the `kill` statement.
+See [12](12-modules.md) for modules and [03](03-statements.md) for statements.

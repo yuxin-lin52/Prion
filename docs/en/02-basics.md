@@ -35,7 +35,8 @@ Reads spell out the verb: `call val "x"`. Calls spell out the verb: `call fn "f"
 
 - `call` — reference the freshest value.
 - `take` — deep-copy the value as it is right now.
-- `kill` — explicit early reclamation (inside `unsafe` blocks; see [08](08-memory.md)).
+
+Memory is released when the owning block ends; there is no explicit early-release statement.
 
 ## Try it
 

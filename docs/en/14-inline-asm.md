@@ -1,6 +1,6 @@
 # 14 Inline assembly
 
-Inline assembly lets you drop down to machine instructions inside an `unsafe` block. It is one of the four unsafe-only capabilities (along with raw address access, C interop and `kill`).
+Inline assembly lets you drop down to machine instructions inside an `unsafe` block. It is one of the three unsafe-only capabilities (along with raw address access and C interop).
 
 ## The form
 

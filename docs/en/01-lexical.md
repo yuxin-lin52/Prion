@@ -31,14 +31,17 @@ Everything you write lives inside a **block**. `#: main b` opens the block named
 These words are reserved:
 
 ```
-add call fn val type fix give take outs if else for while in max
-match case unsafe pub sle ABI hide kill asm and or not
-null re fa int float bool str
+add call take fn val type hide give outs
+if else for while match case
+unsafe pub sle ABI asm fix
+trait impl spawn share send
+int float bool str
 int_8 int_16 int_32 int_64 uint_8 uint_16 uint_32 uint_64
 list map que stack
+and or not null re fa
 ```
 
-A keyword cannot be used as a name, except inside quotes: `add val "if" int = 1` is allowed because the name is quoted.
+A keyword cannot be used as a name, except inside quotes: `add val "if" int = 1` is allowed because the name is quoted. The loop words `in` and `max` are contextual: they carry meaning only inside `for` and `while` syntax.
 
 ## Symbols and markers
 
