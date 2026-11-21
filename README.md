@@ -42,10 +42,10 @@ This prints `5050`. The rules visible in this example:
 
 ## Memory model
 
-* Memory is allocated per block instance. When a block's region dies, everything in it dies with it; reclamation is O(1) per region, not per object.
+* Memory is allocated per block instance. When a block finishes, all of its values are released together rather than object by object.
 * Reclamation points are fixed at compile time from the block reference graph. At run time there is no GC thread, no stop-the-world pause, and no reference counting.
 * Data crossing a block boundary takes one of two explicit forms: a **reference slot** (`call #:block val "name"` — reads see the freshest value, writes go through) or a **deep copy** (`take #:block val "name"` — the value at that moment belongs to the caller).
-* Reference cycles do not leak, because nothing is reclaimed object-by-object.
+* Reference cycles do not leak, because reclamation follows block scope and does not count references.
 
 The model gives every programmer the same simple default: put the code in blocks, and memory takes care of itself — a beginner can write an entire program in one block with zero memory burden. The block layout never affects correctness, only memory footprint. For memory- or performance-sensitive projects, advanced developers can tune it: splitting the program into more blocks releases each block's memory earlier and keeps the peak lower.
 
@@ -65,35 +65,15 @@ cargo build --release -p prionc
 The LLVM backend links LLVM 22.1 statically: set `LLVM_SYS_221_PREFIX` to an LLVM 22.1 installation, and add that installation's `deps` directory to the link search path with `RUSTFLAGS="-L native=<prefix>\deps"` — it holds the zlib, zstd and libxml2 import libraries. LLVM is not redistributed here; get it from the upstream release page: <https://github.com/llvm/llvm-project/releases>.
 
 ```
-./target/release/prionc build demos/en/physics-engine/physics-engine
+./target/release/prionc build hello
 ```
 
 ## Implementation status
 
 * The compiler is implemented in Rust; the source is included in this repository. Self-hosting is in an early stage: the lexer of the self-hosted front end is complete and passes token-for-token comparison against the host implementation.
 * A single backend is implemented: **LLVM**, which compiles through `clang` for linking.
-* Generated code is slower than a hand-written C program. The measured costs are per-statement source-position bookkeeping and handle indirection.
-* Known gaps: parameter parsing for generic functions is incomplete; some diagnostic wording does not match the actual cause.
 * The syntax is **not frozen**. Breaking changes are expected; anything written against this language will need updating.
 * The standard library consists of about 40 builtin functions.
-
-## Verification
-
-The project's acceptance criterion is program behavior, not unit-test counts. Example, from the physics-engine demo in [demos/en/physics-engine/](demos/en/physics-engine/physics-engine.an):
-
-* 400 particles, 400 simulation steps, roughly 32 million pair checks.
-* The program self-checks four invariants after the run (elastic exchange, momentum conservation, wall bouncing, containment); the recorded output:
-
-```
-collision exchange: pass
-momentum conserved: pass
-wall bounce: pass
-containment: pass
-benchmark done, collisions: 7343
-```
-
-* The collision count, 7343, matches reference implementations written in C and Rust exactly.
-* Three consecutive runs produce identical output.
 
 ## Diagnostics
 

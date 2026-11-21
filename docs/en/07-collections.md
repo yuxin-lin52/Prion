@@ -1,6 +1,8 @@
 # 07 Collections
 
-Prion has four builtin containers: `list`, `map`, `que` (queue) and `stack`. Each is created and manipulated through builtin functions.
+## Overview
+
+Prion provides four builtin containers: `list`, `map`, `que` (queue) and `stack`. Each is created and manipulated through builtin functions.
 
 ## Lists
 
@@ -10,11 +12,11 @@ push(call val "l", 4)
 sort(call val "l")
 print(call val "l")        // [1, 2, 3, 4]
 print(len(call val "l"))   // length
-print(call val "l"[1])     // element by index
+print(call val "l"[1])     // element (indices start at 1)
 print(call val "l"[1~2])   // inclusive slice
 ```
 
-Other list verbs: `insert(list, i, v)`, `remove(list, i)`, `has`, `index`, `empty`, `slice`, `concat`, `sort`.
+Other list operations: `insert(list, i, v)`, `remove(list, i)`, `has`, `index`, `empty`, `slice`, `concat` and `sort`.
 
 ## Maps
 
@@ -27,7 +29,7 @@ print(call val "m"["a"])   // read
 print(keys(call val "m"), vals(call val "m"))
 ```
 
-Keys may be `str` or `int`. Check presence with `has` before reading a key that may be missing.
+Keys may be `str` or `int`. Use `has` before reading a key that may be absent.
 
 ## Queue and stack
 
@@ -41,9 +43,9 @@ push(call val "s", 2)
 add val "top" int = pop(call val "s")     // LIFO
 ```
 
-Queues and stacks are push/pop only; slicing and sorting apply to lists only.
+Queues and stacks are push/pop only; slicing and sorting apply to lists.
 
-## Try it
+## Example
 
 ```anle
 #: main b
@@ -77,7 +79,7 @@ Queues and stacks are push/pop only; slicing and sorting apply to lists only.
 #: main d
 ```
 
-Expected output:
+Output:
 
 ```
 list [1, 2, 4, 9] len 4 at 1 slice [1, 2]
@@ -91,4 +93,4 @@ bytes 2 chars 2
 
 ## Nested containers
 
-A container cannot directly hold another container. To group collections, put them in a `map(str, list(int))` or in struct fields — named places can hold containers.
+A container cannot directly hold another container. To group collections, use a `map(str, list(int))` or a struct field.

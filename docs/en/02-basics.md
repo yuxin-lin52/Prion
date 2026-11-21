@@ -1,44 +1,53 @@
 # 02 Basic concepts
 
-This chapter teaches the four ideas you need before writing any real Prion code: blocks, create-once names, full explicitness, and the verb slots. By the end you will have run a small program that uses each of the scalar types.
+## Overview
+
+Four rules govern every Prion program: code lives in flat blocks; names are created once with `add`; reads and calls state their kind explicitly; and values are released when their owning block ends. This chapter defines these rules and demonstrates the scalar types.
 
 ## Blocks
 
-All code lives in blocks. A block opens with `#: name b` and closes with `#: name d`. Blocks are **flat** — they never nest.
+A block opens with `#: name b` and closes with `#: name d`. Blocks are flat and never nest.
 
-At run time, blocks chain: every block that nothing references is a **chain root**, and roots run top-to-bottom in source order. A referenced block runs where it is called. Two blocks that only call each other with no root are rejected at compile time (they could never run).
+At run time blocks form chains. A block that no other block references is a chain root; roots execute top to bottom in source order. A referenced block executes where it is called. Two blocks that only reference each other, with no root, are rejected at compile time because they can never execute.
 
-## Create once, then re-bind
+## Creation and re-binding
 
-Names are created with `add`, exactly once:
+A name is created with `add`, exactly once:
 
 ```anle
-add val "x" int = 1          // create a value
-add fn "f" (n int) int = n   // create a function
-add type "point" = (x int, y int)  // create a type
+add val "x" int = 1
+add fn "f" (n int) int = n
+add type "point" = (x int, y int)
 ```
 
-Re-binding never uses `add` — it is a plain assignment:
+Re-binding does not use `add`:
 
 ```anle
 val "x" = 2
 val "x" = val "x" (+1)
 ```
 
-Assigning to a name that was never created is a compile error. There is no "first assignment creates the variable" rule: a typo becomes a loud error instead of a new invisible variable.
+Assigning to a name that was never created is a compile error. There is no rule that a first assignment creates a variable, so a misspelled name is reported rather than silently becoming a new variable.
 
-## Full explicitness
+## Explicit reads and calls
 
-Reads spell out the verb: `call val "x"`. Calls spell out the verb: `call fn "f"(1)`. A bare identifier such as `x` is rejected — a function and a value may share a name, so a bare identifier cannot say which one is meant.
+A read is written `call val "x"`; a call is written `call fn "f"(1)`. A bare identifier is rejected, because a function and a value may share a name and a bare identifier cannot say which is intended.
 
-## The verb slots
+Two verbs form the read surface:
 
-- `call` — reference the freshest value.
-- `take` — deep-copy the value as it is right now.
+- `call` references the freshest value.
+- `take` deep-copies the value as it is at that moment.
 
-Memory is released when the owning block ends; there is no explicit early-release statement.
+Memory is released when the owning block ends; there is no statement that releases memory early.
 
-## Try it
+## Scalar types
+
+```anle
+int  float  bool  str
+int_8 int_16 int_32 int_64  uint_8 uint_16 uint_32 uint_64
+```
+
+## Example
 
 ```anle
 #: main b
@@ -59,7 +68,7 @@ Memory is released when the owning block ends; there is no explicit early-releas
 #: main d
 ```
 
-Expected output:
+Output:
 
 ```
 int 42
@@ -70,8 +79,9 @@ uint8 200
 null check ok
 ```
 
-## Why these rules
+## Rules
 
-- **Flat blocks**: a block is the unit of execution and the unit of memory; nesting would blur both boundaries.
-- **`add` once**: repeatedly re-`add`ing turns "change the value" into "recreate it", and first-assignment-creates hides typos as new variables.
-- **Full explicitness**: a few extra characters per read buy you the guarantee that no read depends on context.
+- A block is both the unit of execution and the unit of memory; nesting is therefore disallowed.
+- `add` appears once per name; repeated creation is a compile error.
+- Reads and calls state their verb; there are no bare identifiers.
+- Values are released at block end; the lifetime of a value never outlives its block.

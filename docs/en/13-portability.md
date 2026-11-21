@@ -1,6 +1,8 @@
 # 13 Portability and targets
 
-Prion compiles ahead of time through LLVM to a native executable. There is no VM and no runtime dependency in the produced binary.
+## Overview
+
+Prion compiles ahead of time through LLVM to native code. The produced executable has no virtual machine and no runtime dependency.
 
 ## Build modes
 
@@ -8,35 +10,30 @@ Prion compiles ahead of time through LLVM to a native executable. There is no VM
 prionc build [name] --mode debug|release --opt 0-3
 ```
 
-- `debug` — full guards (bounds checks, null checks). Default `--opt 0`.
-- `release` — optimized, all guards stripped. Default `--opt 3`. Out-of-bounds and null dereferences become undefined behavior, so test under `debug` first.
+- `debug` — full guards (bounds and null checks); default `--opt 0`.
+- `release` — optimized with all guards stripped; default `--opt 3`. Out-of-bounds and null accesses become undefined behavior, so programs should be tested in `debug` first.
 
 The mode selects the output directory: `build/<mode>/<name>.exe`.
 
-## Running
+## Commands
 
-```
-prionc run hello
-```
-
-`run` builds, then executes the result. Arguments after `--` are passed through to the program.
-
-## Check only
-
-```
-prionc check hello
-```
-
-`check` runs the front end (lex → parse → check) and produces no files. It is the fastest way to verify code.
+| Command | Effect |
+|---|---|
+| `prionc build [name]` | compile and link |
+| `prionc run [name]` | build, then run; `--` passes arguments to the program |
+| `prionc check [name]` | run the front end only, no files |
+| `prionc fmt [path] [--check]` | add decorative indentation |
+| `prionc clean [name]` | remove the `build/` directory |
+| `prionc -V` / `prionc -h` | version / usage |
 
 ## Targets
 
-The LLVM backend targets `x86` and `aarch64`. Code generation uses the LLVM 22 toolchain and links with `clang`.
+The LLVM backend targets `x86` and `aarch64`. Code generation uses LLVM 22 and links with `clang`.
 
 ## Environment
 
-- `PRION_CC` — the `clang` used for linking (and as a fallback toolchain).
-- `PRION_STD` — the standard library root, if not found by the SDK layout.
+- `PRION_CC` — the `clang` used for linking, and the fallback toolchain.
+- `PRION_STD` — the standard library root, when not found by the SDK layout.
 
 ## Exit codes
 
@@ -51,13 +48,11 @@ The LLVM backend targets `x86` and `aarch64`. Code generation uses the LLVM 22 t
 ## Output layout
 
 ```
-build/debug/hello.exe      // the executable
-build/debug/hello.ll       // LLVM IR (debug aid)
+build/debug/hello.exe      // executable
+build/debug/hello.ll       // LLVM IR
 build/debug/hello.o        // object file
 ```
 
-`prionc clean` removes the whole `build/` directory.
+## Toolchain resolution
 
-## No silent conversion of the environment
-
-The compiler does not auto-detect a "compatible" toolchain and silently fall back. If `PRION_CC` points at a compiler that cannot link, you get an explicit error — fix the toolchain, do not work around it.
+The compiler does not silently substitute an incompatible toolchain. If `PRION_CC` points at a compiler that cannot link, the failure is reported; the toolchain is expected to be corrected rather than worked around.

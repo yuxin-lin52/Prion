@@ -25,17 +25,17 @@ jobs:
           echo "changed files:"
           echo "$changed"
 
-          allowed='^(compiler/|demos/|docs/)'
+          allowed='^(compiler/|docs/)'
           if [ "${{ github.event.pull_request.user.login }}" = "dependabot[bot]" ]; then
-            allowed='^(compiler/|demos/|docs/|\.github/)'
+            allowed='^(compiler/|docs/|\.github/)'
             echo "dependency updates may also change workflow files"
           fi
           outside=$(echo "$changed" | grep -vE "$allowed" || true)
 
           if [ -n "$outside" ]; then
-            echo "::error::A pull request may only change compiler/, demos/ or docs/. These paths are outside that:"
+            echo "::error::A pull request may only change compiler/ or docs/. These paths are outside that:"
             echo "$outside" | sed 's/^/  - /'
             echo "Workflow files, licence, and repository metadata are changed by the maintainer only."
             exit 1
           fi
-          echo "every changed file is inside compiler/, demos/ or docs/"
+          echo "every changed file is inside compiler/ or docs/"

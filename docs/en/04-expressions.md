@@ -1,8 +1,41 @@
 # 04 Expressions
 
-Prion expressions are ordinary infix expressions, but two things are always explicit: reads of a value use `call val "name"`, and calls use `call fn "name"(…)`. This chapter runs through the operators and literals.
+## Overview
 
-## Try it
+Prion uses ordinary infix expressions with explicit verbs for reads (`call val`) and calls (`call fn`). This chapter defines the operator set, literal forms already introduced in [01](01-lexical.md), the expression forms for indexing, slicing and field access, and the `if` expression.
+
+## Operators
+
+| Category | Operators |
+|---|---|
+| Arithmetic | `+ - * / %` |
+| Comparison | `< > <= >= == !=` |
+| Logical (words) | `and or not` |
+| Bitwise | `& \| ^ ! << >>` |
+| Range (in `for`) | `~` |
+| Error propagation | `?` (see [09](09-errors.md)) |
+
+A unary minus must be followed by a numeric literal. Chained comparison such as `1 < x < 5` is not supported; write `1 < x and x < 5`. The ternary operator `?:` is not part of the language; use an `if` expression.
+
+## Index, slice and field
+
+These forms are part of a `call val` expression:
+
+```anle
+call val "list"[1]     // one element (indices start at 1)
+call val "list"[1~2]   // inclusive slice
+call val "point".x     // a field
+```
+
+## if expression
+
+An `if` used in value position produces a value; both branches must have the same type:
+
+```anle
+add fn "max" (p int, q int) int = if p > q { p } else { q }
+```
+
+## Example
 
 ```anle
 #: main b
@@ -14,10 +47,12 @@ Prion expressions are ordinary infix expressions, but two things are always expl
     print("radix", 0xff, 0b1010, 0o17)
     print("escape", "a\nb", "quote \"x\"")
     print("raw", @"a\b")
+    add fn "larger" (p int, q int) int = if p > q { p } else { q }
+    print("if expression", call fn "larger"(3, 2))
 #: main d
 ```
 
-Expected output:
+Output:
 
 ```
 arith 7 1
@@ -28,33 +63,5 @@ radix 255 10 15
 escape a
 b quote "x"
 raw a\b
+if expression 3
 ```
-
-## Operators
-
-- Arithmetic: `+ - * / %`
-- Comparison: `< > <= >= == !=`
-- Logic: `and or not` (words, not `&& || !`)
-- Bitwise: `& | ^ ! << >>`
-- Range (in `for`): `~`
-
-A unary minus must be followed by a numeric literal, e.g. `-1` or `-2.5`.
-
-## Literals
-
-- Integers: decimal, `0x` hex, `0b` binary, `0o` octal; `_` separates digits.
-- Floats: `1.5`, `1e6`, `1.5e-3`.
-- Strings: `"…"` with `\n \t \\ \"`; verbatim `@"…"`.
-- Booleans: `re` / `fa`. Null: `null`.
-
-## Indexing, slicing and fields
-
-These appear as part of a `call val` expression:
-
-```anle
-call val "list"[1]     // one element
-call val "list"[1~2]   // an inclusive slice
-call val "point".x     // a field
-```
-
-A comparison chain such as `1 < x < 5` is **not** supported; write `1 < x and x < 5`.

@@ -1,78 +1,94 @@
 # 09 Error handling
 
-Prion has no exceptions. An operation that can fail returns a **sum type**, and the caller destructures it with `match`. This chapter shows the pattern.
+## Overview
 
-## Model errors as a sum type
+Prion has no exceptions. An operation that can fail returns a **sum type**, and the caller destructures it with `match` or propagates it with `?`.
+
+## Modelling errors
 
 ```anle
-add type "res" = "ok"(int) | "err"(str)
+add type "Result" = Err(str) | Ok(int)
 ```
 
-A function returns `"ok"(value)` on success and `"err"(message)` on failure:
+The error variant is declared first. `?` treats the first variant as the error and the second as the success.
+
+A function returns `Ok(value)` on success and `Err(message)` on failure:
 
 ```anle
-add fn "safe_div" (a int, b int) "res" = if b == 0 { "err"("divide by zero") } else { "ok"(a / b) }
+add fn "parse" (s str) "Result" = if s == "bad" { Err("oops") } else { Ok(42) }
 ```
 
-## Propagate with the expression form of match
+## Propagation with `?`
 
-Inside a function body, `match` is also an expression. That lets you transform a result while passing the error through:
+Inside a function that returns the same sum type, `?` unwraps a success value and returns the error immediately if the value is a failure:
 
 ```anle
-add fn "double_div" (a int, b int) "res" = match call fn "safe_div"(a, b) { case "ok"("v"): "ok"(call val "v" * 2), case "err"("why"): "err"(call val "why") }
+add fn "doit" (s str) "Result":
+    add val "n" int = call fn "parse"(call val s)?
+    give Ok(call val "n")
+;
 ```
 
-## Consume with the statement form of match
+## Dispatch with match
 
-At the call site, match the result and act:
+Expression form transforms a result while passing the error through:
 
 ```anle
-match call fn "double_div"(10, 2):
-    case "ok"("v"):
-        print("ok", call val "v")
+add fn "double" (n int) "Result" = match call fn "parse"("good") { case Ok("v"): Ok(call val "v" * 2), case Err("e"): Err(call val "e") }
+```
+
+Statement form consumes a result at the call site:
+
+```anle
+match call fn "doit"("good"):
+    case Ok("v"):
+        print(call val "v")
     ;
-    case "err"("why"):
-        print("err", call val "why")
+    case Err("e"):
+        print(call val "e")
     ;
 ;
 ```
 
-## Try it
+## Example
 
 ```anle
 #: main b
-    add type "res" = "ok"(int) | "err"(str)
-    add fn "safe_div" (a int, b int) "res" = if b == 0 { "err"("divide by zero") } else { "ok"(a / b) }
-    add fn "double_div" (a int, b int) "res" = match call fn "safe_div"(a, b) { case "ok"("v"): "ok"(call val "v" * 2), case "err"("why"): "err"(call val "why") }
+    add type "Result" = Err(str) | Ok(int)
+    add fn "parse" (s str) "Result" = if s == "bad" { Err("oops") } else { Ok(42) }
+    add fn "doit" (s str) "Result":
+        add val "n" int = call fn "parse"(call val s)?
+        give Ok(call val "n")
+    ;
 
-    match call fn "double_div"(10, 2):
-        case "ok"("v"):
+    match call fn "doit"("good"):
+        case Ok("v"):
             print("success", call val "v")
         ;
-        case "err"("why"):
-            print("failure", call val "why")
+        case Err("e"):
+            print("failure", call val "e")
         ;
     ;
-    match call fn "double_div"(10, 0):
-        case "ok"("v"):
+    match call fn "doit"("bad"):
+        case Ok("v"):
             print("success", call val "v")
         ;
-        case "err"("why"):
-            print("failure", call val "why")
+        case Err("e"):
+            print("failure", call val "e")
         ;
     ;
 #: main d
 ```
 
-Expected output:
+Output:
 
 ```
-success 10
-failure divide by zero
+success 42
+failure oops
 ```
 
-## Why this design
+## Notes
 
-- Failure is part of the type, so the compiler can check that you handled it. `match` exhaustiveness means a new error variant surfaces every place that must be updated.
-- There is no hidden control flow: no exception unwinding, no stack of in-flight cleanups. The caller sees the error in the return type and decides what to do.
-- The standard library ships `result(T, E)` and `option(T)` types built this way; see the appendix for the builtins you will use most.
+- Failure is part of the type, so the compiler checks that it is handled; `match` coverage is checked for exhaustiveness.
+- There is no hidden control flow: no exception unwinding and no cleanup stack. The caller sees the error in the return type.
+- The standard library ships `result(T, E)` and `option(T)` built on the same pattern.

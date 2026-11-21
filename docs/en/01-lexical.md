@@ -1,10 +1,10 @@
 # 01 Lexical structure
 
-In this chapter you write and run your first Prion program, then learn the small set of lexical rules that the rest of the language is built on.
+## Overview
 
-## Your first program
+Prion source is UTF-8 without BOM with LF line endings. A `.an` file is one complete program or one module. This chapter defines the lexical units: keywords, symbols, comments, and literals.
 
-Create `hello.an`:
+## A minimal program
 
 ```anle
 #: main b
@@ -18,17 +18,17 @@ Build and run it:
 prionc run hello
 ```
 
-Expected output:
+Output:
 
 ```
 hello, prion
 ```
 
-Everything you write lives inside a **block**. `#: main b` opens the block named `main` (the `b` means *born*) and `#: main d` closes it (`d` means *death*). Indentation here is only for humans — the compiler does not read it. Blocks are described in [02](02-basics.md).
+All code resides in blocks. `#: main b` opens the block `main` (`b` = born); `#: main d` closes it (`d` = death). Indentation is decorative and is not read by the compiler. Blocks are defined in [02](02-basics.md).
 
 ## Keywords
 
-These words are reserved:
+The following words are reserved and cannot be used as names:
 
 ```
 add call take fn val type hide give outs
@@ -41,7 +41,7 @@ list map que stack
 and or not null re fa
 ```
 
-A keyword cannot be used as a name, except inside quotes: `add val "if" int = 1` is allowed because the name is quoted. The loop words `in` and `max` are contextual: they carry meaning only inside `for` and `while` syntax.
+A name may be written with or without quotes. Quoting is required only when the name is a reserved word or contains characters that cannot appear in an identifier: a keyword can be used as a name only when quoted, as in `add val "if" int = 1`. Of the reserved words, `trait` and `impl` are reserved for future use and are not implemented in this release. The loop words `in` and `max` are contextual: they carry meaning only within `for` and `while` syntax and are not reserved.
 
 ## Symbols and markers
 
@@ -59,32 +59,29 @@ Structural markers:
 
 ## Comments
 
-Only whole-line `//` comments exist — no `/* */` and no comments trailing code on the same line. The rest of a `//` line is ignored:
+Comments are whole-line `//` only; there are no block comments and no trailing comments on a code line. The remainder of a `//` line is ignored by the compiler.
 
 ```anle
 #: main b
     // this line is a comment
-    print("done") // this is NOT a comment - it is parsed as code and rejected
-#: main d
-```
-
-Put the comment on its own line instead:
-
-```anle
-#: main b
-    // print the word done
     print("done")
 #: main d
 ```
 
+A `//` appended to a statement is parsed as code and is rejected.
+
 ## Literals
 
-- **Integers** are decimal by default; `0x` hex, `0b` binary and `0o` octal are also accepted, and `_` separates digits: `0b1111_0000` is 240.
-- **Floats** use a decimal point or scientific notation: `1.5`, `1e6`, `1.5e-3`.
-- **Strings** use `"…"` with the four escapes `\n \t \\ \"`. Any other escape is a compile error. A verbatim string is written `@"…"`, where backslashes are literal and `""` escapes a quote. Strings cannot span lines.
-- **Booleans** are `re` (true) and `fa` (false).
-- **Null** is `null`.
+| Kind | Form |
+|---|---|
+| Integer | decimal; `0x` hex, `0b` binary, `0o` octal; `_` separates digits |
+| Float | decimal point or exponent: `1.5`, `1e6`, `1.5e-3` |
+| String | `"…"` with the four escapes `\n \t \\ \"`; verbatim `@"…"` |
+| Boolean | `re` (true), `fa` (false) |
+| Null | `null` |
 
-## Files
+Any escape other than `\n \t \\ \"` is a compile error. A verbatim string treats backslashes literally and uses `""` for a quote. Strings cannot span lines.
 
-A source file must be **UTF-8 without BOM** with **LF** line endings. One `.an` file is one complete program or one module. The compiler rejects a BOM or CRLF with a clear error.
+## File contract
+
+The compiler rejects a byte-order mark and CRLF line endings with an explicit diagnostic. Files must be saved as UTF-8 without BOM and LF.

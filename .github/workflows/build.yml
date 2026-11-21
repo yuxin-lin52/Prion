@@ -5,12 +5,10 @@ on:
     branches: [main]
     paths:
       - "compiler/**"
-      - "demos/**"
       - ".github/workflows/build.yml"
   pull_request:
     paths:
       - "compiler/**"
-      - "demos/**"
   workflow_dispatch:
 
 permissions:
@@ -46,7 +44,7 @@ jobs:
           fi
 
   build:
-    name: Build and run the demo
+    name: Build the compiler
     needs: gate
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.gate.outputs.run == 'true') }}
     runs-on: ubuntu-latest
@@ -77,23 +75,21 @@ jobs:
           RUSTFLAGS: -L native=/usr/lib/llvm-22/lib
         run: cargo build --release -p prionc
 
-      - name: Compile the demo
+      - name: Smoke test
         env:
           PRION_CC: /usr/bin/clang-22
         run: |
           set -e
           exe="$PWD/compiler/target/release/prionc"
-          cd demos/en/physics-engine
-          "$exe" build physics-engine
-
-      - name: Run the demo and compare with the recorded output
-        run: |
-          set -e
-          out="demos/en/physics-engine/build/debug/physics-engine"
-          "$out" | tee result.txt
-          grep -q "collision exchange: pass" result.txt
-          grep -q "momentum conserved: pass" result.txt
-          grep -q "wall bounce: pass" result.txt
-          grep -q "containment: pass" result.txt
-          grep -q "collisions: 7343" result.txt
-          echo "the demo output matches the recorded five lines"
+          "$exe" -V
+          mkdir -p "$RUNNER_TEMP/smoke"
+          cat > "$RUNNER_TEMP/smoke/hello.an" <<'EOF'
+          #: main b
+              print("ok")
+          #: main d
+          EOF
+          cd "$RUNNER_TEMP/smoke"
+          out=$("$exe" run hello)
+          echo "$out"
+          test "$out" = "ok"
+          echo "the smoke test produced the expected output"

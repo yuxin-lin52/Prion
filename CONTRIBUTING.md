@@ -20,7 +20,7 @@ Open an issue describing the change. Pure fixes — a typo, an example that does
 
 ## What a pull request can change
 
-A pull request may touch `compiler/`, `demos/` and `docs/`. A check enforces this, and it is required before a merge: a pull request that changes anything else stays blocked.
+A pull request may touch `compiler/` and `docs/`. A check enforces this, and it is required before a merge: a pull request that changes anything else stays blocked.
 
 Workflow files, the licence, this document, the READMEs and the repository metadata are changed by the maintainer only. The one exception is an automated dependency update, which may also touch workflow files.
 
@@ -46,11 +46,7 @@ cd compiler
 cargo build --release -p prionc
 ```
 
-Run the demo before and after a change:
-
-```
-./target/release/prionc build demos/en/physics-engine/physics-engine
-```
+Before and after a change, compile and run a small program to confirm the expected behavior.
 
 ## Commit sign-off
 

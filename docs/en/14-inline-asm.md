@@ -1,21 +1,23 @@
 # 14 Inline assembly
 
-Inline assembly lets you drop down to machine instructions inside an `unsafe` block. It is one of the three unsafe-only capabilities (along with raw address access and C interop).
+## Overview
 
-## The form
+Inline assembly allows machine instructions to be embedded inside an `unsafe` block. It is one of the three unsafe-only capabilities, alongside raw address access and C interoperability.
+
+## Form
 
 ```anle
 asm("template" : output : input : clobber)
 ```
 
-- The **template** is the instruction string (ASCII only).
-- The **output** segment binds a register to a Prion name: `reg -> name` (write-only) or `reg <-> name` (read-write).
-- The **input** segment binds a register to an expression: `reg <- expr`.
-- The **clobber** segment lists registers or `memory` / `cc` that the assembly clobbers.
+- **template** — the instruction string, ASCII only.
+- **output** — binds a register to a Prion name: `reg -> name` (write-only) or `reg <-> name` (read-write).
+- **input** — binds a register to an expression: `reg <- expr`.
+- **clobber** — register names, or `memory` / `cc`.
 
-All four segments are separated by `:`. A register name is mapped to a Prion register, e.g. `al/ax/eax/rax -> a`, `r8..r15 -> r8..r15`.
+The four segments are separated by `:`. Register names map to Prion registers, e.g. `al/ax/eax/rax -> a` and `r8..r15 -> r8..r15`.
 
-## Try it
+## Example
 
 ```anle
 #: raw b unsafe
@@ -25,7 +27,7 @@ All four segments are separated by `:`. A register name is mapped to a Prion reg
 #: raw d
 ```
 
-Expected output:
+Output:
 
 ```
 asm out 9
@@ -33,11 +35,11 @@ asm out 9
 
 ## Rules
 
-- `asm` may only appear inside a block declared `#: name b unsafe`.
-- `asm` is an **action statement** — it has no output value and cannot be assigned like an expression. Bind outputs to existing vals instead.
+- `asm` may appear only inside a block declared `#: name b unsafe`.
+- `asm` is an action statement: it has no output value and cannot be assigned like an expression. Outputs are bound to existing vals.
 - Every name in an output binding must already be defined in the same block with `add val`.
-- The isolation region (inside the quotes) must be ASCII; any non-ASCII character is an error.
+- The isolation region (inside the quotes) must be ASCII; a non-ASCII character is an error.
 
-## Why it is fenced off
+## Rationale
 
-Assembly bypasses all of Prion's type and memory rules. Restricting it to `unsafe` blocks means that reading a normal block tells you exactly whether dangerous code can run inside it.
+Assembly bypasses all of Prion's type and memory rules. Restricting it to `unsafe` blocks means that reading an ordinary block tells the reader that no assembly runs inside it.

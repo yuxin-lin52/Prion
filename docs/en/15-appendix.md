@@ -1,22 +1,22 @@
 # 15 Appendix
 
-Reference tables for keywords, builtins, operators and error codes.
-
 ## Keywords
+
+Reserved words:
 
 ```
 add call take fn val type hide give outs
 if else for while match case
 unsafe pub sle ABI asm fix
 trait impl spawn share send
-and or not null re fa
 int float bool str
 int_8 int_16 int_32 int_64
 uint_8 uint_16 uint_32 uint_64
 list map que stack
+and or not null re fa
 ```
 
-`in` and `max` are contextual words used inside `for` and `while`, not reserved keywords.
+Of these, `trait` and `impl` are reserved for future use and are not implemented in this release. The words `in` and `max` are contextual: they carry meaning only inside `for` and `while` syntax and are not reserved.
 
 ## Builtin functions
 
@@ -32,30 +32,31 @@ str_to_c str_from_c asm
 
 The `read_*` / `write_*` / `str_to_c` / `str_from_c` / `asm` builtins are unsafe-only.
 
-## Operator families
+## Operators
 
-| Kind | Operators |
+| Category | Operators |
 |---|---|
 | Arithmetic | `+ - * / %` |
 | Comparison | `< > <= >= == !=` |
-| Logic (words) | `and or not` |
+| Logical (words) | `and or not` |
 | Bitwise | `& \| ^ ! << >>` |
 | Range | `~` |
-
-`/` and `%` by zero, and integer overflow, are reported at run time in `debug` mode.
+| Error propagation | `?` |
 
 ## Error code ranges
 
 | Range | Meaning |
 |---|---|
-| `E0xx` | lexical (bad character, bad escape, CRLF/BOM, number format) |
-| `E1xx` / `E2xx` | syntax and semantic checks (names, types, blocks, control flow) |
-| `E4xx` | code generation / linking |
+| `E0xx` | lexical (character, escape, CRLF/BOM, number format) |
+| `E1xx` / `E2xx` | syntax and semantic checks |
+| `E3xx` | intermediate representation |
+| `E4xx` | code generation and linking |
 | `E5xx` | command-line usage |
 | `E6xx` | environment (files, directories, toolchain) |
+| `E7xx` | internal compiler error |
 | `R0x` | run-time errors (bounds, overflow, division by zero, I/O) |
 
-A diagnostic has the shape:
+A diagnostic has the form:
 
 ```
 [E201] error at file.an line 2, column 5, in <context>: <problem>; source: <line>

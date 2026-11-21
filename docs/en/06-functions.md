@@ -1,19 +1,17 @@
 # 06 Functions
 
-Functions are created once with `add fn`, called with `call fn "name"(…)`, and can be used as first-class values.
+## Overview
 
-## Creating and calling
+A function is created with `add fn`, called with `call fn "name"(…)`, and may be used as a first-class value. Function boundaries require explicit types.
+
+## Expression bodies
 
 ```anle
 add fn "double" (x int) int = x * 2
 add fn "add" (a int, b int) int = a + b
 ```
 
-The body after `=` is a single expression. Call it with `call fn "double"(21)`.
-
-## Declare, then supply the body
-
-Recursive and mutually recursive functions use a declaration (`add fn` with no `=`) plus a body form (`fn` without `add`):
+The body after `=` is a single expression. Recursive and mutually recursive functions use a declaration (an `add fn` with no `=`) followed by a body form (`fn` without `add`):
 
 ```anle
 add fn "try_div" (n int, i int) bool
@@ -21,9 +19,9 @@ add fn "is_prime" (n int) bool = if n < 2 { fa } else { call fn "try_div"(n, 2) 
 fn "try_div" (n int, i int) bool = if i * i > n { re } else { if n % i == 0 { fa } else { call fn "try_div"(n, i + 1) } }
 ```
 
-## Statement-body functions with `give`
+## Statement bodies with give
 
-When a function needs intermediate steps, open a body with `:` and return with `give`:
+A body that needs intermediate steps opens with `:` and returns with `give`:
 
 ```anle
 add fn "total"(n int) int:
@@ -37,9 +35,11 @@ add fn "total"(n int) int:
 ;
 ```
 
+An intermediate `give` returns immediately. Every `give`, intermediate or final, must match the declared return type, and a statement body must end with one.
+
 ## First-class functions
 
-An `fn` value is written `fn "name"`; its type is `fn(args) ret`. Call through a value with `call val "f"(…)`:
+A function value is written `fn "name"`; its type is `fn(args) ret`. It is called through a value with `call val "f"(…)`:
 
 ```anle
 add fn "inc" (x int) int = x + 1
@@ -48,7 +48,7 @@ add val "op" fn(int) int = fn "inc"
 print(call fn "twice"(call val "op", 41))
 ```
 
-## Try it
+## Example
 
 ```anle
 #: main b
@@ -75,7 +75,7 @@ print(call fn "twice"(call val "op", 41))
 #: main d
 ```
 
-Expected output:
+Output:
 
 ```
 prime re fa
@@ -83,8 +83,8 @@ total 10
 hfn 42
 ```
 
-## Rules to remember
+## Rules
 
-- Functions are **define-before-use**: a call must come after its `add fn`. A bare declaration counts as defined; the body may come later.
-- The number and types of arguments must match the declaration exactly.
-- Parameter and local types are mandatory at function boundaries.
+- Functions are defined before use: a call must come after its `add fn`. A declaration counts as defined; the body may follow later.
+- Argument count and argument types must match the declaration.
+- Parameter and return types are mandatory at function boundaries.
