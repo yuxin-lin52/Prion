@@ -1,49 +1,92 @@
 # 03 Statements
 
-Status: implemented.
+In this chapter you write loops, conditionals, `match`, assignments and reclamation. Every construct is closed with a lone `;` on its own line; indentation is cosmetic.
 
-## Control flow
+## Closing bodies with `;`
 
-`if` / `else` / `for` / `while`, ended by a lone `;` on its own line — indentation is purely cosmetic and can never change meaning; a mismatched `;` is a loud parse error. `else:` must directly follow the `;` that closes its `if` body.
+`if`, `else`, `for`, `while` and `match` arms all end with a `;` on its own line. The `;` is the structural close — it never depends on indentation, so a missing one is a loud parse error rather than a silent misread.
 
-- Conditions must be booleans — `if 5:` is rejected.
-- `for i in 1~5:` walks the inclusive range; `for x in collection:` iterates containers and strings.
-- `while cond:` loops freely; `while cond max 100:` hard-caps iterations (a stall guard, not a ban on infinite loops).
-- Loop variables are assignable locals; `max` requires an integer literal.
+## Conditions and loops
 
-## Match
+- A condition must be a boolean. `if 5:` is rejected.
+- `for i in 1~5:` walks the inclusive integer range; `for x in collection:` iterates lists, maps and strings.
+- `while cond:` loops freely; `while cond max 100:` caps iterations as a stall guard (infinite loops are legal, the cap just stops a hang).
+
+## Try it: control flow
 
 ```anle
-match call fn "safe-div"(10, 2):
-case Ok("v"):
-;1 print(call val "v")
-;
-case Err("reason"):
-;1 print(call val "reason")
-;
-;
+#: main b
+    add val "sum" int = 0
+    for "i" in 1~3:
+        val "sum" = val "sum" (+call val "i")
+    ;
+    print("for range", call val "sum")
+    add val "names" list(str) = ["a", "b"]
+    for "n" in call val "names":
+        print("each", call val "n")
+    ;
+    add val "count" int = 0
+    while call val "count" < 3 max 10:
+        val "count" = val "count" (+1)
+    ;
+    print("while", call val "count")
+    add val "v" int = 5
+    if call val "v" > 3:
+        print("big")
+    ;
+    else:
+        print("small")
+    ;
+#: main d
 ```
 
-- `case Variant(binding)` destructures the payload; `case _:` is the fallback.
-- Guards: `case Variant(binding) if cond:` enters the arm only when the condition holds, otherwise tries the next case; the condition must be a boolean and is read-only.
-- The match subject accepts any expression with an inferable type.
-- Exhaustiveness is checked at compile time — adding a variant exposes every stale match.
-- Statement form (as above) and expression form (inside fn bodies) both exist.
+Expected output:
 
-## Assignment and re-binding
+```
+for range 6
+each a
+each b
+while 3
+big
+```
 
-- Re-binding: `val "名" = new-value`.
-- Delta: `val "次" = val "次" (+1)` — applies the parenthesized expression with the current value as the left operand; requires a current value.
-- Index and field writes: `list[1] = v`, `head.next.value = 90` — write positions stay bare.
+## match
+
+A `match` destructures a sum-type value. `case Variant("binding"):` binds a payload, `case _:` is the fallback, and guards use `if`:
+
+```anle
+#: main b
+    add type "res" = "ok"(int) | "err"(str)
+    add val "r" "res" = "ok"(10)
+    match call val "r":
+        case "ok"("v"):
+            print("ok", call val "v")
+        ;
+        case "err"("why"):
+            print("err", call val "why")
+        ;
+    ;
+#: main d
+```
+
+Expected output:
+
+```
+ok 10
+```
+
+The match subject must be an expression whose type is known at compile time. Exhaustiveness is checked: adding a variant to a type exposes every `match` that no longer covers it.
+
+## Re-binding, delta, index and field writes
+
+```anle
+val "x" = 5            // re-bind
+val "x" = val "x" (+1) // delta: read current value, add 1, store
+val "list"[1] = 7      // index write
+```
+
+The delta form `(+1)` takes the current value as the left operand. A write position (`list[1] = …`, `head.next = …`) is written explicitly, e.g. `val "list"[1] = 7`.
 
 ## kill
 
-Inside `unsafe` blocks: `kill #:block` reclaims the target block's active regions; `#: block d kill` cleans the block itself on exit. Sequential statement position only; the target must not be the current block and must have been called by this chain. The compiler tracks every handle and reference-slot propagation path — a live reference at the kill point is a compile error listing all violations. See [08](08-memory.md).
-
-## Why
-
-- `;` termination with cosmetic indentation: pure indentation fails silently — wrong indentation changes meaning. A missing `;` is a loud parse error.
-- Truthy conditions rejected: treating numbers as booleans is implicit conversion, and implicit conversion is where bugs hide.
-- `max`: infinite loops are legal; the cap is a stall guard.
-- Exhaustive match: variants are a closed set; adding one exposes every stale match — a compile-time guarantee, not a convention.
-- `kill` uses tracking, not silence: failure is a compile error enumerating every violating reference. Loud beats quiet.
+Inside an `unsafe` block, `kill #:block` reclaims another block's live regions early, and `#: block d kill` cleans the block on exit. The compiler tracks every live handle at the kill point; a live reference there is a compile error. See [08](08-memory.md).

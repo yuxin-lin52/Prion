@@ -1,35 +1,90 @@
 # 06 Functions
 
-Status: implemented.
+Functions are created once with `add fn`, called with `call fn "name"(…)`, and can be used as first-class values.
 
-## Two body forms
+## Creating and calling
 
-The default is the formula body:
+```anle
+add fn "double" (x int) int = x * 2
+add fn "add" (a int, b int) int = a + b
+```
 
-- Formula body: `add fn "name"(params) ret = expression` — a single expression, calls allowed, statements forbidden.
-- Statement body: `add fn "name"(params) ret:` opens the body; a lone `;` closes it. Inside: local `add val`, re-binding, `if`/`while`/`for`/`match`, calls to other fns, recursion. The return value is `give expression`, and it must be the last statement (single exit; `give` inside a branch is an error).
-- Parameters are read as `call val "name"` — statement bodies have no bare-identifier exemption. Parameter types and return types are mandatory.
+The body after `=` is a single expression. Call it with `call fn "double"(21)`.
 
-## Calls
+## Declare, then supply the body
 
-`call fn "name"(args)` — same block; cross-block and cross-module forms add prefixes (see [02](02-basics.md)). Calls to external C functions are declared with `add outs fn "name"(params) ret` and invoked only inside `unsafe`.
+Recursive and mutually recursive functions use a declaration (`add fn` with no `=`) plus a body form (`fn` without `add`):
+
+```anle
+add fn "try_div" (n int, i int) bool
+add fn "is_prime" (n int) bool = if n < 2 { fa } else { call fn "try_div"(n, 2) }
+fn "try_div" (n int, i int) bool = if i * i > n { re } else { if n % i == 0 { fa } else { call fn "try_div"(n, i + 1) } }
+```
+
+## Statement-body functions with `give`
+
+When a function needs intermediate steps, open a body with `:` and return with `give`:
+
+```anle
+add fn "total"(n int) int:
+    add val "s" int = 0
+    add val "i" int = 1
+    while call val "i" <= call val "n":
+        val "s" = call val "s" + call val "i"
+        val "i" = call val "i" + 1
+    ;
+    give call val "s"
+;
+```
 
 ## First-class functions
 
-Function types exist: `f fn(int) int`. Functions can be passed as parameters, stored in vals, placed in containers, returned, and compared for identity — pure function pointers, no capture.
+An `fn` value is written `fn "name"`; its type is `fn(args) ret`. Call through a value with `call val "f"(…)`:
 
-## Why
+```anle
+add fn "inc" (x int) int = x + 1
+add fn "twice" (f fn(int) int, n int) int = call val "f"(n)
+add val "op" fn(int) int = fn "inc"
+print(call fn "twice"(call val "op", 41))
+```
 
-- Formula bodies (the function equals its value, no `return`): a single-expression body is a validated beginner-friendly shape, and unambiguous for tooling.
-- Statement bodies exist because library functions could not be written: `split` needs "loop and build the result", which a formula body cannot express (no loop, no statements) and a block cannot return.
-- `give`: the meaning is "hand the value to the caller", in the same family as `call` / `take` / `kill` — short verbs, one meaning each.
-- Single exit first: multiple exits need control-flow merge analysis. The single-exit form already covers "loop and build"; mid-body `give` waits for a real requirement.
-- No closures: capture extends an outer value's lifetime, which collides with deterministic reclamation. Function records (a struct holding fns and data) cover the use cases with explicit lifetimes.
-- Blocks never gain return values: block = process, fn = formula is a design-level decision. To get a value out of a block, write a fn at the end and fetch it explicitly.
+## Try it
 
-## Not provided
+```anle
+#: main b
+    add fn "try_div" (n int, i int) bool
+    add fn "is_prime" (n int) bool = if n < 2 { fa } else { call fn "try_div"(n, 2) }
+    fn "try_div" (n int, i int) bool = if i * i > n { re } else { if n % i == 0 { fa } else { call fn "try_div"(n, i + 1) } }
+    print("prime", call fn "is_prime"(7), call fn "is_prime"(8))
 
-- Block return values (the role boundary)
-- Mid-body `give` / early return (control-flow merge analysis; a later batch)
-- Closure capture and anonymous fns (see above)
-- Runtime stack-overflow guards beyond the guard page (deep recursion is user responsibility)
+    add fn "total"(n int) int:
+        add val "s" int = 0
+        add val "i" int = 1
+        while call val "i" <= call val "n":
+            val "s" = call val "s" + call val "i"
+            val "i" = call val "i" + 1
+        ;
+        give call val "s"
+    ;
+    print("total", call fn "total"(4))
+
+    add fn "inc" (x int) int = x + 1
+    add fn "twice" (f fn(int) int, n int) int = call val "f"(n)
+    add val "op" fn(int) int = fn "inc"
+    print("hfn", call fn "twice"(call val "op", 41))
+#: main d
+```
+
+Expected output:
+
+```
+prime re fa
+total 10
+hfn 42
+```
+
+## Rules to remember
+
+- Functions are **define-before-use**: a call must come after its `add fn`. A bare declaration counts as defined; the body may come later.
+- The number and types of arguments must match the declaration exactly.
+- Parameter and local types are mandatory at function boundaries.

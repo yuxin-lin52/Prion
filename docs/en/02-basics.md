@@ -1,31 +1,76 @@
 # 02 Basic concepts
 
-Status: implemented.
+This chapter teaches the four ideas you need before writing any real Prion code: blocks, create-once names, full explicitness, and the verb slots. By the end you will have run a small program that uses each of the scalar types.
 
 ## Blocks
 
-All code lives in blocks. A block opens with `#: name b` (born) and closes with `#: name d` (death). Blocks are flat — they never nest. `in #:parent` is for grouping in display only and has no semantic effect.
+All code lives in blocks. A block opens with `#: name b` and closes with `#: name d`. Blocks are **flat** — they never nest.
 
-At run time, blocks chain: every block nobody references is a chain root, and all chains run top-to-bottom in source order; referenced blocks run where they are called. Mutually-calling blocks with no root are rejected at compile time.
+At run time, blocks chain: every block that nothing references is a **chain root**, and roots run top-to-bottom in source order. A referenced block runs where it is called. Two blocks that only call each other with no root are rejected at compile time (they could never run).
 
-Indentation is decorative. Prion is not sensitive to it — a block is delimited by `:` and the `;` that closes it on a line of its own, not by leading whitespace. Every example in this documentation is still indented, because that makes block boundaries easier to scan. The editor extension for Prion ships an auto-formatter that keeps it consistent.
+## Create once, then re-bind
 
-## Creation and re-binding
+Names are created with `add`, exactly once:
 
-Names are created with `add`, exactly once: `add val "name" = value`, `add fn "name" (params) ret = body`, `add type "name" = definition`. Re-binding never uses `add` — it is `val "name" = new-value`. Assigning to an uncreated name is a compile error; there is no "first assignment creates the variable".
+```anle
+add val "x" int = 1          // create a value
+add fn "f" (n int) int = n   // create a function
+add type "point" = (x int, y int)  // create a type
+```
 
-`add` without `=` is a pure declaration (the fn/val name plus its signature); a later line supplies the body — the complement form has the same syntax minus `add`.
+Re-binding never uses `add` — it is a plain assignment:
+
+```anle
+val "x" = 2
+val "x" = val "x" (+1)
+```
+
+Assigning to a name that was never created is a compile error. There is no "first assignment creates the variable" rule: a typo becomes a loud error instead of a new invisible variable.
 
 ## Full explicitness
 
-Reads are `call val "name"`, calls are `call fn "name"(…)`. Bare identifiers are rejected — `fn` and `val` may share a name, so a bare identifier cannot say which one it means.
+Reads spell out the verb: `call val "x"`. Calls spell out the verb: `call fn "f"(1)`. A bare identifier such as `x` is rejected — a function and a value may share a name, so a bare identifier cannot say which one is meant.
 
 ## The verb slots
 
-`call` (reference — the freshest value), `take` (deep copy — the value as it is right now), `kill` (explicit early reclamation). All three state their target's source explicitly; bare cross-block access is rejected.
+- `call` — reference the freshest value.
+- `take` — deep-copy the value as it is right now.
+- `kill` — explicit early reclamation (inside `unsafe` blocks; see [08](08-memory.md)).
 
-## Why
+## Try it
 
-- Flat blocks: a block is the unit of process and the unit of memory. Nesting would blur the boundary both depend on.
-- `add` once: repeated `add` turns "change the value" into "recreate it". First-assignment-creates hides typos as new variables. Closing both ends makes misspellings loud errors.
-- Full explicitness: `fn` and `val` may share a name, so reads must carry a kind tag. The cost is a few characters per read; the benefit is that no read ever depends on context.
+```anle
+#: main b
+    add val "i" int = 42
+    add val "r" float = 1.5
+    add val "b" bool = re
+    add val "s" str = "abc"
+    add val "u8" uint_8 = 200
+    add val "nil" str = null
+    print("int", call val "i")
+    print("float", call val "r")
+    print("bool", call val "b")
+    print("str", call val "s")
+    print("uint8", call val "u8")
+    if call val "nil" == null:
+        print("null check", "ok")
+    ;
+#: main d
+```
+
+Expected output:
+
+```
+int 42
+float 1.5
+bool re
+str abc
+uint8 200
+null check ok
+```
+
+## Why these rules
+
+- **Flat blocks**: a block is the unit of execution and the unit of memory; nesting would blur both boundaries.
+- **`add` once**: repeatedly re-`add`ing turns "change the value" into "recreate it", and first-assignment-creates hides typos as new variables.
+- **Full explicitness**: a few extra characters per read buy you the guarantee that no read depends on context.

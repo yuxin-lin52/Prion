@@ -1,28 +1,63 @@
 # 13 Portability and targets
 
-Status: designed, not yet implemented.
+Prion compiles ahead of time through LLVM to a native executable. There is no VM and no runtime dependency in the produced binary.
 
-## How it works
+## Build modes
 
-- A target is three orthogonal dimensions plus a stack budget: `system` (windows / linux / none-for-bare-metal) × `arch` (x86_64 / arm64) × `backend` (c / llvm / asm last), and `stack` (e.g. `8M`).
-- **Capability facets.** Builtins are grouped into eight facets — `pure` (pure computation, zero dependencies, available even on bare metal), `console`, `file`, `process`, `time`, `random`, `hw`, `ffi`. Each target declares which facets it implements. A program using a missing facet is rejected at compile time with the missing list. Porting is paying per facet: the pure facet is free, and the minimal runnable target needs two functions (exit + output).
-- Builtin preset targets (e.g. `windows/x86_64/c`, all eight facets, verified) plus a custom-target description file for everything else — the core field is `faces`. Adding a target is adding data, not changing the compiler.
-- Block-level gating `only(目标)`: `#: greeting_win b only(windows)` — whole blocks in or out; unmatched blocks are not checked and produce no code. Main code stays branch-free. Semantic differences are absorbed by the base layer (the platform branch is written once, inside the compiler).
-- Stack: the budget can be set in the build config (written into the artifact at build time); guard pages plus runtime glue always backstop it — stack exhaustion is a clean "stack exhausted" error with exit 1, never a raw segfault.
-- Build configuration: a minimal key-value format, two files (`lib.anle` package metadata, `build.anle` build config), UTF-8 without BOM, LF.
+```
+prionc build [name] --mode debug|release --opt 0-3
+```
 
-## Why
+- `debug` — full guards (bounds checks, null checks). Default `--opt 0`.
+- `release` — optimized, all guards stripped. Default `--opt 3`. Out-of-bounds and null dereferences become undefined behavior, so test under `debug` first.
 
-- The essence of porting: the compiler never needs to know how a new system does anything — it only emits symbol calls, and the target provides what those symbols mean.
-- A custom target is data, not code: adding a target is writing a file.
-- Capability facets: source code stays branch-free at statement level — platform differences are absorbed inside the base layer (Chinese file paths, platform sleep APIs — all inside the compiler). Block-level gating handles the differences that cannot be absorbed, in declaration form: whole blocks in or out, excluded blocks as if they never existed.
-- No probe-and-degrade ("facet missing? switch to another spelling"): that violates the binary principle. The correct posture is source written inside the common capability subset.
-- Statement-level conditional compilation (`#if`) is not adopted for the same reason pure indentation was rejected: it makes meaning depend on symbol placement. Block-level gating plus compile-time branch pruning covers every case.
+The mode selects the output directory: `build/<mode>/<name>.exe`.
 
-## Not provided
+## Running
 
-- Statement-level conditional compilation (`#if`) — block gating plus compile-time branches cover the cases, never
-- Probe-and-degrade — violates the binary principle, never
-- Runtime stack configuration — fixed at build time, never
-- Variable-name-level debug mapping — deep debugging uses the print convention
-- Thread stack policy — decided during the concurrency implementation
+```
+prionc run hello
+```
+
+`run` builds, then executes the result. Arguments after `--` are passed through to the program.
+
+## Check only
+
+```
+prionc check hello
+```
+
+`check` runs the front end (lex → parse → check) and produces no files. It is the fastest way to verify code.
+
+## Targets
+
+The LLVM backend targets `x86` and `aarch64`. Code generation uses the LLVM 22 toolchain and links with `clang`.
+
+## Environment
+
+- `PRION_CC` — the `clang` used for linking (and as a fallback toolchain).
+- `PRION_STD` — the standard library root, if not found by the SDK layout.
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| 0 | success |
+| 101 | a Prion error (diagnostic printed) |
+| 1 | usage error |
+
+`run` forwards the program's own exit code (0–255).
+
+## Output layout
+
+```
+build/debug/hello.exe      // the executable
+build/debug/hello.ll       // LLVM IR (debug aid)
+build/debug/hello.o        // object file
+```
+
+`prionc clean` removes the whole `build/` directory.
+
+## No silent conversion of the environment
+
+The compiler does not auto-detect a "compatible" toolchain and silently fall back. If `PRION_CC` points at a compiler that cannot link, you get an explicit error — fix the toolchain, do not work around it.

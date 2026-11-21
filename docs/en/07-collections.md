@@ -1,42 +1,94 @@
 # 07 Collections
 
-Status: implemented.
+Prion has four builtin containers: `list`, `map`, `que` (queue) and `stack`. Each is created and manipulated through builtin functions.
 
-## How it works
+## Lists
 
-Four kinds: `list`, `map`, `que` (FIFO), `stack` (LIFO). Element types use parentheses: `list(int)`, `map(str, int)`.
+```anle
+add val "l" list(int) = [3, 1, 2]
+push(call val "l", 4)
+sort(call val "l")
+print(call val "l")        // [1, 2, 3, 4]
+print(len(call val "l"))   // length
+print(call val "l"[1])     // element by index
+print(call val "l"[1~2])   // inclusive slice
+```
 
-| Operation | Function | Applies to |
-|---|---|---|
-| Length | `len(x)` (str counts characters) / `len_utf8` (bytes) | all |
-| Append / take last | `push` / `pop` | list, que, stack |
-| Insert / remove at position | `insert` / `remove` | list (`remove` deletes by map key) |
-| Clear | `clear` | all |
-| Contains | `has` | all |
-| Keys / values | `keys` / `vals` | map |
-| Sort / find position | `sort` / `index` | list |
-| Empty check | `empty` | all |
-| Put key-value | `put` | map |
+Other list verbs: `insert(list, i, v)`, `remove(list, i)`, `has`, `index`, `empty`, `slice`, `concat`, `sort`.
 
-- Access is by index (`list[1]`, `config["timeout"]`); assignment is direct (`list[1] = v`). Slices reuse the range operator: `list[1~3]`, `s[2~4]` — 1-based, both ends inclusive.
-- Construction: `list` and `map` have literals (`[1, 2, 3]`, `{"timeout": 30}`); `que`/`stack` construct via the type name (`que([1,2,3])`, `stack()`); an empty map is `map()`.
-- Iteration: `for x in collection:`; strings iterate by character.
-- Nesting rule: a list/que/stack element cannot hold a container; a map value or a struct field can. The principle: unnamed places do not nest unnamed places. Rejections come with a fix: group through map values (`{"语文": [90, 85]}`) or struct fields.
-- `print` output matches the source form: `[1, 2, 3]`, `que[1, 2]`, `{"timeout": 30}`, `Point(3, 4)` — the same syntax as construction, zero new symbols.
-- Naming rule: the name encodes the type when semantics differ per type (`len` characters vs `len_utf8` bytes; `read_8/16/32/64`); builtin dispatch is used when one action is reused across types (`str(x)` accepts int/float/bool).
+## Maps
 
-## Why
+```anle
+add val "m" map(str, int) = {}
+put(call val "m", "a", 1)
+put(call val "m", "b", 2)
+val "m"["b"] = 5           // index write
+print(call val "m"["a"])   // read
+print(keys(call val "m"), vals(call val "m"))
+```
 
-- Builtin-function style: no "method" concept is introduced — custom types have fields only.
-- One `push`/`pop` serves list, que, and stack: reuse saves memory budget in the user's head.
-- `put`, not `set`: `set` collides with assignment `=`. Map access goes through the index, the same as list — learn once.
-- Map literals: `"name": value` reads at a glance. Inside `{}` the `:` is a separate context and never collides with block markers or `if …:`.
-- The nesting ban: mismatched slot widths silently corrupted data. The current rule rejects loudly, with the grouping fix written into the error.
-- Output equals source: what `print` shows can be typed back as a literal — zero memory in either direction.
+Keys may be `str` or `int`. Check presence with `has` before reading a key that may be missing.
 
-## Not provided
+## Queue and stack
 
-- Method syntax
-- `set` (+1 keyword if ever needed)
-- Multi-line map literals (entangled with `;` termination rules)
-- Nested containers — flat storage plus manual indexing; reconsidered if real projects hit the wall
+```anle
+add val "q" que(int) = que([1, 2])
+add val "first" int = pop(call val "q")   // FIFO
+
+add val "s" stack(int) = stack()
+push(call val "s", 1)
+push(call val "s", 2)
+add val "top" int = pop(call val "s")     // LIFO
+```
+
+Queues and stacks are push/pop only; slicing and sorting apply to lists only.
+
+## Try it
+
+```anle
+#: main b
+    add val "l" list(int) = [3, 1, 2]
+    push(call val "l", 4)
+    insert(call val "l", 1, 9)
+    remove(call val "l", 2)
+    sort(call val "l")
+    print("list", call val "l", "len", len(call val "l"), "at", call val "l"[1], "slice", call val "l"[1~2])
+    print("has 3", has(call val "l", 3), "empty", empty(call val "l"), "index 3", index(call val "l", 3))
+    val "l"[1] = 7
+    print("after write", call val "l"[1])
+
+    add val "m" map(str, int) = {}
+    put(call val "m", "a", 1)
+    put(call val "m", "b", 2)
+    val "m"["b"] = 5
+    print("map a", call val "m"["a"], "b", call val "m"["b"], "keys", keys(call val "m"), "vals", vals(call val "m"))
+
+    add val "q" que(int) = que([1, 2])
+    add val "qf" int = pop(call val "q")
+    print("queue", call val "qf", "left", len(call val "q"))
+
+    add val "s" stack(int) = stack()
+    push(call val "s", 1)
+    push(call val "s", 2)
+    add val "st" int = pop(call val "s")
+    print("stack", call val "st", "left", len(call val "s"))
+
+    print("bytes", len("hi"), "chars", char_len("hi"))
+#: main d
+```
+
+Expected output:
+
+```
+list [1, 2, 4, 9] len 4 at 1 slice [1, 2]
+has 3 fa empty fa index 3 0
+after write 7
+map a 1 b 5 keys ["a", "b"] vals [1, 5]
+queue 1 left 1
+stack 2 left 1
+bytes 2 chars 2
+```
+
+## Nested containers
+
+A container cannot directly hold another container. To group collections, put them in a `map(str, list(int))` or in struct fields — named places can hold containers.

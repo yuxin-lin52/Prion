@@ -1,38 +1,74 @@
 # 05 Types
 
-Status: implemented. Capability constraints are designed but not yet implemented.
+Prion has scalar types, container types, product (struct) types, sum (variant) types, and handle types written with `*`. Types are never converted silently.
 
-## Capability constraints
+## Scalars
 
-Capability annotations let generic code use operators on type parameters. They are declared with operators in the parameter list: `add fn "bigger"(T <) (a T, b T) T = (a > b) ? a : b`. Derivation: `>` `>=` derive from `<`; `!=` derives from `==`. Two-point checking: the definition point rejects operators outside the declared capabilities (errors point at the definition line); the instantiation point re-checks everything with the real type substituted. Until this lands, non-structural operations on type parameters are rejected outright.
+```anle
+int  float  bool  str
+int_8 int_16 int_32 int_64
+uint_8 uint_16 uint_32 uint_64
+```
 
-## How it works
+`re` and `fa` are boolean *values*, not types — the type is `bool`.
 
-- Scalars: `int` (i64), `float`, `bool`, `str`. Variable types may be inferred; **function parameters and return types are mandatory**. Booleans are `re` / `fa`.
-- Fixed-width integers `int_8/16/32/64`, `uint_8/16/32/64` are visible only in `unsafe`. Literals narrow automatically (`b & 0x0F`); variables need explicit casts. Safe-level overflow is an error; `unsafe` allows wraparound.
-- Indices start at 1: `list[1]` is the first element. This matches the inclusive range operator — `for i in 1~length` walks the whole list, and there is never an "off by one" decision to make. Slices (`list[1~3]`, `s[2~4]`) reuse the same operator.
-- `null` is the single empty value. Only positions explicitly declared nullable may hold it, and uses must be checked first. Field chains auto-dereference with per-level checks (`head.next.value`); a dangling reference is a runtime error with a line number.
-- Conversions are type names as functions: `int("5")`, `str(number)`, `float(text)`, `uint8(300)`.
-- Product types: `add type "Point" = (x int, y int)`. The type name is the constructor (`Point(3, 4)`); fields use `.`. There are no methods — operations are builtin functions, custom comparison is a comparator fn.
-- Handles `Type*`: a starred type stores an 8-byte handle. Assignment, parameter passing, and containers copy the handle — all refer to one object. Unstarred types are value copies. Self-reference and mutual reference must be starred (unstarred cycles are rejected at compile time). Field chains auto-dereference. `list(Node*)` is allowed; map keys reject handles.
-- Sum types: `add type "Expr" = Num(int) | Add(Expr*, Expr*)`. Variant names are constructors. Matching is `match` + `case Variant(binding)` with destructuring, a compile-time exhaustiveness check (adding a variant exposes every stale match), and `case _` as fallback. The match subject accepts any expression with an inferable type.
-- Overflow: safe-level integer overflow is an error (constant overflow caught at compile time, runtime overflow caught with a line number); `unsafe` allows wraparound.
-- Generics: compile-time monomorphization. `add type "Pair"(A, B) = (first A, second B)`; `add fn "swap"(A, B) (p Pair(A, B)) Pair(B, A)` — type arguments are inferred from the call site, and each used combination is expanded exactly once. By default only structural operations are allowed on type parameters; arithmetic requires a capability annotation (see "Capability constraints" above).
+## Containers
 
-## Why
+```anle
+list(T)  map(K, V)  que(T)  stack(T)
+```
 
-- Types mandatory at function boundaries: functions are the interface, and written types expose errors at call sites. Inferred types everywhere else keep the zero-burden default.
-- 1-based indexing matches the inclusive range operator and `for` loops. Index, range, and loop share one starting point — there is never a "subtract one" decision.
-- Explicit handles: a reference is a semantic choice, so it is written on the type where it is visible and checkable. Unstarred stays value semantics. Unstarred cycles are rejected, forcing the design to state "this is a reference".
-- Sum types with exhaustive match: variants are a closed set; adding one exposes every match that does not handle it. That is a compile-time guarantee, not a convention.
-- 8-byte payload slots everywhere: the same rule as container slots. Bare structs cannot enter variants or containers — the alternative is silent data corruption from mismatched slot widths.
-- Monomorphization is the only viable route: type erasure needs runtime boxes and vtables, which conflict with having no runtime.
-- Explicit conversions: where a number came from and what type it is stays written down. Implicit promotion turns a type mismatch into a runtime surprise.
+`map` keys may only be `str` or `int`. A container cannot directly hold another container; use a `map(str, list(int))` or a struct field to group.
 
-## Not provided
+## Product and sum types
 
-- Methods — operations are builtin functions; custom types have fields only
-- Operator overloading — custom comparison goes through comparator fns
-- Auto-boxing — recursive fields must say `Type*`
-- Nested containers `list(list(int))` — "unnamed places do not nest unnamed places"; group via map values or struct fields
-- Implicit numeric promotion
+```anle
+add type "point" = (x int, y int)              // product: named fields
+add type "expr" = "num"(int) | "add"(int)      // sum: variants
+```
+
+Construct a product with `"point"(3, 4)` and a variant with `"num"(7)`. Read a field with `call val "p".x`; destructure a sum with `match`.
+
+## Handle types
+
+Append `*` to a user-defined type to make it a **handle** (reference): `point*`. Builtin scalar types cannot take `*` — they are already values. A handle can be `null`; check with `== null` before reading a field.
+
+A type whose value field leads back to itself is a cycle and is rejected. Break the cycle by making one end a handle: `node*` instead of `node`.
+
+## Try it
+
+```anle
+#: main b
+    add type "point" = (x int, y int)
+    add val "p" "point" = "point"(3, 4)
+    print("fields", call val "p".x, call val "p".y)
+
+    add type "expr" = "num"(int) | "add"(int)
+    add val "t" "expr" = "num"(7)
+    match call val "t":
+        case "num"("v"):
+            print("num", call val "v")
+        ;
+        case "add"("v"):
+            print("add", call val "v")
+        ;
+    ;
+
+    add val "q" point* = point(9, 9)
+    print("handle", call val "q".x)
+#: main d
+```
+
+Expected output:
+
+```
+fields 3 4
+num 7
+handle 9
+```
+
+## Why no implicit conversion
+
+`int` never becomes `str` on its own. When you need a conversion, write it: `int(v)`, `str(v)`, `float(v)`, `bool(v)`. Implicit conversion is where type bugs hide, so Prion makes it visible.
+
+Type names are checked for existence: a retired or misspelled type name is an error, not a silent new type.

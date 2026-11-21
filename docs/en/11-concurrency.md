@@ -1,31 +1,67 @@
-# 11 Concurrency: static watermark ordering
+# 11 Concurrency
 
-Status: semantics reserved (the design is locked so other designs do not collide with it; the implementation is scheduled separately).
+Prion expresses concurrency with a *task token*. You `spawn` a task body, which yields a `token(T)`, and you must `join` it before the block ends. Nothing is implicitly detached.
 
-## How it works
+## Spawning and joining
 
-1. Operations on shared data are explicitly annotated with an ordering stamp (E1, E2, E3…). En waits for the watermark of E(n-1), then stamps its own when done. Parallel parts run in parallel; only the touch points of shared data wait in order.
-2. Only smaller stamps may be waited on — deadlock is structurally impossible, and the compiler can check for cycles.
-3. The order is fully fixed by the source and reproducible on every run (deterministic concurrency). The runtime may have mechanisms (stamp counting, sleep/wakeup — OS primitives), but they make no ordering decisions.
-4. Data moves along the chain by handoff: after sending, the original is void. "Writing back through a copy" is structurally unwritable, so merge conflicts cannot exist.
-5. Private work is not stamped: each thread producing and processing in its own region runs in parallel for free. Stamping private steps would weld the whole pipeline into serial.
-6. Cross-thread loops are rendezvous-driven: whether the loop continues is decided by a signal sent back through the watermark chain (stored in a val, read at the loop head). Streaming with conditional termination and unknown totals works with constant memory. The stop protocol is a sentinel handoff.
-7. Numbering machines (ticket-style) are user-level code — the language only provides the static watermark.
+```anle
+add val "t" token(int) = spawn:
+    give 42
+;
+add val "r" int = join(call val "t")
+```
 
-## Why
+`spawn:` opens a task body and `give` supplies the result. `join(call val "t")` waits for the task and returns its value. Every spawned token must be joined — a token that escapes its block is a compile error.
 
-- Deterministic memory requires a computable execution flow: shared mutable state must be limited to explicit channels, or reclamation points stop being computable. Safe determinism and free shared-memory parallelism trade off — this design takes the former and deliberately cuts shared-memory parallelism (confirmed after challenge).
-- Runtime numbering was rejected: order decided by arrival timing violates "order fixed by the source".
-- Ownership with runtime blocking was rejected: it gives back both determinism and deadlock freedom.
-- An unsafe shared-memory channel is not built in: the contention and merge problems come back with it.
-- Honest costs, written down: a mismatched loop count is a dead wait the compiler cannot catch (inherent to streaming); the rendezvous loop is lock-step with no compute overlap — multi-core overlap comes from batching or manual double-buffering, both static and mechanism-free.
+## Sharing versus sending
 
-## Explicitly not provided (native; not a rejection — unsafe and FFI are the general escape hatches, and self-built means outside the determinism guarantee)
+By default a task may not touch outer values, because the compiler cannot know whether that is thread-safe. You opt in with a marker:
 
-| Not provided natively | Self-built via |
-|---|---|
-| Runtime numbering | a user-level numbering machine |
-| Locks / mutexes | unsafe spinlocks, or pthread through FFI |
-| unsafe shared-memory channels | two threads reading and writing the same address |
-| Atomic primitives | FFI to a C atomics library |
-| Channel-close primitive | sentinel handoff protocol |
+- `add share val "n" int = 21` — read-only sharing across tasks.
+- `add val(send) "x" int = 7` — move ownership into a single task.
+
+`share` and `(send)` are mutually exclusive, and a `share` value cannot be written. A `(send)` value becomes invalid in the original block once moved.
+
+## Try it
+
+```anle
+#: main b
+    add val "t" token(int) = spawn:
+        give 42
+    ;
+    add val "r" int = join(call val "t")
+    print("result", call val "r")
+
+    add share val "base" int = 21
+    add val "u" token(int) = spawn:
+        give call val "base" * 2
+    ;
+    print("shared", join(call val "u"))
+#: main d
+```
+
+Expected output:
+
+```
+result 42
+shared 42
+```
+
+## Self-terminating tasks
+
+When a task needs no result, end its body with a lone `join` to mark it self-terminating:
+
+```anle
+add val "t" token(void) = spawn:
+    add val "x" int = 1 + 1
+    join
+;
+```
+
+A self-terminating task may not capture outer values, because the parent block might exit first.
+
+## Rules in one place
+
+- Every spawn produces a token; every token is joined, or its body self-terminates with `join`.
+- A token container must be joined as a whole within the block.
+- A value moves at most once; to share for read only, use `add share val`.

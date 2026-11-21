@@ -1,4 +1,6 @@
-# Prion Design Documentation / Prion 设计文档
+# Prion Documentation / Prion 文档
+
+A hands-on tutorial for the Prion language: each chapter walks you through writing and running real code.
 
 [English](#english) | [中文](#%E4%B8%AD%E6%96%87)
 

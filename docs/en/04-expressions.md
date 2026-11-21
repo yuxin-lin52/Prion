@@ -1,40 +1,60 @@
 # 04 Expressions
 
-Status: implemented.
+Prion expressions are ordinary infix expressions, but two things are always explicit: reads of a value use `call val "name"`, and calls use `call fn "name"(…)`. This chapter runs through the operators and literals.
+
+## Try it
+
+```anle
+#: main b
+    print("arith", 1 + 2 * 3, 7 % 2)
+    print("compare", 5 > 3, 2 == 2)
+    add val "b" bool = re
+    print("logic", call val "b" and not fa, call val "b" or fa)
+    print("bits", 6 & 3, 6 | 1, 1 << 4)
+    print("radix", 0xff, 0b1010, 0o17)
+    print("escape", "a\nb", "quote \"x\"")
+    print("raw", @"a\b")
+#: main d
+```
+
+Expected output:
+
+```
+arith 7 1
+compare re re
+logic re re
+bits 2 7 16
+radix 255 10 15
+escape a
+b quote "x"
+raw a\b
+```
 
 ## Operators
 
-| Family | Operators | Notes |
-|---|---|---|
-| Arithmetic | `+ - * / %` | `int` and `float` do not mix without an explicit cast; safe-level overflow is an error |
-| Comparison | `== != < > <= >=` | value comparison; `==` descends into strings, lists, maps, and struct fields |
-| Logic | `and` `or` `not` | keywords; `and`/`or` short-circuit |
-| Bitwise | `& \| ^ << >> !` | integers only; `!` is bitwise NOT (`not` is logical NOT); `>>` is arithmetic shift |
-| Conditional | `if cond { a } else { b }` | expression form; `else` is required and both branches must share a type; `?` is reserved for error propagation (see [09](09-errors.md)) |
+- Arithmetic: `+ - * / %`
+- Comparison: `< > <= >= == !=`
+- Logic: `and or not` (words, not `&& || !`)
+- Bitwise: `& | ^ ! << >>`
+- Range (in `for`): `~`
 
-Precedence: comparison `< | < ^ < & < shift < add < multiply`.
+A unary minus must be followed by a numeric literal, e.g. `-1` or `-2.5`.
 
-## Calls and reads
+## Literals
 
-- `call val "name"` reads a value; `call fn "f"(x)` calls a function.
-- Field access: `position.x`; chains auto-dereference handles with per-level null checks (`head.next.value`).
-- Indexing: `list[1]`, `map["key"]` — 1-based, matching the inclusive range operator.
-- Slices: `list[1~3]`, `s[2~4]` — 1-based, both ends inclusive, reusing the range operator.
+- Integers: decimal, `0x` hex, `0b` binary, `0o` octal; `_` separates digits.
+- Floats: `1.5`, `1e6`, `1.5e-3`.
+- Strings: `"…"` with `\n \t \\ \"`; verbatim `@"…"`.
+- Booleans: `re` / `fa`. Null: `null`.
 
-## Conversions
+## Indexing, slicing and fields
 
-Type names as functions: `int("5")`, `str(number)`, `float(text)`, `uint8(300)`. There are no implicit conversions — `int` and `float` do not mix without one, and where a number came from stays written down.
+These appear as part of a `call val` expression:
 
-## Copying
+```anle
+call val "list"[1]     // one element
+call val "list"[1~2]   // an inclusive slice
+call val "point".x     // a field
+```
 
-- `take val "name"` copies a value in the same block; `take #:block val "name"` and `take ##:module #:block val "name"` copy across blocks and modules.
-- The copy is a snapshot: lists, maps, and strings come back as independent copies; scalars copy by value.
-- The syntax mirrors `call`; the only difference is the verb — take a copy instead of reading a reference slot. `(+0)` no longer means copy.
-
-## Why
-
-- `if` expressions: branches are values; the recursive exit lives in the expression itself, and a required `else` rules out missing branches.
-- No chained comparisons: parsing complexity outweighs the use case; write `and`.
-- Explicit conversions: implicit promotion turns a type mismatch into a runtime surprise.
-- `!` for bitwise NOT and `not` for logical NOT: `~` is already the range operator, `!` was free, and both are familiar.
-- One `take` for copying: local and cross-block use the same verb, so readers no longer guess whether `(+0)` adds or copies.
+A comparison chain such as `1 < x < 5` is **not** supported; write `1 < x and x < 5`.

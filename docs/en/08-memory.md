@@ -1,27 +1,53 @@
-# 08 Memory: the region tree
+# 08 Memory model
 
-Status: implemented.
+Prion reclaims memory deterministically: values live exactly as long as the block that owns them, and there is no tracing garbage collector. This chapter explains the ownership rules and the explicit tools you have.
 
-## How it works
+## Block-scoped lifetime
 
-- Memory is allocated per block instance. When a block's region dies, everything in it dies with it; reclamation is O(1) per region, not per object.
-- Regions form a tree: a region hangs under its caller's region. Block exit does not reclaim — the region lives as long as the call chain (a child dies when its parent dies). The chain root's exit reclaims the whole tree.
-- Reclamation points are fixed at compile time from the block reference graph. At run time there is no GC thread, no stop-the-world pause, and no reference counting.
-- A region pool (64KB uniform blocks plus a large-block path) recycles dead regions; unused regions are returned to the pool and reused by the next same-size allocation.
-- Loop-level reclamation: sub-regions created by calls inside a loop body are returned in bulk at the end of each iteration. This is compiler-implicit, with a conservative analysis (enabled only when nothing escapes the loop).
-- `kill` (inside `unsafe` only): the statement `kill #:block` reclaims all active regions of the target block and its subtree; the block-close suffix `#: block d kill` cleans the block itself on exit. Constraints: sequential statement position only; the target must not be the current block and must have been called by this chain. The compiler tracks every handle and reference-slot propagation path — a live reference at the kill point is a compile error listing all violations.
+Every value created in a block is owned by that block. When the block finishes, its values are released — in a defined order, at a defined point. Because blocks are flat and a block is both the unit of execution and the unit of memory, the lifetime of a value is always visible in the source.
 
-## Why
+A block that nothing references is a chain root; roots run top-to-bottom in source order. A referenced block runs where it is called, so its memory is live while the caller uses it.
 
-- Regions are logically a tree (siblings are independent); the previous stack implementation was LIFO — sibling-independent reclamation and early release were both impossible. That was the defect being fixed.
-- Compile-time reclamation points are the premise, not an option: no GC thread, no pauses, no counters, and cycle-freedom all follow from it.
-- Prior art: region-inference systems still nest regions on a stack (sibling independence fails); explicit region schemes put handles into the type system and leave the heap to a runtime recycler; ownership is per-value and its checks burden the programmer; reference counting costs runtime work and leaks cycles. None fit.
-- Block layout affects memory footprint, never correctness — reclamation granularity is a performance knob, not a requirement. Hence no block-size rules and no compiler nagging.
-- `kill` uses tracking, not silence: failure is a compile error enumerating every violating reference. Loud beats quiet.
+## Copying with `take`
 
-## Not provided
+Reading a value with `call val` references the freshest value. When you want an independent copy — for example to hold data past the point where the source might change — use `take`, a deep copy:
 
-- Region compaction / relocation (it would invalidate handles; fragmentation is absorbed by the 64KB pool)
-- Compiler-initiated early reclamation (the compiler does not make performance decisions for the developer)
-- Persistent blocks / `promote` — a separate topic
-- Cross-process regions — the region tree is single-process, single-chain
+```anle
+add val "a" list(int) = [1, 2, 3]
+add val "b" list(int) = take val "a"   // b is an independent copy
+```
+
+`take` copies `val`; it does not apply to `fn` (a function value holds no data).
+
+## Early reclamation with `kill`
+
+Normally you let blocks release their memory at block end. Inside an `unsafe` block you can reclaim another block's live regions early:
+
+```anle
+kill #:block
+#: block d kill
+```
+
+The compiler tracks every live handle at the kill point. If any reference to the target is still live, it is a **compile error** listing each violation — so `kill` can never silently free memory that is still in use.
+
+## unsafe blocks
+
+Some capabilities are only available in a block marked `unsafe`:
+
+```anle
+#: raw b unsafe
+    ...
+#: raw d
+```
+
+Inside such a block you may use raw address read/write (`read_8`/`write_8` …), C interop (`str_to_c`/`str_from_c`), `asm`, and `kill`. In an ordinary block these words are **blocked by the mode**, which is a different error from "undefined name".
+
+## Cross-block access
+
+Values you need from another block are read explicitly:
+
+```anle
+call #:tools val "constant"
+```
+
+See [12](12-modules.md) for modules and [03](03-statements.md) for the `kill` statement.
