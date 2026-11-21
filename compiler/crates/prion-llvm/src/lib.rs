@@ -73,7 +73,7 @@ pub fn emit_object(
             RelocMode::PIC,
             CodeModel::Default,
         )
-        .ok_or_else(|| "建不了 LLVM 目标机".to_string())?;
+        .ok_or_else(|| "cannot create LLVM target machine".to_string())?;
     module.set_triple(&triple);
     module.set_data_layout(&tm.get_target_data().get_data_layout());
     let td = tm.get_target_data();
@@ -152,7 +152,7 @@ pub fn emit_object(
     }
     
     lo.dbg = None;
-    lo.module.verify().map_err(|e| format!("LLVM 校验失败：{}", e.to_string()))?;
+    lo.module.verify().map_err(|e| format!("LLVM verification failed: {}", e.to_string()))?;
     
     if opt != OptimizationLevel::None {
         use inkwell::passes::PassBuilderOptions;
@@ -232,7 +232,7 @@ impl<'ctx> Lower<'ctx> {
             self.type_fields.insert(st.name.clone(), st.fields.clone());
         }
         for st in &p.types {
-            let t = *self.structs.get(&st.name).ok_or_else(|| format!("缺类型 {}", st.name))?;
+            let t = *self.structs.get(&st.name).ok_or_else(|| format!("missing type {}", st.name))?;
             let fields: Vec<BasicTypeEnum<'ctx>> = if !st.variants.is_empty() {
                 let maxn = st.variants.iter().map(|v| v.fields.len()).max().unwrap_or(0);
                 let mut v: Vec<BasicTypeEnum<'ctx>> = vec![self.ctx.i64_type().into()];
@@ -307,8 +307,8 @@ impl<'ctx> Lower<'ctx> {
             let bb = self.ctx.append_basic_block(fv, "entry");
             self.builder.position_at_end(bb);
             
-            let argc = fv.get_nth_param(0).ok_or_else(|| "main 缺 argc".to_string())?;
-            let argv = fv.get_nth_param(1).ok_or_else(|| "main 缺 argv".to_string())?;
+            let argc = fv.get_nth_param(0).ok_or_else(|| "main is missing argc".to_string())?;
+            let argv = fv.get_nth_param(1).ok_or_else(|| "main is missing argv".to_string())?;
             let sps = [
                 BasicMetadataTypeEnum::from(self.ctx.i32_type()),
                 BasicMetadataTypeEnum::from(pty),
@@ -387,7 +387,7 @@ impl<'ctx> Lower<'ctx> {
             Some(BasicTypeEnum::FloatType(t)) => Ok(t.fn_type(ps, varargs)),
             Some(BasicTypeEnum::PointerType(t)) => Ok(t.fn_type(ps, varargs)),
             Some(BasicTypeEnum::StructType(t)) => Ok(t.fn_type(ps, varargs)),
-            _ => Err("不支持的 LLVM 返回类型".into()),
+            _ => Err("unsupported LLVM return type".into()),
         }
     }
 
@@ -480,7 +480,7 @@ impl<'ctx> Lower<'ctx> {
                 .map_err(|e| e.to_string())?
                 .into_pointer_value()),
             BasicValueEnum::PointerValue(p) => Ok(p),
-            _ => Err("str 值不是描述符".into()),
+            _ => Err("str value is not a descriptor".into()),
         }
     }
 
@@ -629,7 +629,7 @@ impl<'ctx> Lower<'ctx> {
         
         ESCAPED.with(|s| s.borrow_mut().clear());
         let _ = p;
-        let fv = *self.funcs.get(&f.name).ok_or_else(|| format!("缺函数 {}", f.name))?;
+        let fv = *self.funcs.get(&f.name).ok_or_else(|| format!("missing function {}", f.name))?;
         if let Some(d) = self.dbg.as_mut() {
             let ft = d.dib.create_subroutine_type(d.file, None, &[], DIFlags::PUBLIC);
             let sp = d.dib.create_function(
@@ -713,7 +713,7 @@ impl<'ctx> Lower<'ctx> {
             }
             let t = self.ty(&l.ty);
             let a = self.alloca(t, &format!("p{}", i)).map_err(|e| e.to_string())?;
-            let pv = fv.get_nth_param(pi).ok_or_else(|| "缺 LLVM 形参".to_string())?;
+            let pv = fv.get_nth_param(pi).ok_or_else(|| "missing LLVM parameter".to_string())?;
             self.builder.build_store(a, pv).map_err(|e| e.to_string())?;
             allocas[i] = Some(a);
             pi += 1;
@@ -819,7 +819,7 @@ impl<'ctx> Lower<'ctx> {
                 }
                 Exit::Branch { cond, targets } => {
                     if targets.is_empty() {
-                        return Err("分支没有目标块".into());
+                        return Err("branch has no target block".into());
                     }
                     let c = self.value(f, &allocas, cond)?;
                     let i1 = self.to_bool(c)?;
@@ -828,7 +828,7 @@ impl<'ctx> Lower<'ctx> {
                         let cur = self
                             .builder
                             .get_insert_block()
-                            .ok_or_else(|| "分支不在基本块里".to_string())?;
+                            .ok_or_else(|| "branch is not inside a basic block".to_string())?;
                         self.邊φ(f, &allocas, &targets[0], cur)?;
                         self.builder.build_unconditional_branch(bbs[t]).map_err(|e| e.to_string())?;
                     } else {
@@ -837,7 +837,7 @@ impl<'ctx> Lower<'ctx> {
                             let cur = self
                                 .builder
                                 .get_insert_block()
-                                .ok_or_else(|| "分支不在基本块里".to_string())?;
+                                .ok_or_else(|| "branch is not inside a basic block".to_string())?;
                             self.邊φ(f, &allocas, &targets[k], cur)?;
                         }
                         
@@ -859,7 +859,7 @@ impl<'ctx> Lower<'ctx> {
                     .build_int_compare(IntPredicate::NE, i, zero, "cond")
                     .map_err(|e| e.to_string())
             }
-            _ => Err("条件不是布尔值".into()),
+            _ => Err("condition is not a boolean".into()),
         }
     }
 
@@ -1036,7 +1036,7 @@ impl<'ctx> Lower<'ctx> {
                         t.fn_type(&mps, false)
                     }
                 }
-                Some(_) => return Err(format!("运行时 {} 返回类型不支持", name)),
+                Some(_) => return Err(format!("runtime {} return type is not supported", name)),
             };
             self.module.add_function(&名, fty, None)
         };
@@ -1144,7 +1144,7 @@ impl<'ctx> Lower<'ctx> {
                 let b = self.builder.build_bit_cast(f, self.ctx.i64_type(), "fbits").map_err(|e| e.to_string())?;
                 Ok(b.into_int_value())
             }
-            _ => Err("槽只能装标量/指针".into()),
+            _ => Err("a slot can only hold a scalar or pointer".into()),
         }
     }
 
@@ -1152,7 +1152,7 @@ impl<'ctx> Lower<'ctx> {
     fn from_slot(&self, v: BasicValueEnum<'ctx>, ty: &str) -> Result<BasicValueEnum<'ctx>, String> {
         let i = match v {
             BasicValueEnum::IntValue(i) => i,
-            _ => return Err("槽值不是整数".into()),
+            _ => return Err("slot value is not an integer".into()),
         };
         if Self::boxed_ty(ty) {
             return Ok(self
@@ -1288,7 +1288,7 @@ impl<'ctx> Lower<'ctx> {
         let mut a = allocas
             .get(p.base)
             .and_then(|x| *x)
-            .ok_or_else(|| "位置没有栈位".to_string())?;
+            .ok_or_else(|| "the location has no stack slot".to_string())?;
         let mut cur = self.local_ty(f, p.base).0;
         let pt = self.ctx.ptr_type(AddressSpace::default());
         for pr in &p.proj {
@@ -1307,8 +1307,8 @@ impl<'ctx> Lower<'ctx> {
                         .type_fields
                         .get(&owner)
                         .and_then(|fs| fs.iter().position(|(k, _)| k == name))
-                        .ok_or_else(|| format!("类型 {} 没有字段 {}", owner, name))?;
-                    let st = *self.structs.get(&owner).ok_or_else(|| format!("缺类型 {}", owner))?;
+                        .ok_or_else(|| format!("type {} has no field {}", owner, name))?;
+                    let st = *self.structs.get(&owner).ok_or_else(|| format!("missing type {}", owner))?;
                     a = self
                         .builder
                         .build_struct_gep(st, a, idx as u32, "fld")
@@ -1323,7 +1323,7 @@ impl<'ctx> Lower<'ctx> {
                         .into_pointer_value();
                     cur = cur.trim_end_matches('*').to_string();
                 }
-                Proj::Index(_) => return Err("LLVM 后端暂不支持下标投影".into()),
+                Proj::Index(_) => return Err("the LLVM backend does not support index projection yet".into()),
             }
         }
         Ok(a)
@@ -1383,7 +1383,7 @@ impl<'ctx> Lower<'ctx> {
             .builder
             .get_insert_block()
             .and_then(|x| x.get_parent())
-            .ok_or_else(|| "释放点不在函数里".to_string())?;
+            .ok_or_else(|| "the drop point is not inside a function".to_string())?;
         let 空 = self.ctx.append_basic_block(fnv, "rel.null");
         let 有 = self.ctx.append_basic_block(fnv, "rel.has");
         let 出 = self.ctx.append_basic_block(fnv, "rel.exit");
@@ -1490,7 +1490,7 @@ impl<'ctx> Lower<'ctx> {
                 .builder
                 .get_insert_block()
                 .and_then(|x| x.get_parent())
-                .ok_or_else(|| "释放点不在函数里".to_string())?;
+                .ok_or_else(|| "the drop point is not inside a function".to_string())?;
             let 空 = self.ctx.append_basic_block(fnv, "rel.null");
             let 有 = self.ctx.append_basic_block(fnv, "rel.has");
             let 出 = self.ctx.append_basic_block(fnv, "rel.exit");
@@ -1528,7 +1528,7 @@ impl<'ctx> Lower<'ctx> {
             .builder
             .get_insert_block()
             .and_then(|x| x.get_parent())
-            .ok_or_else(|| "释放点不在函数里".to_string())?;
+            .ok_or_else(|| "the drop point is not inside a function".to_string())?;
         let 空 = self.ctx.append_basic_block(fnv, "rel.null");
         let 有 = self.ctx.append_basic_block(fnv, "rel.has");
         let 出 = self.ctx.append_basic_block(fnv, "rel.exit");
@@ -1592,7 +1592,7 @@ impl<'ctx> Lower<'ctx> {
                     .into_int_value();
                 let dp2 = match dv {
                     BasicValueEnum::PointerValue(x) => x,
-                    _ => return Err("列表数据不是指针".into()),
+                    _ => return Err("list data is not a pointer".into()),
                 };
                 let 元宽 = if ety == "str" {
                     16
@@ -1636,11 +1636,11 @@ impl<'ctx> Lower<'ctx> {
             .builder
             .get_insert_block()
             .and_then(|x| x.get_parent())
-            .ok_or_else(|| "元素释放不在函数里".to_string())?;
+            .ok_or_else(|| "element drop is not inside a function".to_string())?;
         let 入口 = self
             .builder
             .get_insert_block()
-            .ok_or_else(|| "元素释放没有当前块".to_string())?;
+            .ok_or_else(|| "element drop has no current block".to_string())?;
         let 头 = self.ctx.append_basic_block(fnv, "er.head");
         let 体 = self.ctx.append_basic_block(fnv, "er.body");
         let 出 = self.ctx.append_basic_block(fnv, "er.exit");
@@ -1759,7 +1759,7 @@ impl<'ctx> Lower<'ctx> {
 
     
     fn deep_copy_struct(&mut self, name: &str, val: StructValue<'ctx>) -> Result<BasicValueEnum<'ctx>, String> {
-        let st = *self.structs.get(name).ok_or_else(|| format!("缺类型 {}", name))?;
+        let st = *self.structs.get(name).ok_or_else(|| format!("missing type {}", name))?;
         
         let 原块 = self.builder.get_insert_block();
         let tmp = {
@@ -1845,12 +1845,12 @@ impl<'ctx> Lower<'ctx> {
         base: &str,
         sv: inkwell::values::StructValue<'ctx>,
     ) -> Result<BasicValueEnum<'ctx>, String> {
-        let st = *self.structs.get(base).ok_or_else(|| format!("缺类型 {}", base))?;
+        let st = *self.structs.get(base).ok_or_else(|| format!("missing type {}", base))?;
         let size = self.td.get_store_size(&st) as i64;
         let mem = self.call_rt("malloc", &[self.ity()], Some(self.pty()), &[self.ci(size)])?;
         let mp = match mem {
             BasicValueEnum::PointerValue(x) => x,
-            _ => return Err("malloc 返回类型不对".into()),
+            _ => return Err("malloc return type is wrong".into()),
         };
         let v: BasicValueEnum<'ctx> = sv.into();
         self.builder.build_store(mp, v).map_err(|e| e.to_string())?;
@@ -1924,7 +1924,7 @@ impl<'ctx> Lower<'ctx> {
                 };
                 let nt = match narrow {
                     BasicTypeEnum::IntType(t) => t,
-                    _ => return Err("截断目标不是整数".into()),
+                    _ => return Err("truncation target is not an integer".into()),
                 };
                 self.builder.build_int_truncate(i, nt, "trunc")
                     .map_err(|e| e.to_string())?
@@ -2045,14 +2045,14 @@ impl<'ctx> Lower<'ctx> {
             Stmt::Assert { cond, msg, fix } if self.dbg.is_some() => {
                 let c = self.value(f, allocas, cond)?;
                 let i1 = self.to_bool(c)?;
-                let fnv = self.builder.get_insert_block().and_then(|b| b.get_parent()).ok_or_else(|| "assert 不在函数里".to_string())?;
+                let fnv = self.builder.get_insert_block().and_then(|b| b.get_parent()).ok_or_else(|| "assert is not inside a function".to_string())?;
                 let ok = self.ctx.append_basic_block(fnv, "assert.ok");
                 let bad = self.ctx.append_basic_block(fnv, "assert.bad");
                 self.builder
                     .build_conditional_branch(i1, ok, bad)
                     .map_err(|e| e.to_string())?;
                 self.builder.position_at_end(bad);
-                let code = if msg.contains("空引用") { 1 } else { 7 };
+                let code = if msg.contains("null reference") { 1 } else { 7 };
                 let m = self.fmt(msg);
                 let fx = self.fmt(fix);
                 let fname = self.cur_file.clone();
@@ -2340,7 +2340,7 @@ impl<'ctx> Lower<'ctx> {
             }
             Rvalue::Call { name, args } => {
                 if name == "print" {
-                    return Err("print 没有返回值".into());
+                    return Err("print has no return value".into());
                 }
                 if let Some(v) = self.builtin(f, allocas, name, args)? {
                     return Ok(v);
@@ -2352,7 +2352,7 @@ impl<'ctx> Lower<'ctx> {
                 self.call(f, name, &vals)
             }
             Rvalue::FnRef { name } => {
-                let fv = *self.funcs.get(name).ok_or_else(|| format!("LLVM 后端不认识函数 {}", name))?;
+                let fv = *self.funcs.get(name).ok_or_else(|| format!("the LLVM backend does not recognize function {}", name))?;
                 Ok(fv.as_global_value().as_pointer_value().into())
             }
             Rvalue::CallIndirect { callee, args } => {
@@ -2363,9 +2363,9 @@ impl<'ctx> Lower<'ctx> {
                         .builder
                         .build_int_to_ptr(i, self.ctx.ptr_type(AddressSpace::default()), "fp")
                         .map_err(|e| e.to_string())?,
-                    _ => return Err("间接调用的被调者不是函数值".into()),
+                    _ => return Err("the callee of an indirect call is not a function value".into()),
                 };
-                let (ps, ret) = Self::fn_sig(&cty).ok_or_else(|| format!("认不出函数类型 {}", cty))?;
+                let (ps, ret) = Self::fn_sig(&cty).ok_or_else(|| format!("unrecognized function type {}", cty))?;
                 let mps: Vec<BasicMetadataTypeEnum<'ctx>> = ps.iter().map(|t| self.ty(t).into()).collect();
                 let fty = self.fn_type(ret.as_ref().map(|t| self.ty(t)), &mps, false)?;
                 let mut av: Vec<BasicMetadataValueEnum<'ctx>> = Vec::new();
@@ -2387,7 +2387,7 @@ impl<'ctx> Lower<'ctx> {
                 Ok(c.try_as_basic_value().basic().unwrap_or_else(|| self.ci(0)))
             }
             Rvalue::VariantLit { ty, tag, args, tys } => {
-                let st = *self.structs.get(ty).ok_or_else(|| format!("缺和类型 {}", ty))?;
+                let st = *self.structs.get(ty).ok_or_else(|| format!("missing sum type {}", ty))?;
                 let slot = self.alloca(st, "var").map_err(|e| e.to_string())?;
                 let tag_p = self
                     .builder
@@ -2428,10 +2428,10 @@ impl<'ctx> Lower<'ctx> {
                             BasicValueEnum::PointerValue(p) => self.builder.build_ptr_to_int(p, self.ctx.i64_type(), "ph").map_err(|e| e.to_string())?,
                             _ => match a {
                                 Value::Local(id) => {
-                                    let ap = allocas.get(*id).and_then(|x| *x).ok_or_else(|| "变体载荷没有栈位".to_string())?;
+                                    let ap = allocas.get(*id).and_then(|x| *x).ok_or_else(|| "variant payload has no stack slot".to_string())?;
                                     self.builder.build_ptr_to_int(ap, self.ctx.i64_type(), "ph").map_err(|e| e.to_string())?
                                 }
-                                _ => return Err("把手载荷只能来自局部".into()),
+                                _ => return Err("handle payload may only come from a local".into()),
                             },
                         }
                     } else {
@@ -2475,7 +2475,7 @@ impl<'ctx> Lower<'ctx> {
                     let n = self.builder.build_load(self.ity(), e1, "vn").map_err(|e| e.to_string())?;
                     let ni = match n {
                         BasicValueEnum::IntValue(i) => i,
-                        _ => return Err("变体串长度不是整数".into()),
+                        _ => return Err("variant string length is not an integer".into()),
                     };
                     return Ok(self.mk_str(p, ni));
                 }
@@ -2522,7 +2522,7 @@ impl<'ctx> Lower<'ctx> {
                 let cv = self.load_place(f, allocas, &Place::local(*ctx))?;
                 let base = match cv {
                     BasicValueEnum::PointerValue(p) => p,
-                    _ => return Err("任务上下文不是指针".into()),
+                    _ => return Err("task context is not a pointer".into()),
                 };
                 let ix = self.ctx.i64_type().const_int(*idx as u64, false);
                 let blob = self.ctx.i64_type().array_type(2);
@@ -2545,7 +2545,7 @@ impl<'ctx> Lower<'ctx> {
                     let n = self.builder.build_load(self.ity(), e1, "cn").map_err(|e| e.to_string())?;
                     let ni = match n {
                         BasicValueEnum::IntValue(i) => i,
-                        _ => return Err("上下文串长度不是整数".into()),
+                        _ => return Err("context string length is not an integer".into()),
                     };
                     return Ok(self.mk_str(p, ni));
                 }
@@ -2660,7 +2660,7 @@ impl<'ctx> Lower<'ctx> {
                         .map_err(|e| e.to_string())?;
                     let 数据 = match self.列表字段(lv.into_pointer_value(), 4)? {
                         BasicValueEnum::PointerValue(pp) => pp,
-                        _ => return Err("列表数据指针类型不对".into()),
+                        _ => return Err("list data pointer type is wrong".into()),
                     };
                     let 偏 = self.builder
                         .build_int_mul(位, self.ity().into_int_type().const_int(16, false), "off")
@@ -2692,7 +2692,7 @@ impl<'ctx> Lower<'ctx> {
                         .map_err(|e| e.to_string())?;
                     let 数据 = match self.列表字段(lv.into_pointer_value(), 4)? {
                         BasicValueEnum::PointerValue(pp) => pp,
-                        _ => return Err("列表数据指针类型不对".into()),
+                        _ => return Err("list data pointer type is wrong".into()),
                     };
                     let 八 = self.ity().into_int_type().const_int(8, false);
                     let 偏 = self.builder
@@ -2802,12 +2802,12 @@ impl<'ctx> Lower<'ctx> {
     ) -> Result<StructValue<'ctx>, String> {
         let ty = self.arg_ty(f, v);
         let base = ty.trim_end_matches('*').to_string();
-        let st = *self.structs.get(&base).ok_or_else(|| format!("缺类型 {}", base))?;
+        let st = *self.structs.get(&base).ok_or_else(|| format!("missing type {}", base))?;
         let raw = self.value(f, allocas, v)?;
         let sv = if ty.ends_with('*') {
             let p = match raw {
                 BasicValueEnum::PointerValue(p) => p,
-                _ => return Err("把手不是指针".into()),
+                _ => return Err("handle is not a pointer".into()),
             };
             self.builder.build_load(st, p, "hval").map_err(|e| e.to_string())?
         } else {
@@ -2815,7 +2815,7 @@ impl<'ctx> Lower<'ctx> {
         };
         match sv {
             BasicValueEnum::StructValue(s) => Ok(s),
-            _ => Err(format!("{} 不是结构值", base)),
+            _ => Err(format!("{} is not a struct value", base)),
         }
     }
 
@@ -2972,7 +2972,7 @@ impl<'ctx> Lower<'ctx> {
                     let c = self.builder.build_float_compare(p, fa, fb, "fcmp").map_err(|e| e.to_string())?;
                     return Ok(self.builder.build_int_z_extend(c, self.ctx.i64_type(), "bool").map_err(|e| e.to_string())?.into());
                 }
-                _ => return Err("LLVM 后端不支持该浮点运算".into()),
+                _ => return Err("the LLVM backend does not support this floating-point operation".into()),
             }.map_err(|e| e.to_string())?;
             return Ok(r.into());
         }
@@ -2987,7 +2987,7 @@ impl<'ctx> Lower<'ctx> {
                 let sv = if astr { a } else { b };
                 let p = self.str_p(sv)?;
                 if !matches!(op, BinOp::Eq | BinOp::Ne) {
-                    return Err("str 只能与 str 或 null 比较".into());
+                    return Err("str can only be compared with str or null".into());
                 }
                 let isnull = self.builder.build_is_null(p, "snull").map_err(|e| e.to_string())?;
                 let c = if op == BinOp::Eq {
@@ -3017,7 +3017,7 @@ impl<'ctx> Lower<'ctx> {
                             &[a, b],
                         )? {
                             BasicValueEnum::IntValue(i) => i,
-                            _ => return Err("str_eq 返回类型不对".into()),
+                            _ => return Err("str_eq return type is wrong".into()),
                         };
                         let zero = self.ctx.i64_type().const_int(0, false);
                         let pred = if op == BinOp::Eq { IntPredicate::NE } else { IntPredicate::EQ };
@@ -3028,10 +3028,10 @@ impl<'ctx> Lower<'ctx> {
                             .map_err(|e| e.to_string())?
                             .into())
                     }
-                    _ => Err("LLVM 后端不支持该字符串运算".into()),
+                    _ => Err("the LLVM backend does not support this string operation".into()),
                 };
             }
-            return Err("str 只能与 str 或 null 参与运算".into());
+            return Err("str can only be used in operations with str or null".into());
         }
         if let (BasicValueEnum::PointerValue(pa), BasicValueEnum::PointerValue(pb)) = (a, b) {
             let lt = self.arg_ty(f, lhs);
@@ -3039,7 +3039,7 @@ impl<'ctx> Lower<'ctx> {
             
             let 是串 = lt == "str" || rt == "str";
             return match op {
-                BinOp::Add => Err("字符串拼接要走描述符路径".into()),
+                BinOp::Add => Err("string concatenation must go through the descriptor path".into()),
                 BinOp::Eq | BinOp::Ne if !是串 => {
                     let ia = self.builder.build_ptr_to_int(pa, self.ctx.i64_type(), "pa").map_err(|e| e.to_string())?;
                     let ib = self.builder.build_ptr_to_int(pb, self.ctx.i64_type(), "pb").map_err(|e| e.to_string())?;
@@ -3051,26 +3051,26 @@ impl<'ctx> Lower<'ctx> {
                 BinOp::Eq | BinOp::Ne => {
                     let fv = self.rt_str_eq();
                     let c = self.builder.build_call(fv, &[pa.into(), pb.into()], "streq").map_err(|e| e.to_string())?;
-                    let n = c.try_as_basic_value().basic().ok_or_else(|| "str_eq 无返回值".to_string())?;
+                    let n = c.try_as_basic_value().basic().ok_or_else(|| "str_eq has no return value".to_string())?;
                     let ni = match n {
                         BasicValueEnum::IntValue(i) => i,
-                        _ => return Err("str_eq 返回类型不对".into()),
+                        _ => return Err("str_eq return type is wrong".into()),
                     };
                     let zero = self.ctx.i64_type().const_int(0, false);
                     let pred = if op == BinOp::Eq { IntPredicate::NE } else { IntPredicate::EQ };
                     let c = self.builder.build_int_compare(pred, ni, zero, "streqcmp").map_err(|e| e.to_string())?;
                     Ok(self.builder.build_int_z_extend(c, self.ctx.i64_type(), "bool").map_err(|e| e.to_string())?.into())
                 }
-                _ => Err("LLVM 后端不支持该字符串运算".into()),
+                _ => Err("the LLVM backend does not support this string operation".into()),
             };
         }
         let ai = match a {
             BasicValueEnum::IntValue(i) => i,
-            _ => return Err("LLVM 后端算术只支持整数/浮点/字符串".into()),
+            _ => return Err("LLVM backend arithmetic only supports int / float / string".into()),
         };
         let bi = match b {
             BasicValueEnum::IntValue(i) => i,
-            _ => return Err("LLVM 后端算术只支持整数/浮点/字符串".into()),
+            _ => return Err("LLVM backend arithmetic only supports int / float / string".into()),
         };
         let r = match op {
             
@@ -3105,7 +3105,7 @@ impl<'ctx> Lower<'ctx> {
                 let c = self.builder
                     .build_call(fv, &[ai.into(), bi.into()], n)
                     .map_err(|e| e.to_string())?;
-                c.try_as_basic_value().basic().ok_or_else(|| "运行时调用没有返回值".to_string())?
+                c.try_as_basic_value().basic().ok_or_else(|| "runtime call has no return value".to_string())?
             }
             BinOp::Div | BinOp::Mod => {
                 let n = if op == BinOp::Div { "prion_div" } else { "prion_mod" };
@@ -3233,7 +3233,7 @@ impl<'ctx> Lower<'ctx> {
         if name == "prion_join_all" {
             return self.call_rt("prion_join_all", &[self.pty()], Some(self.pty()), args);
         }
-        let fv = *self.funcs.get(name).ok_or_else(|| format!("LLVM 后端不认识调用 {}", name))?;
+        let fv = *self.funcs.get(name).ok_or_else(|| format!("the LLVM backend does not recognize call {}", name))?;
         let ptys = fv.get_type().get_param_types();
         let mut av: Vec<BasicMetadataValueEnum<'ctx>> = Vec::new();
         for (i, a) in args.iter().enumerate() {
@@ -3267,7 +3267,7 @@ impl<'ctx> Lower<'ctx> {
             let ty = self.arg_ty(f, a);
             
             if self.structs.contains_key(ty.trim_end_matches('*')) {
-                return Err("print 不收积类型——先取字段（结构可能成环）".into());
+                return Err("print does not accept product types - take fields first (structures may form cycles)".into());
             }
             let ck = if ty.starts_with("list(str") {
                 Some("list_s")
@@ -3448,7 +3448,7 @@ impl<'ctx> Lower<'ctx> {
                             let lv = self.列表字段(安全.into_pointer_value(), 0)?;
                             match lv {
                                 BasicValueEnum::IntValue(_) => lv,
-                                _ => return Err("列表 len 字段不是整数".into()),
+                                _ => return Err("list len field is not an integer".into()),
                             }
                         }
                         _ => self.call_rt("prion_list_len", &[self.pty()], Some(self.ity()), &vals)?,
@@ -3468,14 +3468,14 @@ impl<'ctx> Lower<'ctx> {
                 };
                 let ni = match n {
                     BasicValueEnum::IntValue(i) => i,
-                    _ => return Err("len 返回类型不对".into()),
+                    _ => return Err("len return type is wrong".into()),
                 };
                 let z = self.ctx.i64_type().const_int(0, false);
                 let c = self.builder.build_int_compare(IntPredicate::EQ, ni, z, "isempty").map_err(|e| e.to_string())?;
                 self.builder.build_int_z_extend(c, self.ctx.i64_type(), "bool").map_err(|e| e.to_string())?.into()
             }
             "push" => {
-                let mut a1 = *vals.get(1).ok_or_else(|| "push 要 2 个参数".to_string())?;
+                let mut a1 = *vals.get(1).ok_or_else(|| "push requires 2 arguments".to_string())?;
                 
                 if let (Value::Local(lid), BasicValueEnum::PointerValue(pv)) = (&args[1], a1) {
                     if f.locals.get(*lid).map(|l| l.fn_owned).unwrap_or(false) {
@@ -3553,7 +3553,7 @@ impl<'ctx> Lower<'ctx> {
                 self.from_slot(raw, &elem)?
             }
             "insert" => {
-                let a2 = *vals.get(2).ok_or_else(|| "insert 要 3 个参数".to_string())?;
+                let a2 = *vals.get(2).ok_or_else(|| "insert requires 3 arguments".to_string())?;
                 if elem == "str" {
                     let d = self.str_ref(a2)?;
                     return Ok(Some(self.call_rt(
@@ -3666,7 +3666,7 @@ impl<'ctx> Lower<'ctx> {
             }
             "put" => {
                 let vt = Self::map_value_ty(&t0).unwrap_or_else(|| "int".into());
-                let a2 = *vals.get(2).ok_or_else(|| "put 要 3 个参数".to_string())?;
+                let a2 = *vals.get(2).ok_or_else(|| "put requires 3 arguments".to_string())?;
                 let k = self.key_ll(vals[1])?;
                 let kty = Self::map_kty(&t0);
                 if vt == "str" {
@@ -3746,7 +3746,7 @@ impl<'ctx> Lower<'ctx> {
             "bool" => {
                 let i = match vals[0] {
                     BasicValueEnum::IntValue(i) => i,
-                    _ => return Err("bool 只收整数".into()),
+                    _ => return Err("bool only accepts integers".into()),
                 };
                 let z = self.ctx.i64_type().const_int(0, false);
                 let c = self.builder.build_int_compare(IntPredicate::NE, i, z, "b").map_err(|e| e.to_string())?;
@@ -3788,7 +3788,7 @@ impl<'ctx> Lower<'ctx> {
                 let p = self.str_p(vals[0])?;
                 let idx = match vals[1] {
                     BasicValueEnum::IntValue(i) => i,
-                    _ => return Err("字节下标不是整数".into()),
+                    _ => return Err("byte index is not an integer".into()),
                 };
                 let off = self
                     .builder
@@ -3804,7 +3804,7 @@ impl<'ctx> Lower<'ctx> {
                     .map_err(|e| e.to_string())?;
                 let bi = match b {
                     BasicValueEnum::IntValue(i) => i,
-                    _ => return Err("字节读取类型不对".into()),
+                    _ => return Err("byte read type is wrong".into()),
                 };
                 self.builder
                     .build_int_z_extend(bi, self.ctx.i64_type(), "bzext")
@@ -3827,7 +3827,7 @@ impl<'ctx> Lower<'ctx> {
                 let 型 = n.trim_start_matches("#dcdeep_").to_string();
                 match vals[0] {
                     BasicValueEnum::StructValue(sv) => self.deep_copy_struct(&型, sv)?,
-                    _ => return Err("深拷目标不是结构体".into()),
+                    _ => return Err("deep-copy target is not a struct".into()),
                 }
             }
             "args" => self.call_rt("prion_args", &[], Some(self.pty()), &[])?,
@@ -3835,7 +3835,7 @@ impl<'ctx> Lower<'ctx> {
             "save_file" => self.call_rt("prion_save_file", &[self.str_ty(), self.str_ty()], Some(self.ity()), &vals[0..2])?,
             "run" => {
                 
-                let p0 = *vals.first().ok_or_else(|| "run 要 1 个参数".to_string())?;
+                let p0 = *vals.first().ok_or_else(|| "run requires 1 argument".to_string())?;
                 let a1 = vals.get(1).copied().unwrap_or_else(|| self.ctx.ptr_type(AddressSpace::default()).const_null().into());
                 let 空串 = self.value(f, allocas, &Value::Str(String::new()))?;
                 let a2 = vals.get(2).copied().unwrap_or(空串);
@@ -3857,7 +3857,7 @@ impl<'ctx> Lower<'ctx> {
                         .builder
                         .build_signed_int_to_float(i, self.ctx.f64_type(), "sqi")
                         .map_err(|e| e.to_string())?,
-                    _ => return Err("sqrt 只收数值".into()),
+                    _ => return Err("sqrt only accepts numbers".into()),
                 };
                 self.call_rt("llvm.sqrt.f64", &[ft], Some(ft), &[x.into()])?
             }
@@ -3876,7 +3876,7 @@ impl<'ctx> Lower<'ctx> {
                 let p = self.call_rt("prion_to_c_str", &[self.str_ty()], Some(self.pty()), &vals)?;
                 let pv = match p {
                     BasicValueEnum::PointerValue(p) => p,
-                    _ => return Err("to_c_str 返回类型不对".into()),
+                    _ => return Err("to_c_str return type is wrong".into()),
                 };
                 self.builder
                     .build_ptr_to_int(pv, self.ctx.i64_type(), "caddr")
@@ -3886,14 +3886,14 @@ impl<'ctx> Lower<'ctx> {
             "str_from_c" => {
                 let i = match vals[0] {
                     BasicValueEnum::IntValue(i) => i,
-                    _ => return Err("str_from_c 只收整数地址".into()),
+                    _ => return Err("str_from_c only accepts integer addresses".into()),
                 };
                 self.call_rt("prion_from_c_str", &[self.ity()], Some(self.str_ty()), &[i.into()])?
             }
             "read_8" | "read_16" | "read_32" | "read_64" => {
                 let i = match vals[0] {
                     BasicValueEnum::IntValue(i) => i,
-                    _ => return Err(format!("{} 只收整数地址", name)),
+                    _ => return Err(format!("{} only accepts integer addresses", name)),
                 };
                 let p = self
                     .builder
@@ -3916,7 +3916,7 @@ impl<'ctx> Lower<'ctx> {
                     let raw = self.builder.build_load(t, p, "rd").map_err(|e| e.to_string())?;
                     let iv = match raw {
                         BasicValueEnum::IntValue(i) => i,
-                        _ => return Err(format!("{} 读数类型不对", name)),
+                        _ => return Err(format!("{} read type is wrong", name)),
                     };
                     self.builder.build_int_s_extend(iv, self.ctx.i64_type(), "sext").map_err(|e| e.to_string())?.into()
                 }
@@ -3924,7 +3924,7 @@ impl<'ctx> Lower<'ctx> {
             "write_8" | "write_16" | "write_32" | "write_64" => {
                 let i = match vals[0] {
                     BasicValueEnum::IntValue(i) => i,
-                    _ => return Err(format!("{} 只收整数地址", name)),
+                    _ => return Err(format!("{} only accepts integer addresses", name)),
                 };
                 let p = self
                     .builder
@@ -3932,7 +3932,7 @@ impl<'ctx> Lower<'ctx> {
                     .map_err(|e| e.to_string())?;
                 let v = match vals.get(1) {
                     Some(BasicValueEnum::IntValue(v)) => *v,
-                    _ => return Err(format!("{} 要地址与值两个参数", name)),
+                    _ => return Err(format!("{} requires an address and a value", name)),
                 };
                 let w = match name {
                     "write_8" => 8,

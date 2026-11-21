@@ -290,7 +290,7 @@ impl<'ctx, 'a> 发射器<'ctx, 'a> {
         }
         let g = self.内部i64("prion_line");
         let line = self.b.build_load(self.i64t(), g.as_pointer_value(), "ln").unwrap();
-        self.报错("  （第 %lld 行）\n", &[line]);
+        self.报错("  (line %lld)\n", &[line]);
         self.b.build_return(None).unwrap();
     }
 
@@ -353,7 +353,7 @@ impl<'ctx, 'a> 发射器<'ctx, 'a> {
         self.b.build_conditional_branch(cond, b_show, b_plain).unwrap();
 
         self.b.position_at_end(b_show);
-        self.报错("[R%02d] 位于 %s", &[code.into(), srcf]);
+        self.报错("[R%02d] at %s", &[code.into(), srcf]);
         self.b.build_unconditional_branch(b_after1).unwrap();
         self.b.position_at_end(b_plain);
         self.报错("[R%02d]", &[code.into()]);
@@ -370,10 +370,10 @@ impl<'ctx, 'a> 发射器<'ctx, 'a> {
         let 有列 = self.b.build_int_compare(IntPredicate::SGT, col, self.i64t().const_zero(), "hc").unwrap();
         self.b.build_conditional_branch(有列, b_col, b_nocol).unwrap();
         self.b.position_at_end(b_col);
-        self.报错(" 第 %lld 行第 %lld 列发生错误", &[line.into(), col.into()]);
+        self.报错(" error at line %lld, column %lld", &[line.into(), col.into()]);
         self.b.build_unconditional_branch(b_nocol).unwrap();
         self.b.position_at_end(b_nocol);
-        self.报错(" 第 %lld 行发生错误", &[line.into()]);
+        self.报错(" error at line %lld", &[line.into()]);
         let b_src = self.ctx.append_basic_block(f, "fsrc");
         self.b.build_unconditional_branch(b_src).unwrap();
 
@@ -388,15 +388,15 @@ impl<'ctx, 'a> 发射器<'ctx, 'a> {
         let snz = self.b.build_int_compare(IntPredicate::NE, sc0, self.i8t().const_zero(), "snz").unwrap();
         self.b.build_conditional_branch(snz, b_srcshow, b_end).unwrap();
         self.b.position_at_end(b_srcshow);
-        self.报错("，源码为：%s", &[src.into()]);
+        self.报错(", source: %s", &[src.into()]);
         self.b.build_unconditional_branch(b_end).unwrap();
 
         self.b.position_at_end(b_noline);
-        self.报错("发生错误", &[]);
+        self.报错("error occurred", &[]);
         self.b.build_unconditional_branch(b_end).unwrap();
 
         self.b.position_at_end(b_end);
-        self.报错("，错误为：%s。改法：%s。\n", &[msg.into(), fix.into()]);
+        self.报错(", error: %s. Fix: %s.\n", &[msg.into(), fix.into()]);
         self.调(self.exit(), &[self.i32t().const_int(1, false).into()], "");
         self.b.build_return(None).unwrap();
         let _ = 首块;
@@ -421,7 +421,7 @@ impl<'ctx, 'a> 发射器<'ctx, 'a> {
             .b
             .build_select(self.b.build_is_null(cur, "cn").unwrap(), 文件, cur, "srcf")
             .unwrap();
-        self.报错("[R%02d] 位于 %s", &[code.into(), srcf]);
+        self.报错("[R%02d] at %s", &[code.into(), srcf]);
 
         let b_loc = self.ctx.append_basic_block(f, "dl");
         let b_noline = self.ctx.append_basic_block(f, "dnl");
@@ -436,10 +436,10 @@ impl<'ctx, 'a> 发射器<'ctx, 'a> {
         let 有列 = self.b.build_int_compare(IntPredicate::SGT, col, self.i64t().const_zero(), "hc").unwrap();
         self.b.build_conditional_branch(有列, b_col, b_nocol).unwrap();
         self.b.position_at_end(b_col);
-        self.报错(" 第 %lld 行第 %lld 列发生错误", &[line.into(), col.into()]);
+        self.报错(" error at line %lld, column %lld", &[line.into(), col.into()]);
         self.b.build_unconditional_branch(b_nocol).unwrap();
         self.b.position_at_end(b_nocol);
-        self.报错(" 第 %lld 行发生错误", &[line.into()]);
+        self.报错(" error at line %lld", &[line.into()]);
         let b_src = self.ctx.append_basic_block(f, "ds");
         self.b.build_unconditional_branch(b_src).unwrap();
 
@@ -454,15 +454,15 @@ impl<'ctx, 'a> 发射器<'ctx, 'a> {
             b_srcshow,
         ).unwrap();
         self.b.position_at_end(b_srcshow);
-        self.报错("，源码为：%s", &[src.into()]);
+        self.报错(", source: %s", &[src.into()]);
         self.b.build_unconditional_branch(b_end).unwrap();
 
         self.b.position_at_end(b_noline);
-        self.报错("发生错误", &[]);
+        self.报错("error occurred", &[]);
         self.b.build_unconditional_branch(b_end).unwrap();
 
         self.b.position_at_end(b_end);
-        self.报错("，错误为：%s。改法：%s。\n", &[msg.into(), fix.into()]);
+        self.报错(", error: %s. Fix: %s.\n", &[msg.into(), fix.into()]);
         self.调(self.exit(), &[self.i32t().const_int(1, false).into()], "");
         self.b.build_return(None).unwrap();
     }
@@ -812,7 +812,7 @@ impl<'ctx, 'a> 发射器<'ctx, 'a> {
         ).unwrap();
 
         self.b.position_at_end(b_fail);
-        self.报错("运行错误：读不到文件「%s」——文件不存在，或没有读权限\n", &[path.into()]);
+        self.报错("runtime error: cannot read file \"%s\" - the file does not exist or is not readable\n", &[path.into()]);
         let ep = self.错误流();
         self.调(self.fputc(), &[self.i32t().const_int(10, false).into(), ep.into()], "");
         self.调(self.exit(), &[self.i32t().const_int(1, false).into()], "");
@@ -852,8 +852,8 @@ impl<'ctx, 'a> 发射器<'ctx, 'a> {
             b_alloc,
         ).unwrap();
         self.b.position_at_end(b_oom);
-        let m1 = self.串("内存不够——程序申请的空间超出可用内存");
-        let m2 = self.串("缩小数据量，或换更省内存的写法");
+        let m1 = self.串("out of memory - the program requested more than the available memory");
+        let m2 = self.串("reduce the data size, or use a more memory-efficient approach");
         self.调(
             self.die_nc_fn(),
             &[self.i32t().const_int(6, false).into(), m1.into(), m2.into()],
@@ -925,7 +925,7 @@ impl<'ctx, 'a> 发射器<'ctx, 'a> {
         ).unwrap();
 
         self.b.position_at_end(b_fail);
-        self.报错("运行错误：写不进文件「%s」——目录不存在，或没有写权限\n", &[path.into()]);
+        self.报错("runtime error: cannot write file \"%s\" - the directory does not exist or is not writable\n", &[path.into()]);
         let ep = self.错误流();
         self.调(self.fputc(), &[self.i32t().const_int(10, false).into(), ep.into()], "");
         self.调(self.exit(), &[self.i32t().const_int(1, false).into()], "");
@@ -1102,8 +1102,8 @@ impl<'ctx, 'a> 发射器<'ctx, 'a> {
     }
 
     fn 内存不够(&self) {
-        let m1 = self.串("内存不够——程序申请的空间超出可用内存");
-        let m2 = self.串("缩小数据量，或换更省内存的写法");
+        let m1 = self.串("out of memory - the program requested more than the available memory");
+        let m2 = self.串("reduce the data size, or use a more memory-efficient approach");
         self.调(
             self.die_nc_fn(),
             &[self.i32t().const_int(6, false).into(), m1.into(), m2.into()],
@@ -1515,7 +1515,7 @@ impl<'ctx, 'a> 发射器<'ctx, 'a> {
         let v = f.get_nth_param(1).unwrap().into_int_value();
         let n = f.get_nth_param(2).unwrap().into_int_value();
         self.报错(
-            "运行错误：%s位置 %lld 越界——这个容器只有 %lld 个位置；取之前先用 len(容器) 查一下个数\n",
+            "runtime error: %s index %lld out of bounds - this container has only %lld position(s); check with len(container) before accessing\n",
             &[what.into(), v.into(), n.into()],
         );
         let at = self.函数("prion_at", None, &[], false);
@@ -3406,17 +3406,17 @@ impl<'ctx, 'a> 发射器<'ctx, 'a> {
 fn ir_lits() -> String {
     let mut s = String::new();
     for (n, v) in [
-        ("oom1", "内存不够——程序申请的空间超出可用内存"),
-        ("oom2", "缩小数据量，或换更省内存的写法"),
-        ("pos", "位置 %lld 越界——这个容器只有 %lld 个位置"),
-        ("fix", "取之前先用 len(容器) 查一下个数"),
-        ("mkey", "键\"%s\"不存在"),
-        ("mkeyi", "键%lld 不存在"),
-        ("mkeyfix", "先用 has 问一声，要新增请用 put"),
-        ("ovf", "整数运算溢出——加减乘结果超出了 int 的范围"),
-        ("ovffix", "改用 float，或把计算拆小步"),
-        ("div0", "除以零——除数不能是 0"),
-        ("div0fix", "先用 if 判一下（if 除数 != 0:）再除"),
+        ("oom1", "out of memory - the program requested more than the available memory"),
+        ("oom2", "reduce the data size, or use a more memory-efficient approach"),
+        ("pos", "index %lld out of bounds - this container has only %lld position(s)"),
+        ("fix", "check the count with len(container) before accessing"),
+        ("mkey", "key \"%s\" does not exist"),
+        ("mkeyi", "key %lld does not exist"),
+        ("mkeyfix", "check with has first; to add one use put"),
+        ("ovf", "integer overflow - the add/sub/mul result exceeds the int range"),
+        ("ovffix", "use float instead, or break the computation into smaller steps"),
+        ("div0", "division by zero - the divisor cannot be 0"),
+        ("div0fix", "check first with if (if divisor != 0:) before dividing"),
     ] {
         let bytes: Vec<u8> = v.as_bytes().iter().copied().chain(std::iter::once(0)).collect();
         let esc: String = bytes

@@ -109,7 +109,7 @@ pub fn 解析隔离区(inner: &[Token]) -> Result<AsmSections, String> {
         };
         if let Some(c) = 文本.chars().find(|c| !c.is_ascii()) {
             return Err(format!(
-                "asm 隔离区只准 ASCII——「{}」里的「{}」不是 ASCII 字符",
+                "asm isolation region allows ASCII only - \"{}\" in \"{}\" is not an ASCII character",
                 文本, c
             ));
         }
@@ -126,7 +126,7 @@ pub fn 解析隔离区(inner: &[Token]) -> Result<AsmSections, String> {
         }
     }
     if 段.len() > 4 {
-        return Err("asm 最多四段（模板 : 输出 : 输入 : 破坏）".into());
+        return Err("asm has at most four segments (template : output : input : clobber)".into());
     }
 
     
@@ -139,7 +139,7 @@ pub fn 解析隔离区(inner: &[Token]) -> Result<AsmSections, String> {
                 }
                 模板.push_str(s);
             }
-            _ => return Err("asm 的第一段是指令模板字符串".into()),
+            _ => return Err("asm's first segment is the instruction template string".into()),
         }
     }
 
@@ -152,10 +152,10 @@ pub fn 解析隔离区(inner: &[Token]) -> Result<AsmSections, String> {
             let (约束, 名, 读写, 步) = 读绑定(&项)?;
             let _ = 步;
             if 约束.is_empty() {
-                return Err("输出段要写 `寄存器 -> 名`（或 `寄存器 <-> 名`）".into());
+                return Err("the output segment is written `register -> name` (or `register <-> name`)".into());
             }
             if 名.is_empty() {
-                return Err("输出段右边要写 Prion 名".into());
+                return Err("the output segment must write a Prion name".into());
             }
             出项.push((约束, 名, 读写));
         }
@@ -165,16 +165,16 @@ pub fn 解析隔离区(inner: &[Token]) -> Result<AsmSections, String> {
             
             let 寄 = match 项.first() {
                 Some(Token::Ident(n)) => n.clone(),
-                _ => return Err("输入段要写 `寄存器 <- 表达式`".into()),
+                _ => return Err("the input segment is written `register <- expression`".into()),
             };
             match 箭头(&项, 1) {
                 Some(("<-", 步)) => {
                     let 约束 = 寄存器约束(&寄)
-                        .ok_or_else(|| format!("寄存器「{}」不在映射表里", 寄))?
+                        .ok_or_else(|| format!("register \"{}\" is not in the mapping table", 寄))?
                         .to_string();
                     入项.push((约束, 项[1 + 步..].to_vec()));
                 }
-                _ => return Err("输入段要写 `寄存器 <- 表达式`".into()),
+                _ => return Err("the input segment is written `register <- expression`".into()),
             }
         }
     }
@@ -182,7 +182,7 @@ pub fn 解析隔离区(inner: &[Token]) -> Result<AsmSections, String> {
         for 项 in 切(段[3], |t| *t == Token::Sym(",")) {
             match 项.first() {
                 Some(Token::Ident(n)) => 破坏.push(n.to_string()),
-                _ => return Err("破坏段写 memory / cc / 寄存器名".into()),
+                _ => return Err("the clobber segment lists memory / cc / register names".into()),
             }
         }
     }
@@ -199,17 +199,17 @@ pub fn 解析隔离区(inner: &[Token]) -> Result<AsmSections, String> {
 fn 读绑定(项: &[Token]) -> Result<(String, String, bool, usize), String> {
     let 寄 = match 项.first() {
         Some(Token::Ident(n)) => n.clone(),
-        _ => return Err("绑定项要以寄存器名开头（如 `al -> 名`）".into()),
+        _ => return Err("a binding entry must start with a register name (e.g. `al -> name`)".into()),
     };
     let (形, 步) = match 箭头(项, 1) {
         Some((形, 步)) if 形 == "->" || 形 == "<->" => (形, 步),
-        _ => return Err("输出段用 `寄存器 -> 名`（只写）或 `寄存器 <-> 名`（读写）".into()),
+        _ => return Err("the output segment uses `register -> name` (write-only) or `register <-> name` (read-write)".into()),
     };
     let 名 = match 项.get(1 + 步) {
         Some(Token::Ident(n)) | Some(Token::Str(n)) => n.clone(),
-        _ => return Err("箭头右边要写 Prion 名".into()),
+        _ => return Err("the right side of the arrow must be a Prion name".into()),
     };
-    let 约束 = 寄存器约束(&寄).ok_or_else(|| format!("寄存器「{}」不在映射表里", 寄))?;
+    let 约束 = 寄存器约束(&寄).ok_or_else(|| format!("register \"{}\" is not in the mapping table", 寄))?;
     Ok((约束.to_string(), 名.to_string(), 形 == "<->", 步))
 }
 
@@ -233,5 +233,5 @@ pub fn 括号内(toks: &[Token], 左括号: usize) -> Option<&[Token]> {
 
 
 pub fn 映射表说明() -> &'static str {
-    "寄存器映射：al/ax/eax/rax → a；bl/bx/ebx/rbx → b；cl/cx/ecx/rcx → c；dl/dx/edx/rdx → d；si/esi/rsi → S；di/edi/rdi → D；r8–r15 → r8…r15"
+    "register mapping: al/ax/eax/rax -> a; bl/bx/ebx/rbx -> b; cl/cx/ecx/rcx -> c; dl/dx/edx/rdx -> d; si/esi/rsi -> S; di/edi/rdi -> D; r8-r15 -> r8...r15"
 }

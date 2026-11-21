@@ -431,7 +431,7 @@ fn 核能力(
             if !类型能力(实, op) {
                 return Err(BuildError {
                     message: format!(
-                        "泛型 fn「{}」的类型参数「{}」声明了能力「{}」，但实参类型「{}」不支持",
+                        "generic fn \"{}\" has type parameter \"{}\" declaring capability \"{}\", but argument type \"{}\" does not support it",
                         名, 参数, op, 实
                     ),
                     code: prion_error::Code::E201,
@@ -1083,7 +1083,7 @@ impl Builder {
         }
         Err(BuildError {
             message: format!(
-                "模块「{}」有歧义——{} 都叫这名，请写全路径（如 `##:{}`）",
+                "module \"{}\" is ambiguous - {} all use this name; write the full path (e.g. `##:{}`)",
                 given,
                 cands.join("、"),
                 cands[0]
@@ -1104,7 +1104,7 @@ impl Builder {
         }
         Err(BuildError {
             message: format!(
-                "块「{}」（模块 {}）是私有的——跨模块只能调标了 pub 的块",
+                "block \"{}\" (module {}) is private - only pub blocks can be called across modules",
                 blk, blk_mod
             ),
             code: prion_error::Code::E201,
@@ -1206,7 +1206,7 @@ impl Builder {
     }
 
     fn switch_to(&mut self, id: BlockId) {
-        self.cur = self.blocks.iter().position(|b| b.id == id).expect("块应已存在");
+        self.cur = self.blocks.iter().position(|b| b.id == id).expect("block should already exist");
     }
 
     fn emit(&mut self, s: Stmt) {
@@ -1247,7 +1247,7 @@ impl Builder {
         let Some(t) = self.串字面量.get(&id) else { return Ok(()) };
         if k < 1 || (k as usize) > t.len() {
             return Err(BuildError {
-                message: format!("下标 {} 越界——字面量「{}」只有 {} 字节", k, t, t.len()),
+                message: format!("index {} is out of bounds - literal \"{}\" has only {} byte(s)", k, t, t.len()),
                 code: prion_error::Code::E302,
                 line: CUR_LINE.with(|c| c.get()),
                 file: String::new(),
@@ -1332,7 +1332,7 @@ impl Builder {
                 Some(Token::Ident(f)) | Some(Token::Str(f)) => f.to_string(),
                 
                 Some(Token::Int(n)) if *n >= 1 => n.to_string(),
-                _ => return err("字段访问后应是字段名"),
+                _ => return err("field access must be followed by a field name"),
             };
             *i += 2;
             
@@ -1340,7 +1340,7 @@ impl Builder {
             if !self.type_idx.contains_key(&owner0) {
                 return Err(BuildError {
                     message: format!(
-                        "{} 没有字段——字段访问（.名）只对 add type 定义的积类型用；和类型请用 match 解构",
+                        "{} has no fields - field access (.name) only applies to product types defined with add type; for sum types use match destructuring",
                         cur_ty
                     ),
                     code: prion_error::Code::E303,
@@ -1352,8 +1352,8 @@ impl Builder {
                 let c = self.bin(BinOp::Ne, Value::Local(cur), Value::Null);
                 self.emit(Stmt::Assert {
                     cond: c,
-                    msg: "空引用——把手是 null，取不到字段".into(),
-                    fix: "取字段前先判一声（x != null），或用 case 接住空的情况".into(),
+                    msg: "null reference - the handle is null, cannot read a field".into(),
+                    fix: "check for null first (x != null) before reading a field, or catch the empty case with a case branch".into(),
                 });
             }
             let owner = cur_ty.trim_end_matches('*').to_string();
@@ -1406,7 +1406,7 @@ impl Builder {
                         }
                         None => {
                             return Err(BuildError {
-                                message: format!("fn 要用本块 val「{}」——本块还没建它", vn),
+                                message: format!("the fn must use this block's val \"{}\" - it is not defined in this block yet", vn),
                                 code: prion_error::Code::E304,
                                 line: CUR_LINE.with(|c| c.get()),
                                 file: String::new(),
@@ -1431,7 +1431,7 @@ impl Builder {
                             None => {
                                 return Err(BuildError {
                                     message: format!(
-                                        "块「{}」的 val「{}」不存在——先 add val 建它，sle 块还要先 call #:{}",
+                                        "val \"{}\" of block \"{}\" does not exist - define it with add val first; for an sle block, call #:{} first too",
                                         blk, vn, blk
                                     ),
                                     code: prion_error::Code::E304,
@@ -1586,7 +1586,7 @@ impl Builder {
             });
             return Ok(Value::Local(t));
         }
-        err(format!("take 还不能复制「{}」这种类型", n))
+        err(format!("take cannot copy this type \"{}\" yet", n))
     }
 
     fn bin(&mut self, op: BinOp, lhs: Value, rhs: Value) -> Value {
@@ -1681,7 +1681,7 @@ impl Builder {
             .get(self.type_idx[名])
             .cloned()
             .ok_or_else(|| BuildError {
-                message: format!("类型「{}」没登记", 名),
+                message: format!("type \"{}\" is not registered", 名),
                 code: prion_error::Code::E304,
                 line: CUR_LINE.with(|c| c.get()),
                 file: String::new(),
@@ -1707,7 +1707,7 @@ impl Builder {
         if 绑定.iter().any(|x| x.is_none()) {
             return Err(BuildError {
                 message: format!(
-                    "泛型类型「{}」推不出类型参数——给每个实参一个明确的类型（字面量或带类型的 val）",
+                    "cannot infer type parameters of generic type \"{}\" - give each argument an explicit type (a literal or a typed val)",
                     名
                 ),
                 code: prion_error::Code::E201,
@@ -1720,7 +1720,7 @@ impl Builder {
         if !self.type_idx.contains_key(&实例名) {
             return Err(BuildError {
                 message: format!(
-                    "泛型实例「{}」还没生成——请先写一条带类型的声明 `add val \"x\" {}(…) = …`",
+                    "generic instance \"{}\" has not been generated - first write a typed declaration `add val \"x\" {}(...) = ...`",
                     实例名, 实例名
                 ),
                 code: prion_error::Code::E201,
@@ -1793,7 +1793,7 @@ impl Builder {
         let mut outs = Vec::new();
         for (约束, 名, 读写) in 段.outs {
             let id = *self.names.get(&名).ok_or_else(|| BuildError {
-                message: format!("asm 输出绑定的名字「{}」本块没有——先 add val 建它", 名),
+                message: format!("asm output binding name \"{}\" is not in this block - define it with add val first", 名),
                 code: prion_error::Code::E304,
                 line: CUR_LINE.with(|c| c.get()),
                 file: String::new(),
@@ -1848,11 +1848,11 @@ impl Builder {
                     self.emit(Stmt::Assign { lhs: Place::local(tmp), rhs: Rvalue::FnRef { name: key } });
                     Ok(Value::Local(tmp))
                 }
-                _ => err(format!("裸名「{}」在此处不可用", name)),
+                _ => err(format!("bare name \"{}\" is not usable here", name)),
             },
             ExprKind::Call { verb, target, module, block, name, args } => {
                 if *verb == Verb::Delta {
-                    return err("delta 不出现在表达式树");
+                    return err("delta does not appear in the expression tree");
                 }
                 if *verb == Verb::Take {
                     let src = if let Some(tb) = block {
@@ -1862,7 +1862,7 @@ impl Builder {
                             } else {
                                 match self.resolve_module(m)? {
                                     Some(f) => f,
-                                    None => return err(format!("模块「{}」找不到", m)),
+                                    None => return err(format!("module \"{}\" not found", m)),
                                 }
                             }
                         } else {
@@ -1872,7 +1872,7 @@ impl Builder {
                         let slot_key = format!("{}|{}#{}", blk_mod, tb, name);
                         match self.槽或建(&slot_key) {
                             Some(id) => Value::Local(id),
-                            None => return err(format!("块「{}」的 val「{}」不存在", tb, name)),
+                            None => return err(format!("val \"{}\" of block \"{}\" does not exist", tb, name)),
                         }
                     } else {
                         self.expr_tree_val(name)?
@@ -1890,7 +1890,7 @@ impl Builder {
                                 } else {
                                     match self.resolve_module(m)? {
                                         Some(f) => f,
-                                        None => return err(format!("模块「{}」找不到", m)),
+                                        None => return err(format!("module \"{}\" not found", m)),
                                     }
                                 }
                             } else {
@@ -1900,7 +1900,7 @@ impl Builder {
                             let slot_key = format!("{}|{}#{}", blk_mod, tb, name);
                             match self.槽或建(&slot_key) {
                                 Some(id) => Ok(Value::Local(id)),
-                                None => err(format!("块「{}」的 val「{}」不存在", tb, name)),
+                                None => err(format!("val \"{}\" of block \"{}\" does not exist", tb, name)),
                             }
                         } else if vals.is_empty() {
                             self.expr_tree_val(name)
@@ -1957,17 +1957,17 @@ impl Builder {
                 let owner = bty.trim_end_matches('*').to_string();
                 if bty.ends_with('*') {
                     let c = self.bin(BinOp::Ne, b.clone(), Value::Null);
-                    self.emit(Stmt::Assert { cond: c, msg: "空引用——把手是 null，取不到字段".into(), fix: "取字段前先判一声（x != null），或用 case 接住空的情况".into() });
+                    self.emit(Stmt::Assert { cond: c, msg: "null reference - the handle is null, cannot read a field".into(), fix: "check for null first (x != null) before reading a field, or catch the empty case with a case branch".into() });
                 }
                 let ft = self.field_ty_of(&owner, name);
                 let tmp = self.temp(Ty(ft));
-                let base_local = match b { Value::Local(id) => id, _ => return err("字段访问的基必须是局部") };
+                let base_local = match b { Value::Local(id) => id, _ => return err("the base of a field access must be a local") };
                 self.emit(Stmt::Assign { lhs: Place::local(tmp), rhs: Rvalue::Use(Place { base: base_local, proj: vec![Proj::Field(name.clone())] }) });
                 Ok(Value::Local(tmp))
             }
             ExprKind::Deref(inner) => {
                 let v = self.expr_tree(inner)?;
-                match v { Value::Local(id) => Ok(Value::Local(id)), _ => err("解引用的基必须是局部") }
+                match v { Value::Local(id) => Ok(Value::Local(id)), _ => err("the base of a dereference must be a local") }
             }
             ExprKind::Unary { op, operand } => match op {
                 UnOp::Not => {
@@ -1988,7 +1988,7 @@ impl Builder {
                     self.emit(Stmt::Assign { lhs: Place::local(t2), rhs: Rvalue::BinOp { op: BinOp::BitXor, lhs: Value::Int(-1), rhs: v } });
                     Ok(Value::Local(t2))
                 }
-                _ => err("树行走器：不支持的一元运算"),
+                _ => err("tree walker: unsupported unary operation"),
             },
             ExprKind::Binary { op, lhs, rhs } => {
                 let l = self.expr_tree(lhs)?;
@@ -2012,7 +2012,7 @@ impl Builder {
                     prion_parser::expr::BinOp::BitXor => BinOp::BitXor,
                     prion_parser::expr::BinOp::Shl => BinOp::Shl,
                     prion_parser::expr::BinOp::Shr => BinOp::Shr,
-                    prion_parser::expr::BinOp::Range => return err("范围符不做二元运算"),
+                    prion_parser::expr::BinOp::Range => return err("the range operator is not a binary operator"),
                 };
                 Ok(self.bin(ir_op, l, r))
             }
@@ -2064,7 +2064,7 @@ impl Builder {
                 let ety = self.ty_of_value(ev.clone());
                 if ety.0 != ty.0 && ety.0 != "null" {
                     return err(format!(
-                        "if 表达式的两个分支类型要一致——一边是「{}」，另一边是「{}」",
+                        "the two branches of an if expression must have the same type - one is \"{}\", the other is \"{}\"",
                         ty.0, ety.0
                     ));
                 }
@@ -2077,7 +2077,7 @@ impl Builder {
                 let vals: Vec<Value> = elems.iter().map(|x| self.expr_tree(x)).collect::<Result<_, _>>()?;
                 for v in &vals {
                     if self.is_container_value(v) {
-                        return err("列表里不能直接装容器——要分组请用键值表或结构体字段");
+                        return err("a list cannot directly hold containers - to group, use a key-value table or struct fields");
                     }
                 }
                 let lty = self.lit_ty.take().unwrap_or_else(|| Ty("list".into()));
@@ -2091,7 +2091,7 @@ impl Builder {
                     let kv = match &k.kind {
                         ExprKind::Str(s) => MapKey::Str(s.clone()),
                         ExprKind::Int(n) => MapKey::Int(*n),
-                        _ => return err("map 字面量的键须是字符串或整数字面量"),
+                        _ => return err("map literal keys must be string or integer literals"),
                     };
                     let vv = self.expr_tree(v)?;
                     ps.push((kv, vv));
@@ -2124,7 +2124,7 @@ impl Builder {
             self.emit(Stmt::Assign { lhs: Place::local(tmp), rhs: Rvalue::Use(Place { base: id, proj: vec![Proj::Deref] }) });
             return Ok(Value::Local(tmp));
         }
-        err(format!("val「{}」没建过", name))
+        err(format!("val \"{}\" has not been defined", name))
     }
 
     
@@ -2149,7 +2149,7 @@ impl Builder {
         }
         if 绑定.iter().any(|x| x.is_none()) {
             return Err(BuildError {
-                message: format!("调用泛型 fn「{}」时推不出类型参数——实参要写成字面量或带类型的 val", name),
+                message: format!("cannot infer type parameters when calling generic fn \"{}\" - write arguments as literals or typed vals", name),
                 code: prion_error::Code::E304,
                 line: CUR_LINE.with(|c| c.get()),
                 file: String::new(),
@@ -2213,7 +2213,7 @@ Ok(v) => v,
                         return self.expr_tree_call_fn(&实例名, Some(tb), args, Some(&属模));
                     }
                     return Err(BuildError {
-                        message: format!("还没建过 fn「{}」——先用 add fn 建", name),
+                        message: format!("fn \"{}\" has not been defined yet - define it with add fn first", name),
                         code: prion_error::Code::E304,
                         line: CUR_LINE.with(|c| c.get()),
                         file: String::new(),
@@ -2248,7 +2248,7 @@ Ok(v) => v,
                 }
                 if 绑定.iter().any(|x| x.is_none()) {
                     return err(format!(
-                        "调用泛型 fn「{}」时推不出类型参数——实参要写成字面量或带类型的 val",
+                        "cannot infer type parameters when calling generic fn \"{}\" - write arguments as literals or typed vals",
                         name
                     ));
                 }
@@ -2277,7 +2277,7 @@ Ok(v) => v,
                 }
                 if 绑定.iter().any(|x| x.is_none()) {
                     return err(format!(
-                        "调用泛型 fn「{}」时推不出类型参数——实参要写成字面量或带类型的 val",
+                        "cannot infer type parameters when calling generic fn \"{}\" - write arguments as literals or typed vals",
                         name
                     ));
                 }
@@ -2292,7 +2292,7 @@ Ok(v) => v,
             }
         }
         let sig = self.fns.get(&key).or_else(|| self.global_fns.get(&key)).cloned().ok_or_else(|| BuildError {
-            message: format!("还没建过 fn「{}」——先用 add fn 建", name),
+            message: format!("fn \"{}\" has not been defined yet - define it with add fn first", name),
             code: prion_error::Code::E304,
             line: CUR_LINE.with(|c| c.get()),
             file: String::new(),
@@ -2312,14 +2312,14 @@ Ok(v) => v,
     
     fn expr_tree_indirect(&mut self, name: &str, args: Vec<Value>) -> Result<Value, BuildError> {
         let id = *self.names.get(name).ok_or_else(|| BuildError {
-            message: format!("val「{}」没建过", name),
+            message: format!("val \"{}\" has not been defined", name),
             code: prion_error::Code::E304,
             line: CUR_LINE.with(|c| c.get()),
             file: String::new(),
         })?;
         let fty = self.f.locals.get(id).map(|l| l.ty.0.clone()).unwrap_or_default();
         let ret = fn_ret_of(&fty).ok_or_else(|| BuildError {
-            message: format!("val「{}」不是函数类型——不能直接调", name),
+            message: format!("val \"{}\" is not a function type - it cannot be called directly", name),
             code: prion_error::Code::E201,
             line: CUR_LINE.with(|c| c.get()),
             file: String::new(),
@@ -2372,7 +2372,7 @@ Ok(v) => v,
     
     fn expr_tree_variant(&mut self, name: &str, vals: &[Value], root_id: u32) -> Result<Value, BuildError> {
         let (模板型, tag0, 模板载荷) = self.sum_variants.get(name).cloned().ok_or_else(|| BuildError {
-            message: format!("变体「{}」没登记", name),
+            message: format!("variant \"{}\" is not registered", name),
             code: prion_error::Code::E201,
             line: CUR_LINE.with(|c| c.get()),
             file: String::new(),
@@ -2433,7 +2433,7 @@ Ok(v) => v,
                     let 实例名 = format!("{}({})", name, 实参.join(", "));
                     if !self.type_idx.contains_key(&实例名) {
                         return err(format!(
-                            "泛型实例「{}」还没生成——请先写一条带类型的声明 `add val \"x\" {}(…) = …`",
+                            "generic instance \"{}\" has not been generated - first write a typed declaration `add val \"x\" {}(...) = ...`",
                             实例名, 实例名
                         ));
                     }
@@ -2449,14 +2449,14 @@ Ok(v) => v,
     
     fn construct命名(&mut self, 实例: &str, name: &str, vals: &[Value]) -> Result<Value, BuildError> {
         let idx = *self.type_idx.get(实例).ok_or_else(|| BuildError {
-            message: format!("类型「{}」没登记", 实例),
+            message: format!("type \"{}\" is not registered", 实例),
             code: prion_error::Code::E201,
             line: CUR_LINE.with(|c| c.get()),
             file: String::new(),
         })?;
         let st = self.types[idx].clone();
         if vals.len() != st.fields.len() {
-            return err(format!("构造器实参数不对——{} 要 {} 个字段", name, st.fields.len()));
+            return err(format!("wrong number of constructor arguments - {} requires {} field(s)", name, st.fields.len()));
         }
         let sid = self.new_local(None, Ty(st.name.clone()), false, false);
         for (k, a) in vals.iter().enumerate() {
@@ -2530,7 +2530,7 @@ Ok(v) => v,
 
     fn expr(&mut self, 段: &[Token]) -> Result<Value, BuildError> {
         if 段.is_empty() {
-            return err("表达式是空的");
+            return err("the expression is empty");
         }
         
         if matches!(段.first(), Some(Token::Kw("take"))) {
@@ -2548,7 +2548,7 @@ Ok(v) => v,
                 if 是常量 {
                     return Err(BuildError {
                         message: format!(
-                            "「{}」是编译期常量，要用 `call fix \"{}\"` 读，不能用 call val",
+                            "\"{}\" is a compile-time constant; read it with `call fix \"{}\"`, not call val",
                             n, n
                         ),
                         code: prion_error::Code::E201,
@@ -2594,14 +2594,14 @@ Ok(v) => v,
                     let blk = match 段.get(j + 1) {
                         Some(Token::Ident(n)) | Some(Token::Str(n)) => n.to_string(),
                         Some(Token::Kw(k)) => (*k).to_string().into(),
-                        _ => return err("`#:` 后应接块名"),
+                        _ => return err("`#:` must be followed by a block name"),
                     };
                     let full = if self.mod_has(&m) {
                         m
                     } else {
                         match self.resolve_module(&m)? {
                             Some(f) => f,
-                            None => return err(format!("模块「{}」找不到", m)),
+                            None => return err(format!("module \"{}\" not found", m)),
                         }
                     };
                     self.check_pub(&full, &blk)?;
@@ -2612,12 +2612,12 @@ Ok(v) => v,
             if let Some(k) = 定位 {
                 let n = match 段.get(k + 1) {
                     Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
-                    _ => return err("`call fix` 后应接常量名"),
+                    _ => return err("`call fix` must be followed by a constant name"),
                 };
                 if let Some((m, b)) = &跨模块目标 {
                     if self.hidden_items.contains(&format!("{}|{}|fix|{}", m, b, n)) {
                         return Err(BuildError {
-                            message: format!("常量「{}」被 hide 剔除，跨模块取不到", n),
+                            message: format!("constant \"{}\" is removed by hide and cannot be taken across modules", n),
                             code: prion_error::Code::E201,
                             line: CUR_LINE.with(|c| c.get()),
                             file: String::new(),
@@ -2625,7 +2625,7 @@ Ok(v) => v,
                     }
                 }
                 let c = self.常量值.borrow().get::<str>(n.as_ref()).cloned().ok_or_else(|| BuildError {
-                    message: format!("没有常量「{}」——先用 add fix 声明", n),
+                    message: format!("no constant \"{}\" - declare it with add fix first", n),
                     code: prion_error::Code::E304,
                     line: CUR_LINE.with(|c| c.get()),
                     file: String::new(),
@@ -2648,7 +2648,7 @@ Ok(v) => v,
         {
             let 内区 = prion_lexer::asm::括号内(段, 1)
                 .ok_or_else(|| BuildError {
-                    message: "asm 的括号没闭合".into(),
+                    message: "asm parentheses are not closed".into(),
                     code: prion_error::Code::E301,
                     line: CUR_LINE.with(|c| c.get()),
                     file: String::new(),
@@ -2657,7 +2657,7 @@ Ok(v) => v,
             let form = self.建asm(&内区)?;
             let 首 = match form.outs.first() {
                 Some((_, id, _)) => *id,
-                None => return err("asm 没有输出约束，不能当事赋值给变量——它是动作语句"),
+                None => return err("asm has no output constraint and cannot be assigned to a variable as a value - it is an action statement"),
             };
             self.emit(Stmt::Asm(form));
             return Ok(Value::Local(首));
@@ -2674,7 +2674,7 @@ Ok(v) => v,
                 .map(|(k, _)| k);
             if colon_opt.is_some() {
                 return Err(BuildError {
-                    message: "三元 `条件 ? 甲 : 乙` 已取消——改用 if 表达式：`if 条件 { 甲 } else { 乙 }`".into(),
+                    message: "the ternary `cond ? a : b` is retired - use an if expression: `if cond { a } else { b }`".into(),
                     code: prion_error::Code::E301,
                     line: CUR_LINE.with(|c| c.get()),
                     file: String::new(),
@@ -2704,7 +2704,7 @@ Ok(v) => v,
             }
         }
         if i != 段.len() {
-            return err(format!("表达式没读完（多余：{:?}）", &段[i..]));
+            return err(format!("expression not fully consumed (extra: {:?})", &段[i..]));
         }
         Ok(v)
     }
@@ -2744,7 +2744,7 @@ Ok(v) => v,
             let r = self.parse_bitor(t, i)?;
 
             if self.is_bool_value(&l) != self.is_bool_value(&r) {
-                return err("链式比较（如 `1 < x < 5`）v0 不做——拆成两个比较，用 `and` 连（如 `1 < x and x < 5`）");
+                return err("chained comparison (e.g. `1 < x < 5`) is not supported; split it into two comparisons joined with `and` (e.g. `1 < x and x < 5`)");
             }
             l = self.bin(op, l, r);
         }
@@ -2848,7 +2848,7 @@ Ok(v) => v,
                 _ => {}
             }
         }
-        let close = close.ok_or_else(|| BuildError { message: "下标缺 ]".into() , code: prion_error::Code::E302 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
+        let close = close.ok_or_else(|| BuildError { message: "index is missing ]".into() , code: prion_error::Code::E302 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
         if t[*i + 1..close].iter().any(|tk| *tk == Token::Sym("~")) {
             let pos = t[*i + 1..close].iter().position(|tk| *tk == Token::Sym("~")).unwrap();
             let a = self.expr(&t[*i + 1..*i + 1 + pos])?;
@@ -2911,7 +2911,7 @@ Ok(v) => v,
                     *i += 2;
                     Ok(Value::Float(-x))
                 } else {
-                    err("一元负号后要跟数字字面量".to_string())
+                    err("a unary minus must be followed by a numeric literal".to_string())
                 }
             }
             Some(Token::Int(n)) => {
@@ -2992,7 +2992,7 @@ Ok(v) => v,
                         _ => {}
                     }
                 }
-                let end = end.ok_or_else(|| BuildError { message: "括号没闭合".into() , code: prion_error::Code::E301 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
+                let end = end.ok_or_else(|| BuildError { message: "parentheses are not closed".into() , code: prion_error::Code::E301 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
                 let inner: Vec<Token> = t[*i + 1..end].to_vec();
                 *i = end + 1;
                 self.expr(&inner)
@@ -3001,11 +3001,11 @@ Ok(v) => v,
             Some(Token::Kw("call")) if matches!(t.get(*i + 1), Some(Token::Kw("fix"))) => {
                 let vname = match t.get(*i + 2) {
                     Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
-                    _ => return err("`call fix` 后应接常量名"),
+                    _ => return err("`call fix` must be followed by a constant name"),
                 };
                 let Some(c) = self.常量值.borrow().get(&vname).cloned() else {
                     return Err(BuildError {
-                        message: format!("还没建过常量「{}」——先用 add fix 建", vname),
+                        message: format!("constant \"{}\" has not been defined yet - define it with add fix first", vname),
                         code: prion_error::Code::E304,
                         line: CUR_LINE.with(|c| c.get()),
                         file: String::new(),
@@ -3019,12 +3019,12 @@ Ok(v) => v,
             Some(Token::Kw("call")) if matches!(t.get(*i + 1), Some(Token::Kw("val"))) => {
                 let vname = match t.get(*i + 2) {
                     Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
-                    _ => return err("`call val` 后应接 val 名"),
+                    _ => return err("`call val` must be followed by a val name"),
                 };
                 if self.常量值.borrow().contains_key(&vname) {
                     return Err(BuildError {
                         message: format!(
-                            "「{}」是编译期常量，要用 `call fix \"{}\"` 读，不能用 call val",
+                            "\"{}\" is a compile-time constant; read it with `call fix \"{}\"`, not call val",
                             vname, vname
                         ),
                         code: prion_error::Code::E201,
@@ -3060,7 +3060,7 @@ Ok(v) => v,
                 if self.常量值.borrow().contains_key(&vname) {
                     return Err(BuildError {
                         message: format!(
-                            "「{}」是编译期常量，要用 `call fix \"{}\"` 读，不能用 call val",
+                            "\"{}\" is a compile-time constant; read it with `call fix \"{}\"`, not call val",
                             vname, vname
                         ),
                         code: prion_error::Code::E201,
@@ -3069,7 +3069,7 @@ Ok(v) => v,
                     });
                 }
                 let id = *self.names.get(&vname).ok_or_else(|| BuildError {
-                    message: format!("本块没有 val「{}」——同块取 val 取的是本块的", vname),
+                    message: format!("this block has no val \"{}\" - a same-block val read takes this block's", vname),
                     code: prion_error::Code::E304,
                     line: CUR_LINE.with(|c| c.get()),
                     file: String::new(),
@@ -3083,7 +3083,7 @@ Ok(v) => v,
                         .map(|l| l.ty.0.clone())
                         .unwrap_or_default();
                     let ret = fn_ret_of(&fty).ok_or_else(|| BuildError {
-                        message: format!("val「{}」不是函数类型——不能直接调", vname),
+                        message: format!("val \"{}\" is not a function type - it cannot be called directly", vname),
                         code: prion_error::Code::E201,
                         line: CUR_LINE.with(|c| c.get()),
                         file: String::new(),
@@ -3107,7 +3107,7 @@ Ok(v) => v,
                         *i += 1;
                     }
                     if depth != 0 {
-                        return err("调用的括号没闭合");
+                        return err("call parentheses are not closed");
                     }
                     let mut vals = Vec::new();
                     for a in split_args(&inner) {
@@ -3150,7 +3150,7 @@ Ok(v) => v,
                     let blk = match t.get(*i + 2) {
                         Some(Token::Ident(n)) => n.to_string(),
                         Some(Token::Kw(k)) => (*k).to_string().into(),
-                        _ => return err("`call #:` 后应接块名"),
+                        _ => return err("`call #:` must be followed by a block name"),
                     };
                     (self.module.clone(), blk)
                 } else {
@@ -3175,12 +3175,12 @@ Ok(v) => v,
                         }
                     }
                     if m.is_empty() || !matches!(t.get(j), Some(Token::HashColon)) {
-                        return err("`##:` 后应接模块名再接 `#:块`——形如 `##:前端.拆词 #:分句`");
+                        return err("`##:` must be followed by a module name then `#:block` - e.g. `##:frontend.tokenizer #:split`");
                     }
                     let blk = match t.get(j + 1) {
                         Some(Token::Ident(n)) => n.to_string(),
                         Some(Token::Kw(k)) => (*k).to_string().into(),
-                        _ => return err("`##:模块 #:` 后应接块名"),
+                        _ => return err("`##:module #:` must be followed by a block name"),
                     };
                     colon_at = Some(j);
                     
@@ -3189,7 +3189,7 @@ Ok(v) => v,
                     } else {
                         match self.resolve_module(&m)? {
                             Some(f) => f,
-                            None => return err(format!("模块「{}」找不到", m)),
+                            None => return err(format!("module \"{}\" not found", m)),
                         }
                     };
                     (full, blk)
@@ -3199,14 +3199,14 @@ Ok(v) => v,
                     None => (
                         match t.get(*i + 4) {
                             Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
-                            _ => return err("`call #:块 val` 后应接 val 名"),
+                            _ => return err("`call #:block val` must be followed by a val name"),
                         },
                         5,
                     ),
                     Some(j) => (
                         match t.get(j + 3) {
                             Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
-                            _ => return err("`call ##:模块 #:块 val` 后应接 val 名"),
+                            _ => return err("`call ##:module #:block val` must be followed by a val name"),
                         },
                         j + 4,
                     ),
@@ -3219,7 +3219,7 @@ Ok(v) => v,
                     None => {
                         return Err(BuildError {
                             message: format!(
-                                "块「{}」的 val「{}」不存在——先 add val 建它，sle 块还要先 call #:{}",
+                                "val \"{}\" of block \"{}\" does not exist - define it with add val first; for an sle block, call #:{} first too",
                                 blk, vname, blk
                             ),
                             code: prion_error::Code::E309,
@@ -3235,10 +3235,10 @@ Ok(v) => v,
             Some(Token::Kw("call")) if matches!(t.get(*i + 1), Some(Token::Kw("fn"))) => {
                 let fname = match t.get(*i + 2) {
                     Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
-                    _ => return err("`call fn` 后应接函数名"),
+                    _ => return err("`call fn` must be followed by a function name"),
                 };
                 if !matches!(t.get(*i + 3), Some(Token::Sym("("))) {
-                    return err("调用要写实参表 `(…)`");
+                    return err("calls require an argument list `(...)`");
                 }
                 let key = format!("{}|{}|{}", self.module, self.block, fname);
                 
@@ -3261,7 +3261,7 @@ Ok(v) => v,
                         }
                         if 绑定.iter().any(|x| x.is_none()) {
                             return err(format!(
-                                "调用泛型 fn「{}」时推不出类型参数——实参要写成字面量或带类型的 val",
+                                "cannot infer type parameters when calling generic fn \"{}\" - write arguments as literals or typed vals",
                                 fname
                             ));
                         }
@@ -3308,7 +3308,7 @@ Ok(v) => v,
                         }
                         if 绑定.iter().any(|x| x.is_none()) {
                             return err(format!(
-                                "调用泛型 fn「{}」时推不出类型参数——实参要写成字面量或带类型的 val",
+                                "cannot infer type parameters when calling generic fn \"{}\" - write arguments as literals or typed vals",
                                 fname
                             ));
                         }
@@ -3340,7 +3340,7 @@ Ok(v) => v,
                     .or_else(|| self.global_fns.get(&key))
                     .cloned()
                     .ok_or_else(|| BuildError {
-                    message: format!("还没建过 fn「{}」——先用 add fn 建", fname),
+                    message: format!("fn \"{}\" has not been defined yet - define it with add fn first", fname),
                     code: prion_error::Code::E304,
                     line: CUR_LINE.with(|c| c.get()),
                     file: String::new(),
@@ -3364,7 +3364,7 @@ Ok(v) => v,
                     *i += 1;
                 }
                 if depth != 0 {
-                    return err("调用的括号没闭合");
+                    return err("call parentheses are not closed");
                 }
                 let mut vals = Vec::new();
                 for a in split_args(&inner) {
@@ -3398,21 +3398,21 @@ Ok(v) => v,
                 let blk = match t.get(*i + 1) {
                     Some(Token::Ident(n)) => n.to_string(),
                     Some(Token::Kw(k)) => (*k).to_string().into(),
-                    _ => return err("`#:` 后应接块名"),
+                    _ => return err("`#:` must be followed by a block name"),
                 };
                 if !matches!(t.get(*i + 2), Some(Token::Kw("fn"))) {
-                    return err("跨块取用目前只支持 `#:块 fn \"名\"(… )`");
+                    return err("cross-block use currently only supports `#:block fn \"name\"(...)`");
                 }
                 let fname = match t.get(*i + 3) {
                     Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
-                    _ => return err("`#:块 fn` 后应接函数名"),
+                    _ => return err("`#:block fn` must be followed by a function name"),
                 };
                 if !matches!(t.get(*i + 4), Some(Token::Sym("("))) {
-                    return err("跨块取用要写实参表 `(…)`");
+                    return err("cross-block use requires an argument list `(...)`");
                 }
                 let key = format!("{}|{}|{}", self.module, blk, fname);
                 let sig = self.global_fns.get(&key).cloned().ok_or_else(|| BuildError {
-                    message: format!("块「{}」里没有 fn「{}」", blk, fname),
+                    message: format!("block \"{}\" has no fn \"{}\"", blk, fname),
                     code: prion_error::Code::E304,
                     line: CUR_LINE.with(|c| c.get()),
                     file: String::new(),
@@ -3436,7 +3436,7 @@ Ok(v) => v,
                     *i += 1;
                 }
                 if depth != 0 {
-                    return err("跨块调用的括号没闭合");
+                    return err("cross-block call parentheses are not closed");
                 }
                 let mut vals = Vec::new();
                 for a in split_args(&inner) {
@@ -3483,22 +3483,22 @@ Ok(v) => v,
                     }
                 }
                 if module.is_empty() || !matches!(t.get(j), Some(Token::HashColon)) {
-                    return err("`##:` 后应接模块名再接 `#:块`——形如 `##:前端.拆词 #:分句`");
+                    return err("`##:` must be followed by a module name then `#:block` - e.g. `##:frontend.tokenizer #:split`");
                 }
                 let blk = match t.get(j + 1) {
                     Some(Token::Ident(n)) => n.to_string(),
                     Some(Token::Kw(k)) => (*k).to_string().into(),
-                    _ => return err("`##:模块 #:` 后应接块名"),
+                    _ => return err("`##:module #:` must be followed by a block name"),
                 };
                 if !matches!(t.get(j + 2), Some(Token::Kw("fn"))) {
-                    return err("跨模块取用目前只支持 `##:模块 #:块 fn \"名\"(… )`");
+                    return err("cross-module use currently only supports `##:module #:block fn \"name\"(...)`");
                 }
                 let fname = match t.get(j + 3) {
                     Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
-                    _ => return err("`##:模块 #:块 fn` 后应接函数名"),
+                    _ => return err("`##:module #:block fn` must be followed by a function name"),
                 };
                 if !matches!(t.get(j + 4), Some(Token::Sym("("))) {
-                    return err("跨模块取用要写实参表 `(…)`");
+                    return err("cross-module use requires an argument list `(...)`");
                 }
                 let key = format!("{}|{}|{}", module, blk, fname);
 
@@ -3509,7 +3509,7 @@ Ok(v) => v,
                 } else {
                     
                     return err(format!(
-                        "模块「{}」找不到——单文件编译不装载模块；请按目录工程编（入口放 main.an），或检查模块文件在不在",
+                        "module \"{}\" not found - single-file compilation does not load modules; build as a directory project (entry in main.an), or check that the module file exists",
                         module
                     ));
                 };
@@ -3522,7 +3522,7 @@ Ok(v) => v,
                 {
                     return Err(BuildError {
                         message: format!(
-                            "fn「{}」在块「{}」（模块 {}）里被 hide 了——它的公开面里没有这项",
+                            "fn \"{}\" is hidden in block \"{}\" (module {}) - it is not part of its public surface",
                             fname, blk, full_mod
                         ),
                         code: prion_error::Code::E201,
@@ -3537,7 +3537,7 @@ Ok(v) => v,
                         let 模板 = 泛型语句体fn表.with(|g| g.borrow().get(&fname).cloned());
                         let Some((带能力, 形参, 返回, 体, _模, _块)) = 模板 else {
                             return Err(BuildError {
-                                message: format!("模块「{}」的块「{}」里没有 fn「{}」", module, blk, fname),
+                                message: format!("block \"{}\" of module \"{}\" has no fn \"{}\"", module, blk, fname),
                                 code: prion_error::Code::E304,
                                 line: CUR_LINE.with(|c| c.get()),
                                 file: String::new(),
@@ -3559,7 +3559,7 @@ Ok(v) => v,
                         }
                         if 绑定.iter().any(|x| x.is_none()) {
                             return err(format!(
-                                "调用泛型 fn「{}」时推不出类型参数——实参要写成字面量或带类型的 val",
+                                "cannot infer type parameters when calling generic fn \"{}\" - write arguments as literals or typed vals",
                                 fname
                             ));
                         }
@@ -3581,7 +3581,7 @@ Ok(v) => v,
                         }
                         调用键 = 实例键.clone();
                         self.fns.get(&实例键).cloned().ok_or_else(|| BuildError {
-                            message: format!("模块「{}」的块「{}」里没有 fn「{}」", module, blk, fname),
+                            message: format!("block \"{}\" of module \"{}\" has no fn \"{}\"", module, blk, fname),
                             code: prion_error::Code::E304,
                             line: CUR_LINE.with(|c| c.get()),
                             file: String::new(),
@@ -3607,7 +3607,7 @@ Ok(v) => v,
                     *i += 1;
                 }
                 if depth != 0 {
-                    return err("跨模块调用的括号没闭合");
+                    return err("cross-module call parentheses are not closed");
                 }
                 let mut vals = Vec::new();
                 for a in split_args(&inner) {
@@ -3636,7 +3636,7 @@ Ok(v) => v,
             }
             
             Some(Token::HashColon) => {
-                err("跨块取用要写 `call`——形如 `call #:块 fn \"名\"(…)`")
+                err("cross-block use requires `call` - the form is `call #:block fn \"name\"(...)`")
             }
 
             Some(Token::Kw(k)) if matches!(t.get(*i + 1), Some(Token::Sym("("))) => {
@@ -3660,7 +3660,7 @@ Ok(v) => v,
                     *i += 1;
                 }
                 if depth != 0 {
-                    return err("调用括号没闭合");
+                    return err("call parentheses are not closed");
                 }
                 let mut vals = Vec::new();
                 
@@ -3702,7 +3702,7 @@ Ok(v) => v,
                         _ => {}
                     }
                 }
-                let end = end.ok_or_else(|| BuildError { message: "map 字面量缺 }".into() , code: prion_error::Code::E302 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
+                let end = end.ok_or_else(|| BuildError { message: "map literal is missing }".into() , code: prion_error::Code::E302 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
                 let inner = t[*i + 1..end].to_vec();
                 *i = end + 1;
                 let mut pairs: Vec<(MapKey, Value)> = Vec::new();
@@ -3711,10 +3711,10 @@ Ok(v) => v,
                     let k = match seg.first() {
                         Some(Token::Str(k)) => MapKey::Str(k.to_string()),
                         Some(Token::Int(n)) => MapKey::Int(*n),
-                        _ => return err("map 字面量的键须是字符串或整数字面量"),
+                        _ => return err("map literal keys must be string or integer literals"),
                     };
                     if !matches!(seg.get(1), Some(Token::Sym(":"))) {
-                        return err("map 字面量键值之间缺 :");
+                        return err("map literal is missing : between key and value");
                     }
                     pairs.push((k, self.expr(&seg[2..])?));
                 }
@@ -3744,7 +3744,7 @@ Ok(v) => v,
                         _ => {}
                     }
                 }
-                let end = end.ok_or_else(|| BuildError { message: "列表字面量缺 ]".into() , code: prion_error::Code::E302 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
+                let end = end.ok_or_else(|| BuildError { message: "list literal is missing ]".into() , code: prion_error::Code::E302 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
                 let inner = t[start + 1..end].to_vec();
                 *i = end + 1;
                 let mut elems = Vec::new();
@@ -3752,7 +3752,7 @@ Ok(v) => v,
                     let v = self.expr(&a)?;
 
                     if self.is_container_value(&v) {
-                        return err("列表里不能直接装容器（`[[1], [2]]` 不行）——要分组请用键值表（如 map(str, list(int))）或结构体字段装列表");
+                        return err("a list cannot directly hold containers (`[[1], [2]]` is invalid) - to group, use a key-value table (e.g. map(str, list(int))) or struct fields");
                     }
                     elems.push(v);
                 }
@@ -3766,12 +3766,12 @@ Ok(v) => v,
             Some(Token::Kw("val")) => {
                 let name = match t.get(*i + 1) {
                     Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
-                    _ => return err("`val` 后应接名字"),
+                    _ => return err("`val` must be followed by a name"),
                 };
                 if self.常量值.borrow().contains_key(&name) {
                     return Err(BuildError {
                         message: format!(
-                            "「{}」是编译期常量，要用 `call fix \"{}\"` 读，不能用 call val",
+                            "\"{}\" is a compile-time constant; read it with `call fix \"{}\"`, not call val",
                             name, name
                         ),
                         code: prion_error::Code::E201,
@@ -3795,7 +3795,7 @@ Ok(v) => v,
                             });
                             tmp
                         } else {
-                            return err(format!("val「{}」没建过", name));
+                            return err(format!("val \"{}\" has not been defined", name));
                         }
                     }
                 };
@@ -3831,13 +3831,13 @@ Ok(v) => v,
                             _ => {}
                         }
                     }
-                    let close = close.ok_or_else(|| BuildError { message: "delta 括号没闭合".into() , code: prion_error::Code::E302 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
+                    let close = close.ok_or_else(|| BuildError { message: "delta parentheses are not closed".into() , code: prion_error::Code::E302 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
                     let op = match t.get(*i + 1) {
                         Some(Token::Sym("+")) => BinOp::Add,
                         Some(Token::Sym("-")) => BinOp::Sub,
                         Some(Token::Sym("*")) => BinOp::Mul,
                         Some(Token::Sym("/")) => BinOp::Div,
-                        _ => return err("delta 括号应以运算符开头（如 `(+1)`、`(+ 表达式)`）"),
+                        _ => return err("delta parentheses must start with an operator (e.g. `(+1)`, `(+ expression)`)"),
                     };
                     let rhs = self.expr(&t[*i + 2..close])?;
                     let nv = self.bin(op, Value::Local(id), rhs);
@@ -3851,7 +3851,7 @@ Ok(v) => v,
             {
                 let fname = match t.get(*i + 1) {
                     Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
-                    _ => return err("`fn` 后应接函数名"),
+                    _ => return err("`fn` must be followed by a function name"),
                 };
                 *i += 2;
                 let key = format!("{}|{}|{}", self.module, self.block, fname);
@@ -3861,7 +3861,7 @@ Ok(v) => v,
                     .or_else(|| self.global_fns.get(&key))
                     .cloned()
                     .ok_or_else(|| BuildError {
-                        message: format!("还没建过 fn「{}」——先用 add fn 建", fname),
+                        message: format!("fn \"{}\" has not been defined yet - define it with add fn first", fname),
                         code: prion_error::Code::E304,
                         line: CUR_LINE.with(|c| c.get()),
                         file: String::new(),
@@ -3879,7 +3879,7 @@ Ok(v) => v,
                 if let Some(bid) = self.names.get(n.as_ref()) {
                     if !self.f.locals.get(*bid).map(|l| l.bare_ok).unwrap_or(false) {
                         return err(format!(
-                            "裸名「{}」——取 val 请写 val \"{}\"（全面显式：fn 与 val 可重名，裸名消不了歧义）",
+                            "bare name \"{}\" - read the val as val \"{}\" (fully explicit: fn and val may share a name, so a bare name cannot resolve ambiguity)",
                             n, n
                         ));
                     }
@@ -3889,7 +3889,7 @@ Ok(v) => v,
                     let base = *self
                         .names
                         .get(n.as_ref())
-                        .ok_or_else(|| BuildError { message: format!("还没建过「{}」", n) , code: prion_error::Code::E304 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
+                        .ok_or_else(|| BuildError { message: format!("\"{}\" has not been defined yet", n) , code: prion_error::Code::E304 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
                     let open = *i + 1;
                     let mut depth = 0i32;
                     let mut close = None;
@@ -3906,7 +3906,7 @@ Ok(v) => v,
                             _ => {}
                         }
                     }
-                    let close = close.ok_or_else(|| BuildError { message: "下标缺 ]".into() , code: prion_error::Code::E302 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
+                    let close = close.ok_or_else(|| BuildError { message: "index is missing ]".into() , code: prion_error::Code::E302 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
                     let idx_toks = t[open + 1..close].to_vec();
                     *i = close + 1;
                     
@@ -3975,7 +3975,7 @@ Ok(v) => v,
                         .map(|l| l.ty.0.starts_with("que") || l.ty.0.starts_with("stack"))
                         .unwrap_or(false);
                     if slice_base_filo {
-                        return err("队列/栈只进只出——切片只对列表用");
+                        return err("queues/stacks are push-pop only - slicing applies to lists only");
                     }
                     if idx_toks.contains(&Token::Sym("~")) {
                         let pos = idx_toks.iter().position(|tk| *tk == Token::Sym("~")).unwrap();
@@ -4024,7 +4024,7 @@ Ok(v) => v,
                     let cur = *self
                         .names
                         .get(n.as_ref())
-                        .ok_or_else(|| BuildError { message: format!("还没建过「{}」", n) , code: prion_error::Code::E304 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
+                        .ok_or_else(|| BuildError { message: format!("\"{}\" has not been defined yet", n) , code: prion_error::Code::E304 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
                     let cur_ty = self
                         .f
                         .locals
@@ -4057,7 +4057,7 @@ Ok(v) => v,
                         *i += 1;
                     }
                     if depth != 0 {
-                        return err("构造括号没闭合");
+                        return err("construction parentheses are not closed");
                     }
                     let args = split_args(&inner);
                     
@@ -4069,7 +4069,7 @@ Ok(v) => v,
                     let st = self.types[self.type_idx[&键]].clone();
                     if args.len() != st.fields.len() {
                         return err(format!(
-                            "类型「{}」有 {} 个字段，构造给了 {} 个",
+                            "type \"{}\" has {} field(s), construction gave {}",
                             st.name,
                             st.fields.len(),
                             args.len()
@@ -4116,7 +4116,7 @@ Ok(v) => v,
                         *i += 1;
                     }
                     if depth != 0 {
-                        return err("调用括号没闭合");
+                        return err("call parentheses are not closed");
                     }
                     let mut vals = Vec::new();
                     for a in split_args(&inner) {
@@ -4186,7 +4186,7 @@ Ok(v) => v,
                             *i += 1;
                         }
                         if depth != 0 {
-                            return err("调用括号没闭合");
+                            return err("call parentheses are not closed");
                         }
                         let mut vals = Vec::new();
                         for a in split_args(&inner) {
@@ -4223,7 +4223,7 @@ Ok(v) => v,
                             *i += 1;
                         }
                         if depth != 0 {
-                            return err("调用括号没闭合");
+                            return err("call parentheses are not closed");
                         }
                         let mut vals = Vec::new();
                         for a in split_args(&inner) {
@@ -4293,7 +4293,7 @@ Ok(v) => v,
                         }
                     }
                     return err(format!(
-                        "调用要写 `call`——形如 `call fn \"{}\"(…)`（同块调用也要写）",
+                        "calls require `call` - the form is `call fn \"{}\"(...)` (same-block calls require it too)",
                         n
                     ));
                 }
@@ -4339,7 +4339,7 @@ Ok(v) => v,
                             *i += 1;
                         }
                         if depth != 0 {
-                            return err("变体构造的括号没闭合");
+                            return err("variant construction parentheses are not closed");
                         }
                         let mut vals = Vec::new();
                         for a in split_args(&inner) {
@@ -4367,13 +4367,13 @@ Ok(v) => v,
                 *i += 1;
                 match self.names.get(n.as_ref()) {
                     Some(id) => Ok(Value::Local(*id)),
-                    None => err(format!("还没建过「{}」——先用 add val 建 (fn={})", n, self.f.name)),
+                    None => err(format!("\"{}\" has not been defined yet - define it with add val first (fn={})", n, self.f.name)),
                 }
             }
             
             Some(Token::Kw("match")) => self.match_expr(t, i),
             Some(Token::Kw("if")) => self.if_expr(t, i),
-            other => err(format!("表达式里不认识的 token：{:?}", other)),
+            other => err(format!("unrecognized token in expression: {:?}", other)),
         }
     }
 
@@ -4501,14 +4501,14 @@ Ok(v) => v,
             };
             let name = match 段.get(name_at) {
                 Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
-                _ => return err(format!("fn 后应是名字：{:?}", 段)),
+                _ => return err(format!("expected a name after fn: {:?}", 段)),
             };
             
             if matches!(段.get(name_at + 1), Some(Token::Sym("("))) {
                 if let Some(类型参数) = 读类型参数表(段, name_at + 1) {
                     let 类型参数表止 = 括号止(段, name_at + 1)
                         .ok_or_else(|| BuildError {
-                            message: "泛型 fn 的类型参数表没闭合".into(),
+                            message: "the type parameter list of the generic fn is not closed".into(),
                             code: prion_error::Code::E301,
                             line: CUR_LINE.with(|c| c.get()),
                             file: String::new(),
@@ -4541,7 +4541,7 @@ Ok(v) => v,
             
             let (ret, _限定, _) = parse_type_ref(段, after)
                 .map_err(|_| BuildError {
-                    message: "add fn 缺返回类型（函数边界类型必写）".into(),
+                    message: "add fn is missing a return type (boundary types on functions are mandatory)".into(),
                     code: prion_error::Code::E301,
                     line: CUR_LINE.with(|c| c.get()),
                     file: String::new(),
@@ -4610,15 +4610,15 @@ Ok(v) => v,
         {
             let name = match 段.get(3) {
                 Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
-                _ => return err("add outs fn 后应是名字"),
+                _ => return err("expected a name after add outs fn"),
             };
             if 段.iter().any(|t| *t == Token::Sym("=")) {
-                return err("外部函数声明没有函数体——函数体在 C 那边");
+                return err("an external function declaration has no body - the body lives in C");
             }
             let (params, after) = parse_params(段)?;
             let ret = match 段.get(after) {
                 Some(Token::Kw(t)) => Ty((*t).to_string()),
-                _ => return err("add outs fn 缺返回类型（外部函数边界类型必写）"),
+                _ => return err("add outs fn is missing a return type (external function boundary types are mandatory)"),
             };
             let param_tys: Vec<Ty> = params.iter().map(|(_, t)| t.clone()).collect();
             self.fns.insert(
@@ -4633,7 +4633,7 @@ Ok(v) => v,
         if matches!(kind, prion_parser::LineKind::CallFn(_)) {
             let name = match 段.get(2) {
                 Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
-                _ => return err(format!("call fn 后应是名字：{:?}", 段)),
+                _ => return err(format!("expected a name after call fn: {:?}", 段)),
             };
             let key = format!("{}|{}|{}", self.module, self.block, name);
             let sig = self
@@ -4642,7 +4642,7 @@ Ok(v) => v,
                 .cloned()
                 .or_else(|| self.global_fns.get(&key).cloned())
                 .ok_or_else(|| BuildError {
-                    message: format!("还没建过 fn「{}」——先用 add fn 建", name),
+                    message: format!("fn \"{}\" has not been defined yet - define it with add fn first", name),
                     code: prion_error::Code::E304,
                     line: CUR_LINE.with(|c| c.get()),
                     file: String::new(),
@@ -4671,7 +4671,7 @@ Ok(v) => v,
             let blk = match 段.get(2) {
                 Some(Token::Ident(n)) => n.to_string(),
                 Some(Token::Kw(k)) => (*k).to_string().into(),
-                _ => return err("`call #:` 后应接块名"),
+                _ => return err("`call #:` must be followed by a block name"),
             };
             (blk, self.module.clone())
         } else if matches!(kind, prion_parser::LineKind::CallBlock(_))
@@ -4698,23 +4698,23 @@ Ok(v) => v,
                 }
             }
             if m.is_empty() || !matches!(段.get(j), Some(Token::HashColon)) {
-                return err("`##:` 后应接模块名再接 `#:块`——形如 `##:前端.拆词 #:分句`");
+                return err("`##:` must be followed by a module name then `#:block` - e.g. `##:frontend.tokenizer #:split`");
             }
             let blk = match 段.get(j + 1) {
                 Some(Token::Ident(n)) => n.to_string(),
                 Some(Token::Kw(k)) => (*k).to_string().into(),
-                _ => return err("`##:模块 #:` 后应接块名"),
+                _ => return err("`##:module #:` must be followed by a block name"),
             };
             
             if 段.get(j + 2).is_some() {
-                return err("跨模块跑整块写 `call ##:模块 #:块`；取 fn / val 用各自形态");
+                return err("to run a whole block across modules write `call ##:module #:block`; take fn / val with their respective forms");
             }
             let full = if self.mod_has(&m) {
                 m.clone()
             } else {
                 match self.resolve_module(&m)? {
                     Some(f) => f,
-                    None => return err(format!("模块「{}」找不到", m)),
+                    None => return err(format!("module \"{}\" not found", m)),
                 }            };
             (blk, full)
         } else {
@@ -4762,15 +4762,15 @@ Ok(v) => v,
         {
             let vname = match 段.get(2) {
                 Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
-                _ => return err("`call val` 后应接 val 名"),
+                _ => return err("`call val` must be followed by a val name"),
             };
             if !matches!(段.get(3), Some(Token::Sym("="))) {
                 return err(
-                    "`call val \"名\"` 作语句要接 `= 新值`；只读取请放进表达式（`= call val \"名\"`）",
+                    "`call val \"name\"` as a statement must be followed by `= newvalue`; for a pure read put it in an expression (`= call val \"name\"`)",
                 );
             }
             let id = *self.names.get(&vname).ok_or_else(|| BuildError {
-                message: format!("本块没有 val「{}」——同块写 val 写的是本块的", vname),
+                message: format!("this block has no val \"{}\" - a same-block val write targets this block's", vname),
                 code: prion_error::Code::E304,
                 line: CUR_LINE.with(|c| c.get()),
                 file: String::new(),
@@ -4807,14 +4807,14 @@ Ok(v) => v,
                     }
                 }
                 if m.is_empty() || !matches!(段.get(j), Some(Token::HashColon)) {
-                    return err("`##:` 后应接模块名再接 `#:块`——形如 `##:前端.拆词 #:分句`");
+                    return err("`##:` must be followed by a module name then `#:block` - e.g. `##:frontend.tokenizer #:split`");
                 }
                 let full = if self.mod_has(&m) {
                     m.clone()
                 } else {
                     match self.resolve_module(&m)? {
                         Some(f) => f,
-                        None => return err(format!("模块「{}」找不到", m)),
+                        None => return err(format!("module \"{}\" not found", m)),
                     }
                 };
                 (full, j + 1)
@@ -4827,16 +4827,16 @@ Ok(v) => v,
                 return Ok(());
             }
             if !matches!(段.get(blk_idx + 1), Some(Token::Kw("val"))) {
-                return err("跨块写 val 要写 `#:块 val \"名\"`");
+                return err("writing a val across blocks requires `#:block val \"name\"`");
             }
             let blk = match 段.get(blk_idx) {
                 Some(Token::Ident(n)) => n.to_string(),
                 Some(Token::Kw(k)) => (*k).to_string().into(),
-                _ => return err("`call #:` 后应接块名"),
+                _ => return err("`call #:` must be followed by a block name"),
             };
             let vname = match 段.get(blk_idx + 2) {
                 Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
-                _ => return err("`#:块 val` 后应接 val 名"),
+                _ => return err("`#:block val` must be followed by a val name"),
             };
 
             self.check_pub(&blk_mod, &blk)?;
@@ -4846,7 +4846,7 @@ Ok(v) => v,
                 None => {
                     return Err(BuildError {
                         message: format!(
-                            "块「{}」的 val「{}」不存在——先 add val 建它，sle 块还要先 call #:{}",
+                            "val \"{}\" of block \"{}\" does not exist - define it with add val first; for an sle block, call #:{} first too",
                             blk, vname, blk
                         ),
                         code: prion_error::Code::E309,
@@ -4869,7 +4869,7 @@ Ok(v) => v,
             && matches!(段.get(1), Some(Token::Sym("[")))
         {
             return Err(BuildError {
-                message: "下标写左边要显式——写 `val \"名\"[下标] = 值`".into(),
+                message: "the index write target must be explicit - write `val \"name\"[index] = value`".into(),
                 code: prion_error::Code::E303,
                 line: CUR_LINE.with(|c| c.get()),
                 file: String::new(),
@@ -4888,7 +4888,7 @@ Ok(v) => v,
             let base = *self
                 .names
                 .get(&base_name)
-                .ok_or_else(|| BuildError { message: format!("还没建过「{}」", base_name) , code: prion_error::Code::E304 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
+                .ok_or_else(|| BuildError { message: format!("\"{}\" has not been defined yet", base_name) , code: prion_error::Code::E304 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
             let mut depth = 0i32;
             let mut close = None;
             for (k, tk) in 段.iter().enumerate().skip(open) {
@@ -4904,17 +4904,17 @@ Ok(v) => v,
                     _ => {}
                 }
             }
-            let close = close.ok_or_else(|| BuildError { message: "下标缺 ]".into() , code: prion_error::Code::E302 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
+            let close = close.ok_or_else(|| BuildError { message: "index is missing ]".into() , code: prion_error::Code::E302 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
             let eq = 段
                 .iter()
                 .position(|t| *t == Token::Sym("="))
-                .ok_or_else(|| BuildError { message: "下标写缺 = 表达式".into() , code: prion_error::Code::E301 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
+                .ok_or_else(|| BuildError { message: "index write is missing = expression".into() , code: prion_error::Code::E301 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
             let idx = self.expr(&段[open + 1..close])?;
             
             if matches!(段.get(close + 1), Some(Token::Sym("."))) {
                 let field = match 段.get(close + 2) {
                     Some(Token::Ident(f)) | Some(Token::Str(f)) => f.to_string(),
-                    _ => return err("下标后的 `.` 之后应接字段名"),
+                    _ => return err("the `.` after an index must be followed by a field name"),
                 };
                 let val = self.行右值(exprs, 段, eq)?;
                 let base_ty = self
@@ -4934,8 +4934,8 @@ Ok(v) => v,
                     let c = self.bin(BinOp::Ne, Value::Local(h), Value::Null);
                     self.emit(Stmt::Assert {
                         cond: c,
-                        msg: "空引用——把手是 null，写不到字段".into(),
-                        fix: "写字段前先判一声（x != null）".into(),
+                        msg: "null reference - the handle is null, cannot write a field".into(),
+                        fix: "check for null first (x != null) before writing a field".into(),
                     });
                 }
                 self.emit(Stmt::Assign {
@@ -4979,7 +4979,7 @@ Ok(v) => v,
                 .map(|l| l.ty.0.starts_with("que") || l.ty.0.starts_with("stack"))
                 .unwrap_or(false);
             if base_is_filo {
-                return err("队列/栈只进只出——下标赋值只对列表用");
+                return err("queues/stacks are push-pop only - index assignment applies to lists only");
             }
             self.emit(Stmt::ListSet {
                 list: Value::Local(base),
@@ -4996,7 +4996,7 @@ Ok(v) => v,
             && matches!(段.get(1), Some(Token::Sym(".")))
         {
             return Err(BuildError {
-                message: "字段写左边要显式——写 `val \"名\".字段 = 值`".into(),
+                message: "the field write target must be explicit - write `val \"name\".field = value`".into(),
                 code: prion_error::Code::E303,
                 line: CUR_LINE.with(|c| c.get()),
                 file: String::new(),
@@ -5009,15 +5009,15 @@ Ok(v) => v,
         if let Some(ni) = 字段写名位 {
             let base_name = match 段.get(ni) {
                 Some(Token::Ident(n)) | Some(Token::Str(n)) => n.to_string(),
-                _ => return err("字段写左边应是名字"),
+                _ => return err("the field write target must be a name"),
             };
             let base = *self
                 .names
                 .get(&base_name)
-                .ok_or_else(|| BuildError { message: format!("还没建过「{}」", base_name) , code: prion_error::Code::E304 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
+                .ok_or_else(|| BuildError { message: format!("\"{}\" has not been defined yet", base_name) , code: prion_error::Code::E304 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
             let field = match 段.get(ni + 2) {
                 Some(Token::Ident(f)) | Some(Token::Str(f)) => f.to_string(),
-                _ => return err("字段访问后应是字段名"),
+                _ => return err("field access must be followed by a field name"),
             };
             
             let w_ty = self
@@ -5029,7 +5029,7 @@ Ok(v) => v,
             if !self.type_idx.contains_key(&w_ty) {
                 return Err(BuildError {
                     message: format!(
-                        "{} 没有字段——字段写（.名 = 值）只对 add type 定义的积类型用",
+                        "{} has no fields - field write (.name = value) only applies to product types defined with add type",
                         w_ty
                     ),
                     code: prion_error::Code::E303,
@@ -5040,7 +5040,7 @@ Ok(v) => v,
             let eq = 段
                 .iter()
                 .position(|t| *t == Token::Sym("="))
-                .ok_or_else(|| BuildError { message: "字段写缺 = 表达式".into() , code: prion_error::Code::E301 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
+                .ok_or_else(|| BuildError { message: "field write is missing = expression".into() , code: prion_error::Code::E301 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
             let v = self.行右值(exprs, 段, eq)?;
             self.emit(Stmt::Assign {
                 lhs: Place { base, proj: vec![Proj::Field(field.to_string())] },
@@ -5056,11 +5056,11 @@ Ok(v) => v,
         {
             let vname = match 段.get(1) {
                 Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
-                _ => return err("`val` 后应接名字"),
+                _ => return err("`val` must be followed by a name"),
             };
             let id = *self.names.get(&vname).ok_or_else(|| {
                 BuildError {
-                message: format!("还没建过 val「{}」——先用 add val 建 (fn={})", vname, self.f.name),
+                message: format!("val \"{}\" has not been defined yet - define it with add val first (fn={})", vname, self.f.name),
                 code: prion_error::Code::E304,
                 line: CUR_LINE.with(|c| c.get()),
                 file: String::new(),
@@ -5082,13 +5082,13 @@ Ok(v) => v,
                     _ => {}
                 }
             }
-            let close = close.ok_or_else(|| BuildError { message: "delta 括号没闭合".into() , code: prion_error::Code::E302 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
+            let close = close.ok_or_else(|| BuildError { message: "delta parentheses are not closed".into() , code: prion_error::Code::E302 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
             let op = match 段.get(3) {
                 Some(Token::Sym("+")) => BinOp::Add,
                 Some(Token::Sym("-")) => BinOp::Sub,
                 Some(Token::Sym("*")) => BinOp::Mul,
                 Some(Token::Sym("/")) => BinOp::Div,
-                _ => return err("delta 括号应以运算符开头（如 `(+1)`、`(+ 表达式)`）"),
+                _ => return err("delta parentheses must start with an operator (e.g. `(+1)`, `(+ expression)`)"),
             };
             let rhs = self.expr(&段[4..close])?;
             let nv = self.bin(op, Value::Local(id), rhs);
@@ -5110,7 +5110,7 @@ Ok(v) => v,
         {
             let 内区 = prion_lexer::asm::括号内(段, 1)
                 .ok_or_else(|| BuildError {
-                    message: "asm 的括号没闭合".into(),
+                    message: "asm parentheses are not closed".into(),
                     code: prion_error::Code::E301,
                     line: CUR_LINE.with(|c| c.get()),
                     file: String::new(),
@@ -5133,7 +5133,7 @@ Ok(v) => v,
             if (name == "push" && vals.len() >= 2 && self.is_container_value(&vals[1]))
                 || (name == "insert" && vals.len() >= 3 && self.is_container_value(&vals[2]))
             {
-                return err("容器里不能装容器——塞进列表的值不能是容器；要分组请用键值表（如 map(str, list(int))）或结构体字段装列表");
+                return err("a container cannot hold a container - a value inserted into a list cannot be a container; to group, use a key-value table (e.g. map(str, list(int))) or struct fields");
             }
             self.emit(Stmt::Call { name: name.to_string(), args: vals });
             return Ok(());
@@ -5154,7 +5154,7 @@ Ok(v) => v,
         {
             let name = match 段.get(2) {
                 Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
-                _ => return err(format!("add val 后应是名字：{:?}", 段)),
+                _ => return err(format!("expected a name after add val: {:?}", 段)),
             };
             let 可空前缀 = matches!(段.get(3), Some(Token::Sym("?")));
             let explicit_ty: Option<Ty> = if 可空前缀 {
@@ -5212,12 +5212,12 @@ Ok(v) => v,
                                 }
                             }
                             if m.is_empty() || !matches!(段.get(j), Some(Token::HashColon)) {
-                                return err("`##:` 后应接模块名再接 `#:块`——形如 `##:前端.拆词 #:点 type \"node\"`");
+                                return err("`##:` must be followed by a module name then `#:block` - e.g. `##:frontend.tokenizer #:point type \"node\"`");
                             }
                             let full = if self.mod_has(&m) { m.clone() } else {
                                 match self.resolve_module(&m)? {
                                     Some(f) => f,
-                                    None => return err(format!("模块「{}」找不到", m)),
+                                    None => return err(format!("module \"{}\" not found", m)),
                                 }
                             };
                             (full, j)
@@ -5227,21 +5227,21 @@ Ok(v) => v,
                         let blk = match 段.get(colon_at + 1) {
                             Some(Token::Ident(n)) => n.to_string(),
                             Some(Token::Kw(k)) => (*k).to_string().into(),
-                            _ => return err("`#:` 后应接块名"),
+                            _ => return err("`#:` must be followed by a block name"),
                         };
                         if !matches!(段.get(colon_at + 2), Some(Token::Kw("type"))) {
-                            return err("跨块取类型要写 `#:块 type \"名\"`");
+                            return err("to take a type across blocks write `#:block type \"name\"`");
                         }
                         let tname = match 段.get(colon_at + 3) {
                             Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
-                            _ => return err("`#:块 type` 后应接类型名"),
+                            _ => return err("`#:block type` must be followed by a type name"),
                         };
                         
                         if cross_mod {
                             self.check_pub(&blk_mod, &blk)?;
                             if self.hidden_items.contains(&format!("{}|{}|type|{}", blk_mod, blk, tname)) {
                                 return Err(BuildError {
-                                    message: format!("type「{}」在块「{}」（模块 {}）里被 hide 了——它的公开面里没有这项", tname, blk, blk_mod),
+                                    message: format!("type \"{}\" is hidden in block \"{}\" (module {}) - it is not part of its public surface", tname, blk, blk_mod),
                                     code: prion_error::Code::E201,
                                     line: CUR_LINE.with(|c| c.get()),
                                     file: String::new(),
@@ -5254,7 +5254,7 @@ Ok(v) => v,
                             .map(|m| m.contains(&tname))
                             .unwrap_or(false);
                         if !has {
-                            return err(format!("块「{}」里没有 type「{}」", blk, tname));
+                            return err(format!("block \"{}\" has no type \"{}\"", blk, tname));
                         }
                         
                         Some(Ty(tname.to_string()))
@@ -5271,7 +5271,7 @@ Ok(v) => v,
             };
             let ty = match explicit_ty {
                 Some(t) => t,
-                None => self.ty_of_value(pre.clone().expect("缺类型必有值")),
+                None => self.ty_of_value(pre.clone().expect("a missing type must have a value")),
             };
         
         let lit = 段
@@ -5292,7 +5292,7 @@ Ok(v) => v,
                 if let Some((lo, hi)) = width_range(&ty.0) {
                     if v < lo || v > hi {
                         return err(format!(
-                            "val「{}」声明是 {}，字面量 {} 超出范围（{}..={}）",
+                            "val \"{}\" is declared as {}, literal {} is out of range ({}..={})",
                             name, ty.0, v, lo, hi
                         ));
                     }
@@ -5342,7 +5342,7 @@ Ok(v) => v,
             }
             let (是share, 是send) = prion_parser::建val修饰(原始段);
             if 是share && 是send {
-                return err(format!("val「{}」不能既是 share 又标 (send)——一个数据要么共享、要么移交", name));
+                return err(format!("val \"{}\" cannot be both share and marked (send) - a value is either shared or moved", name));
             }
             if (是share || 是send) && !is_exposed {
                 let t = self.f.locals[id].ty.clone();
@@ -5389,7 +5389,7 @@ Ok(v) => v,
                     if let Some((项, 限)) = crate::quota::超限() {
                         return Err(BuildError {
                             message: format!(
-                                "编译期求值超过{}配额（上限 {}）——这不是语法错。改法：把 --const-depth / --const-steps 调高，或给 0 不设上限",
+                                "compile-time evaluation exceeded the {} quota (limit {}) - this is not a syntax error. Fix: raise --const-depth / --const-steps, or pass 0 for no limit",
                                 项, 限
                             ),
                             code: prion_error::Code::E205,
@@ -5399,8 +5399,7 @@ Ok(v) => v,
                     }
                     return Err(BuildError {
                         message: format!(
-                            "常量「{}」的右值不是编译期可求值的表达式——常量要求字面量、运算符、\
-                             或参数全为常量的 fn 调用",
+                            "the value of constant \"{}\" is not a compile-time-evaluable expression - constants require literals, operators, or fn calls whose arguments are all constants",
                             常量名显示(段)
                         ),
                         code: prion_error::Code::E201,
@@ -5464,7 +5463,7 @@ Ok(v) => v,
         if matches!(kind, prion_parser::LineKind::Assign(_)) {
             let name = match 段.get(1) {
                 Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
-                _ => return err(format!("val 后应是名字：{:?}", 段)),
+                _ => return err(format!("expected a name after val: {:?}", 段)),
             };
             
             if let Some(&pid) = self.exposed.get(&name) {
@@ -5480,7 +5479,7 @@ Ok(v) => v,
                                 Value::Bool(b) => Rvalue::Const(Value::Bool(b)),
                                 Value::Str(s) => Rvalue::Const(Value::Str(s)),
                                 Value::Null => Rvalue::Const(Value::Null),
-                                _ => return err("内部：该形态暂不支持写回本块 val"),
+                                _ => return err("internal: this form cannot yet write back a same-block val"),
                             };
                             self.emit(Stmt::Assign {
                                 lhs: Place { base: pid, proj: vec![Proj::Deref] },
@@ -5497,7 +5496,7 @@ Ok(v) => v,
                 return Ok(());
             }
             let id = *self.names.get(&name).ok_or_else(|| BuildError {
-                message: format!("还没建过 val「{}」(fn={})", name, self.f.name),
+                message: format!("val \"{}\" has not been defined yet (fn={})", name, self.f.name),
                 code: prion_error::Code::E304,
                 line: CUR_LINE.with(|c| c.get()),
                 file: String::new(),
@@ -5513,7 +5512,7 @@ Ok(v) => v,
         }
 
         err(format!(
-            "暂不支持的语句（当前支持 add val / add fn / add type / add outs fn / val \"名\" = / call fn / call #:块 / call ##:模块 #:块 / print / if / while / for / match / asm / 下标写 / 字段写）：{:?}",
+            "unsupported statement (currently supported: add val / add fn / add type / add outs fn / val \"name\" = / call fn / call #:block / call ##:module #:block / print / if / while / for / match / asm / index write / field write): {:?}",
             段
         ))
     }
@@ -5522,7 +5521,7 @@ Ok(v) => v,
     fn for_list_stmt(&mut self, head: &[Token], body: &[AstStmt]) -> Result<(), BuildError> {
         let var = match head.get(1) {
             Some(Token::Ident(n)) | Some(Token::Str(n)) => n.to_string(),
-            _ => return err("for 后应是循环变量"),
+            _ => return err("expected a loop variable after for"),
         };
         
         let lst_toks: Vec<Token> = head[3..head.len() - 1].to_vec();
@@ -5611,11 +5610,11 @@ Ok(v) => v,
         
         
         if head.len() < 5 || !matches!(head.get(2), Some(Token::Ident(w)) if w == "in") {
-            return err("for 目前只支持 `for 变量 in 甲~乙:`（范围循环）；遍历容器要等容器接入");
+            return err("for currently only supports `for var in a~b:` (range loop); iterating containers is not available yet");
         }
         let var = match head.get(1) {
             Some(Token::Ident(n)) | Some(Token::Str(n)) => n.to_string(),
-            _ => return err("for 后应是循环变量"),
+            _ => return err("expected a loop variable after for"),
         };
         
         let mut 深 = 0i32;
@@ -5633,7 +5632,7 @@ Ok(v) => v,
         }
         let 波浪 = match 波浪 {
             Some(i) => i,
-            None => return err("范围循环缺少 `~`"),
+            None => return err("range loop is missing `~`"),
         };
         let 止 = if matches!(head.last(), Some(Token::Sym(":"))) {
             head.len() - 1
@@ -5641,7 +5640,7 @@ Ok(v) => v,
             head.len()
         };
         if 波浪 == 3 || 波浪 + 1 >= 止 {
-            return err("范围循环两端都要写表达式");
+            return err("both ends of a range loop must be expressions");
         }
         let lo = self.expr(&head[3..波浪])?;
         let hi = self.expr(&head[波浪 + 1..止])?;
@@ -5742,12 +5741,12 @@ Ok(v) => v,
             let mv = self.expr(mx)?;
             
             if matches!(mv, Value::Int(0)) {
-                return err("max 上限不能是 0——不限制就别写 max");
+                return err("the max limit cannot be 0 - if you do not want a limit, omit max");
             }
             let mt = self.ty_of_value(mv.clone());
             if mt.0 != "int" {
                 return err(format!(
-                    "while 的 max 上限必须是整数——给的是 {}（如 `max 100` 或 int 变量/算式）",
+                    "the while max limit must be an integer - got {} (e.g. `max 100` or an int variable/expression)",
                     mt.0
                 ));
             }
@@ -5756,8 +5755,8 @@ Ok(v) => v,
             let ok = self.bin(BinOp::Le, Value::Local(cnt), mv.clone());
             self.emit(Stmt::Assert {
                 cond: ok,
-                msg: "循环超过 max 上限——疑似死循环".into(),
-                fix: "检查循环的退出条件是否能达成，或把 max 上限调大".into(),
+                msg: "loop exceeded the max limit - possible infinite loop".into(),
+                fix: "check whether the loop's exit condition can be reached, or raise the max limit".into(),
             });
             
             if let Value::Int(n) = mv {
@@ -5787,12 +5786,12 @@ Ok(v) => v,
             match s {
                 AstStmt::Struct { head: h, body: cb, .. } => {
                     if !matches!(h.first(), Some(Token::Kw("case"))) {
-                        return err("match 体里只能是 case 分支");
+                        return err("a match body may only contain case branches");
                     }
                     cases.push((h.clone(), cb.clone()));
                 }
                 AstStmt::Line { kind, .. } if kind.tokens().is_empty() => {}
-                _ => return err("match 体里只能是 case 分支"),
+                _ => return err("a match body may only contain case branches"),
             }
         }
 
@@ -5923,14 +5922,14 @@ Ok(v) => v,
             }
             j += 1;
         }
-        let brace = match brace { Some(b) => b, None => return err("if 表达式缺 {") };
+        let brace = match brace { Some(b) => b, None => return err("if expression is missing {") };
         let cond_toks = &t[*i..brace];
-        if cond_toks.is_empty() { return err("if 后要跟条件"); }
+        if cond_toks.is_empty() { return err("if must be followed by a condition"); }
         let mut k = brace + 1;
         let mut d2 = 0i32;
         let then_end;
         loop {
-            if k >= t.len() { return err("if 表达式的 } 没闭合"); }
+            if k >= t.len() { return err("the if expression's } is not closed"); }
             match &t[k] {
                 Token::Sym("{") => d2 += 1,
                 Token::Sym("}") if d2 == 0 => { then_end = k; break; }
@@ -5941,15 +5940,15 @@ Ok(v) => v,
         }
         let then_toks = &t[brace + 1..then_end];
         k = then_end + 1;
-        if !matches!(t.get(k), Some(Token::Kw("else"))) { return err("if 表达式必须写 else"); }
+        if !matches!(t.get(k), Some(Token::Kw("else"))) { return err("an if expression must have else"); }
         k += 1;
-        if !matches!(t.get(k), Some(Token::Sym("{"))) { return err("else 后要跟 {"); }
+        if !matches!(t.get(k), Some(Token::Sym("{"))) { return err("else must be followed by {"); }
         let else_start = k + 1;
         let mut k2 = else_start;
         d2 = 0;
         let else_end;
         loop {
-            if k2 >= t.len() { return err("else 的 } 没闭合"); }
+            if k2 >= t.len() { return err("else's } is not closed"); }
             match &t[k2] {
                 Token::Sym("{") => d2 += 1,
                 Token::Sym("}") if d2 == 0 => { else_end = k2; break; }
@@ -5986,7 +5985,7 @@ Ok(v) => v,
         let ety = self.ty_of_value(ev.clone());
         if ety.0 != ty.0 && ety.0 != "null" {
             return err(format!(
-                "if 表达式的两个分支类型要一致——一边是「{}」，另一边是「{}」",
+                "the two branches of an if expression must have the same type - one is \"{}\", the other is \"{}\"",
                 ty.0, ety.0
             ));
         }
@@ -6018,25 +6017,25 @@ Ok(v) => v,
         }
         let brace = match brace {
             Some(b) => b,
-            None => return err("表达式形态 match 的 `{` 没找到——形如 `match 对象 { case 变体(绑定): 表达式, … }`"),
+            None => return err("the `{` of the expression-form match was not found - the form is `match subject { case variant(binding): expression, ... }`"),
         };
         let obj_toks: Vec<Token> = t[*i..brace].to_vec();
         if obj_toks.is_empty() {
-            return err("match 后要跟对象");
+            return err("match must be followed by a subject");
         }
         
         let mut arms: Vec<(Vec<Token>, Vec<Token>)> = Vec::new();
         j = brace + 1;
         loop {
             if j >= t.len() {
-                return err("表达式形态 match 的 `}` 没闭合");
+                return err("the expression-form match's `}` is not closed");
             }
             if matches!(&t[j], Token::Sym("}")) {
                 j += 1;
                 break;
             }
             if !matches!(&t[j], Token::Kw("case")) {
-                return err("表达式形态 match 的体里只能是 case 分支（形如 `case 得(v): 得(v*2)`）");
+                return err("the expression-form match body may only contain case branches (e.g. `case get(v): get(v*2)`)");
             }
             j += 1;
             
@@ -6052,7 +6051,7 @@ Ok(v) => v,
                 j += 1;
             }
             if j >= t.len() {
-                return err("表达式形态 match 的 case 缺 `:`");
+                return err("the expression-form match case is missing `:`");
             }
             let pat: Vec<Token> = t[pat_start..j].to_vec();
             j += 1; 
@@ -6079,7 +6078,7 @@ Ok(v) => v,
         }
         *i = j;
         if arms.is_empty() {
-            return err("表达式形态 match 至少要有一个 case");
+            return err("the expression-form match needs at least one case");
         }
         let v = self.expr(&obj_toks)?;
         let tmp = self.temp(Ty("int".into())); 
@@ -6098,11 +6097,11 @@ Ok(v) => v,
             }
             let vname = match pat.first() {
                 Some(Token::Ident(n)) | Some(Token::Str(n)) => n.to_string(),
-                _ => return err("表达式形态 match 的 case 模式只支持 `变体(绑定…)` 与 `_`"),
+                _ => return err("expression-form match case patterns only support `variant(binding...)` and `_`"),
             };
             let (_, tag, ftypes) = match self.sum_variants.get(&vname).cloned() {
                 Some(x) => x,
-                None => return err(format!("「{}」不是和类型变体——表达式形态 match 的 case 只按变体判别", vname)),
+                None => return err(format!("\"{}\" is not a sum-type variant - expression-form match cases dispatch only by variant", vname)),
             };
             let tagv = self.temp(Ty("int".into()));
             self.emit(Stmt::Assign { lhs: Place::local(tagv), rhs: Rvalue::VariantTag(v.clone()) });
@@ -6155,8 +6154,8 @@ Ok(v) => v,
         
         self.emit(Stmt::Assert {
             cond: Value::Bool(false),
-            msg: "match 没有命中任何分支——穷尽性检查被绕过".into(),
-            fix: "补上缺的 case，或写 `case _:` 兜底".into(),
+            msg: "match hit no branch - exhaustiveness was bypassed".into(),
+            fix: "add the missing case, or write `case _:` as a fallback".into(),
         });
         self.goto(exit_id);
         self.switch_to(exit_id);
@@ -6178,11 +6177,11 @@ Ok(v) => v,
         let name_at = if is_rebind { 1 } else if is_hide_fn { 3 } else { 2 };
         let name = match h.get(name_at) {
             Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
-            _ => return err("语句体 fn 后应是名字"),
+            _ => return err("expected a name after statement-body fn"),
         };
         let (params, after) = parse_params(&h)?;
         let (ret, _限, _) = parse_type_ref(&h, after).map_err(|_| BuildError {
-            message: "语句体 fn 缺返回类型（函数边界类型必写）".into(),
+            message: "statement-body fn is missing a return type (boundary types on functions are mandatory)".into(),
             code: prion_error::Code::E301,
             line: CUR_LINE.with(|c| c.get()),
             file: String::new(),
@@ -6237,7 +6236,7 @@ Ok(v) => v,
     ) -> Result<Function, BuildError> {
         
         let (last, init) = body.split_last().ok_or_else(|| BuildError {
-            message: "语句体 fn 是空的——最后要写 `give 表达式`".into(),
+            message: "the statement-body fn is empty - end it with `give expression`".into(),
             code: prion_error::Code::E301,
             line: CUR_LINE.with(|c| c.get()),
             file: String::new(),
@@ -6248,7 +6247,7 @@ Ok(v) => v,
             }
             _ => {
                 return Err(BuildError {
-                    message: "语句体 fn 的最后一条必须是 `give 表达式`".into(),
+                    message: "the last statement of a statement-body fn must be `give expression`".into(),
                     code: prion_error::Code::E301,
                     line: CUR_LINE.with(|c| c.get()),
                     file: String::new(),
@@ -6332,7 +6331,7 @@ Ok(v) => v,
         }
         if !自结束 && give_toks.is_none() {
             return Err(BuildError {
-                message: "spawn 任务体最后要写 `give 值`（要返回值）或单独一行 `join`（自结束、不等）".into(),
+                message: "the spawn task body must end with `give value` (to return a value) or a lone `join` (self-terminate, do not wait)".into(),
                 code: prion_error::Code::E301,
                 line: CUR_LINE.with(|c| c.get()),
                 file: String::new(),
@@ -6423,13 +6422,13 @@ Ok(v) => v,
                         prion_parser::StructKind::While => Kind::While,
                         prion_parser::StructKind::Match => Kind::Match,
                         prion_parser::StructKind::For => Kind::For,
-                        prion_parser::StructKind::Case => return err("case 不能单独出现"),
+                        prion_parser::StructKind::Case => return err("case cannot appear on its own"),
                         prion_parser::StructKind::Spawn => {
                             if let Some(Token::Ident(n) | Token::Str(n)) = head.get(2) {
                                 let payload = 解析token载荷(head);
                                 if payload != "int" && payload != "bool" && payload != "void" {
                                     return err(format!(
-                                        "token 载荷「{}」本期还不支持——先只做 int / bool / void（自结束）",
+                                        "token payload \"{}\" is not supported yet - only int / bool / void (self-terminating) for now",
                                         payload
                                     ));
                                 }
@@ -6479,7 +6478,7 @@ Ok(v) => v,
                             }
                             j += 1;
                         }
-                        Kind::Else => return err("else 不能单独出现（须紧跟其 if 体的 ; 之后）"),
+                        Kind::Else => return err("else cannot appear on its own (it must come right after the ; that closes its if body)"),
                         Kind::If => {
                             let eb: Option<Vec<AstStmt>> = match stmts.get(j + 1) {
                                 Some(AstStmt::Struct { kind: prion_parser::StructKind::Else, body: b, .. }) => Some(b.clone()),
@@ -6571,7 +6570,7 @@ fn parse_type_ref_raw(
                     }
                 }
                 let 尽 = 尽.ok_or_else(|| BuildError {
-                    message: format!("容器类型「{}」的括号没闭合", 基),
+                    message: format!("parentheses of container type \"{}\" are not closed", 基),
                     code: prion_error::Code::E201,
                     line: CUR_LINE.with(|c| c.get()),
                     file: String::new(),
@@ -6599,7 +6598,7 @@ fn parse_type_ref_raw(
                     }
                 }
                 let 尽 = 尽.ok_or_else(|| BuildError {
-                    message: "函数类型「fn」的括号没闭合".into(),
+                    message: "parentheses of function type \"fn\" are not closed".into(),
                     code: prion_error::Code::E201,
                     line: CUR_LINE.with(|c| c.get()),
                     file: String::new(),
@@ -6621,7 +6620,7 @@ fn parse_type_ref_raw(
             if let Some(ps) = 参数 {
                 if !matches!(段.get(at + 1), Some(Token::Sym("("))) {
                     return Err(BuildError {
-                        message: format!("泛型类型「{}」要写类型参数（如 `{}(int, str)`）", n, n),
+                        message: format!("generic type \"{}\" requires type parameters (e.g. `{}(int, str)`)", n, n),
                         code: prion_error::Code::E201,
                         line: CUR_LINE.with(|c| c.get()),
                         file: String::new(),
@@ -6643,7 +6642,7 @@ fn parse_type_ref_raw(
                     }
                 }
                 let 尽 = 尽.ok_or_else(|| BuildError {
-                    message: format!("泛型类型「{}」的实参括号没闭合", n),
+                    message: format!("the argument parentheses of generic type \"{}\" are not closed", n),
                     code: prion_error::Code::E201,
                     line: CUR_LINE.with(|c| c.get()),
                     file: String::new(),
@@ -6655,7 +6654,7 @@ fn parse_type_ref_raw(
                         实参.push(t.0);
                     } else {
                         return Err(BuildError {
-                            message: format!("泛型实参只能是单层类型（`{}` 太复杂）", t.0),
+                            message: format!("generic arguments must be single-level types (`{}` is too complex)", t.0),
                             code: prion_error::Code::E201,
                             line: CUR_LINE.with(|c| c.get()),
                             file: String::new(),
@@ -6665,7 +6664,7 @@ fn parse_type_ref_raw(
                 if 实参.len() != ps.len() {
                     return Err(BuildError {
                         message: format!(
-                            "泛型类型「{}」要 {} 个类型参数，这里给了 {} 个",
+                            "generic type \"{}\" requires {} type parameter(s), {} given",
                             n,
                             ps.len(),
                             实参.len()
@@ -6708,7 +6707,7 @@ fn parse_type_ref_raw(
                     }
                 }
                 if m.is_empty() || !matches!(段.get(j), Some(Token::HashColon)) {
-                    return err("`##:` 后应接模块名再接 `#:块`——形如 `##:前端.拆词 #:分句`");
+                    return err("`##:` must be followed by a module name then `#:block` - e.g. `##:frontend.tokenizer #:split`");
                 }
                 (m, j)
             } else {
@@ -6717,14 +6716,14 @@ fn parse_type_ref_raw(
             let blk = match 段.get(colon_at + 1) {
                 Some(Token::Ident(n)) => n.to_string(),
                 Some(Token::Kw(k)) => (*k).to_string().into(),
-                _ => return err("`#:` 后应接块名"),
+                _ => return err("`#:` must be followed by a block name"),
             };
             if !matches!(段.get(colon_at + 2), Some(Token::Kw("type"))) {
-                return err("跨块取类型要写 `#:块 type \"名\"`");
+                return err("to take a type across blocks write `#:block type \"name\"`");
             }
             let tname = match 段.get(colon_at + 3) {
                 Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
-                _ => return err("`#:块 type` 后应接类型名"),
+                _ => return err("`#:block type` must be followed by a type name"),
             };
             let mut end = colon_at + 4;
             let ty = if matches!(段.get(end), Some(Token::Sym("*"))) {
@@ -6735,7 +6734,7 @@ fn parse_type_ref_raw(
             };
             Ok((ty, Some((blk_mod, blk.to_string(), tname.to_string())), end))
         }
-        _ => err("这里应当是类型（内置类型名 / 自定义类型名 / `#:块 type \"名\"`）"),
+        _ => err("expected a type here (builtin type name / user-defined type name / `#:block type \"name\"`)"),
     }
 }
 
@@ -6744,7 +6743,7 @@ fn parse_params(段: &[Token]) -> Result<(Vec<(String, Ty)>, usize), BuildError>
     let open = 段
         .iter()
         .position(|t| *t == Token::Sym("("))
-        .ok_or_else(|| BuildError { message: "add fn 缺参数表".into() , code: prion_error::Code::E301 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
+        .ok_or_else(|| BuildError { message: "add fn is missing a parameter list".into() , code: prion_error::Code::E301 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
     let mut depth = 0i32;
     let mut end = None;
     for (k, t) in 段.iter().enumerate().skip(open) {
@@ -6760,16 +6759,16 @@ fn parse_params(段: &[Token]) -> Result<(Vec<(String, Ty)>, usize), BuildError>
             _ => {}
         }
     }
-    let end = end.ok_or_else(|| BuildError { message: "add fn 参数表没闭合".into() , code: prion_error::Code::E301 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
+    let end = end.ok_or_else(|| BuildError { message: "the add fn parameter list is not closed".into() , code: prion_error::Code::E301 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
     let mut out = Vec::new();
     for a in split_args(&段[open + 1..end]) {
         let name = match a.first() {
             Some(Token::Ident(n)) | Some(Token::Str(n)) => n.to_string(),
-            _ => return err(format!("参数缺名字：{:?}", a)),
+            _ => return err(format!("parameter is missing a name: {:?}", a)),
         };
         let (ty, _限定, _) = match a.get(1) {
             Some(_) => parse_type_ref(&a, 1)?,
-            None => return err(format!("参数「{}」缺类型", name)),
+            None => return err(format!("parameter \"{}\" is missing a type", name)),
         };
         out.push((name, ty));
     }
@@ -6780,7 +6779,7 @@ fn between_parens(段: &[Token]) -> Result<Vec<Token>, BuildError> {
     let open = 段
         .iter()
         .position(|t| *t == Token::Sym("("))
-        .ok_or_else(|| BuildError { message: "print 后缺 (".into() , code: prion_error::Code::E301 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
+        .ok_or_else(|| BuildError { message: "print is missing (".into() , code: prion_error::Code::E301 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })?;
     let mut depth = 0i32;
     let mut out = Vec::new();
     for t in &段[open..] {
@@ -6801,7 +6800,7 @@ fn between_parens(段: &[Token]) -> Result<Vec<Token>, BuildError> {
         }
         out.push(t.clone());
     }
-    err("括号没闭合")
+    err("parentheses are not closed")
 }
 
 fn split_case_guard(t: &[Token]) -> (&[Token], Option<&[Token]>) {
@@ -6852,7 +6851,7 @@ fn is_add_type(段: &[Token]) -> bool {
 fn parse_type_def(段: &[Token]) -> Result<Option<StructType>, BuildError> {
     let name = match 段.get(2) {
         Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
-        _ => return err("add type 后应是类型名"),
+        _ => return err("expected a type name after add type"),
     };
     
     let mut params: Vec<String> = Vec::new();
@@ -6874,7 +6873,7 @@ fn parse_type_def(段: &[Token]) -> Result<Option<StructType>, BuildError> {
             }
         }
         let 尽 = 尽.ok_or_else(|| BuildError {
-            message: "泛型参数表括号没闭合".into(),
+            message: "the generic parameter list parentheses are not closed".into(),
             code: prion_error::Code::E201,
             line: CUR_LINE.with(|c| c.get()),
             file: String::new(),
@@ -6884,7 +6883,7 @@ fn parse_type_def(段: &[Token]) -> Result<Option<StructType>, BuildError> {
                 [Token::Ident(n)] => params.push(n.to_string()),
                 _ => {
                     return Err(BuildError {
-                        message: "泛型参数表里只能写裸名（`add type \"对子\"(A, B) = …`）".into(),
+                        message: "generic parameters may only be bare names (`add type \"pair\"(A, B) = ...`)".into(),
                         code: prion_error::Code::E201,
                         line: CUR_LINE.with(|c| c.get()),
                         file: String::new(),
@@ -6894,7 +6893,7 @@ fn parse_type_def(段: &[Token]) -> Result<Option<StructType>, BuildError> {
         }
         if params.is_empty() {
             return Err(BuildError {
-                message: "泛型参数表的括号是空的".into(),
+                message: "the generic parameter list parentheses are empty".into(),
                 code: prion_error::Code::E201,
                 line: CUR_LINE.with(|c| c.get()),
                 file: String::new(),
@@ -6906,7 +6905,7 @@ fn parse_type_def(段: &[Token]) -> Result<Option<StructType>, BuildError> {
         Some(k) => 名后 + k,
         None => {
             return err(
-                "add type 要写 `=`——积类型 `add type \"名\" = (字段…)`；和类型 `add type \"名\" = 变体(…) | …`",
+                "add type requires `=` - product type `add type \"name\" = (fields...)`; sum type `add type \"name\" = variant(...) | ...`",
             )
         }
     };
@@ -6928,7 +6927,7 @@ fn parse_type_def(段: &[Token]) -> Result<Option<StructType>, BuildError> {
         }
         let vname = match seg.first() {
             Some(Token::Ident(n)) | Some(Token::Str(n)) => n.to_string(),
-            _ => return err("变体缺名字"),
+            _ => return err("variant is missing a name"),
         };
         let fields = if matches!(seg.get(1), Some(Token::Sym("("))) {
             parse_variant_fields(&seg[2..])?
@@ -6938,7 +6937,7 @@ fn parse_type_def(段: &[Token]) -> Result<Option<StructType>, BuildError> {
         variants.push(Variant { name: vname.to_string(), fields });
     }
     if variants.is_empty() {
-        return err("和类型至少要有一个变体");
+        return err("a sum type needs at least one variant");
     }
     Ok(Some(StructType { name: name.to_string(), params, fields: Vec::new(), variants }))
 }
@@ -6952,12 +6951,12 @@ fn parse_field_list(段: &[Token]) -> Result<Vec<(String, Ty)>, BuildError> {
             Some(Token::Ident(n)) | Some(Token::Str(n)) => (n.to_string(), &a[1..]),
             
             Some(Token::Kw(_)) | Some(Token::Int(_)) => ((fields.len() + 1).to_string(), &a[..]),
-            _ => return err("字段缺名字"),
+            _ => return err("field is missing a name"),
         };
         
         
         if 尾.is_empty() {
-            return err(format!("字段「{}」缺类型", fname));
+            return err(format!("field \"{}\" is missing a type", fname));
         }
         let mut fty = String::new();
         for t in 尾.iter() {
@@ -7012,7 +7011,7 @@ fn parse_variant_fields(段: &[Token]) -> Result<Vec<(String, Ty)>, BuildError> 
         let fty = match fty_tok {
             Some(Token::Kw(t)) => (*t).to_string(),
             Some(Token::Ident(n)) => n.to_string(),
-            _ => return err(format!("变体字段「{}」缺类型", fname)),
+            _ => return err(format!("variant field \"{}\" is missing a type", fname)),
         };
         
         let fty = if a.iter().any(|t| matches!(t, Token::Sym("*"))) {
@@ -7061,7 +7060,7 @@ fn matching_close(段: &[Token]) -> Result<usize, BuildError> {
             _ => {}
         }
     }
-    Err(BuildError { message: "字段表没闭合".into() , code: prion_error::Code::E301 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })
+    Err(BuildError { message: "the field list is not closed".into() , code: prion_error::Code::E301 , line: CUR_LINE.with(|c| c.get()) , file: String::new() })
 }
 
 
@@ -7509,7 +7508,7 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
     let mut types: Vec<StructType> = Vec::new();
     let mut type_first: BTreeMap<String, (String, usize)> = BTreeMap::new(); 
     
-    let base_of = |f: &str| -> String { if f.is_empty() { "本文件".to_string() } else { f.to_string() } };
+    let base_of = |f: &str| -> String { if f.is_empty() { "this file".to_string() } else { f.to_string() } };
     for b in &ast.blocks {
         let mut flat_ln: Vec<(usize, &TokStream)> = Vec::new();
         collect_ast_lines_ln(&b.stmts, &mut flat_ln);
@@ -7519,7 +7518,7 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
                         if let Some((f0, l0)) = type_first.get(n.as_ref()) {
                             return Err(BuildError {
                                 message: format!(
-                                    "类型「{}」重复定义——第一次在 {} 第 {} 行；类型名全程序唯一（跨模块也一样），请改写名",
+                                    "type \"{}\" is defined twice - first at {} line {}; type names are unique across the whole program (including across modules), rename it",
                                     n, base_of(f0), l0
                                 ),
                                 code: prion_error::Code::E201,
@@ -7534,7 +7533,7 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
                         if let Some((f0, l0)) = type_first.get(&v.name) {
                             return Err(BuildError {
                                 message: format!(
-                                    "变体「{}」重复定义——第一次在 {} 第 {} 行；变体名全程序唯一，请改写名",
+                                    "variant \"{}\" is defined twice - first at {} line {}; variant names are unique across the whole program, rename it",
                                     v.name, base_of(f0), l0
                                 ),
                                 code: prion_error::Code::E201,
@@ -7942,13 +7941,13 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
                 continue;
             }
             let (cat, what) = match 段.get(2) {
-                Some(Token::Kw("fn")) => ("fn", "函数"),
-                Some(Token::Kw("type")) => ("type", "类型"),
-                Some(Token::Kw("fix")) => ("fix", "常量"),
+                Some(Token::Kw("fn")) => ("fn", "function"),
+                Some(Token::Kw("type")) => ("type", "type"),
+                Some(Token::Kw("fix")) => ("fix", "constant"),
                 _ => {
                     return Err(BuildError {
                         message: format!(
-                            "hide 只能对 fn / type / fix 写——val 本就在公开面里，不许单独藏"
+                            "hide can only be applied to fn / type / fix - val is part of the public surface already and cannot be hidden on its own"
                         ),
                         code: prion_error::Code::E203,
                         line: line_no,
@@ -7960,7 +7959,7 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
                 Some(Token::Str(n)) | Some(Token::Ident(n)) => n.to_string(),
                 _ => {
                     return Err(BuildError {
-                        message: format!("`add hide {}` 后应接{}名", cat, what),
+                        message: format!("`add hide {}` must be followed by a {} name", cat, what),
                         code: prion_error::Code::E203,
                         line: line_no,
                         file: b.file.clone(),
@@ -7970,7 +7969,7 @@ pub fn build(ast: &AstProgram, typeck: &std::collections::BTreeMap<u32, String>)
             if !is_pub {
                 return Err(BuildError {
                     message: format!(
-                        "块「{}」不是 pub 块，不许 hide——hide 是给 pub 块「开窗又拉帘」用的",
+                        "block \"{}\" is not a pub block and cannot hide - hide is for opening a window in a pub block and then drawing the curtain",
                         b.name
                     ),
                     code: prion_error::Code::E203,
@@ -8252,7 +8251,7 @@ fn 禁裸传校验(functions: &[Function], _types: &[StructType]) -> Result<(), 
                 }
                 return Err(BuildError {
                     message: format!(
-                        "同块容器/str 裸传禁止——「{}」与「{}」会共享同一份缓冲。持有用 take（val \"A\" = take val \"B\"），跨块用 call #:块，或计算出新值",
+                        "passing containers/str by bare name within a block is forbidden - \"{}\" and \"{}\" would share the same buffer. To hold, use take (val \"A\" = take val \"B\"), use call #:block across blocks, or compute a new value",
                         d.name.clone().unwrap_or_else(|| format!("v{}", did)),
                         l.name.clone().unwrap_or_else(|| format!("v{}", sid))
                     ),

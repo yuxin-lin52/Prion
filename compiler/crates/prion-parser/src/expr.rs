@@ -263,7 +263,7 @@ impl<'a> Parser<'a> {
     pub fn parse(&mut self) -> Result<Expr, String> {
         let e = self.or()?;
         if !self.done() {
-            return Err(format!("表达式没读完，剩余 {:?}", &self.toks[self.i..]));
+            return Err(format!("expression not fully consumed, remaining {:?}", &self.toks[self.i..]));
         }
         Ok(e)
     }
@@ -443,7 +443,7 @@ impl<'a> Parser<'a> {
                     self.i += 1;
                     let n = match self.peek() {
                         Some(Token::Ident(n)) | Some(Token::Str(n)) => n.clone(),
-                        _ => return Err("字段访问要写字段名".into()),
+                        _ => return Err("field access must be followed by a field name".into()),
                     };
                     self.i += 1;
                     e = Expr::new(ExprKind::Field { base: Box::new(e), name: n.to_string() }, span);
@@ -463,7 +463,7 @@ impl<'a> Parser<'a> {
             self.i += 1;
             Ok(())
         } else {
-            Err(format!("期望 {:?}，来的是 {:?}", t, self.peek()))
+            Err(format!("expected {:?}, got {:?}", t, self.peek()))
         }
     }
 
@@ -507,7 +507,7 @@ impl<'a> Parser<'a> {
                 self.i += 1;
                 Target::Fn
             }
-            _ => return Err("跨块引用后接 val 或 fn".into()),
+            _ => return Err("a cross-block reference must be followed by val or fn".into()),
         };
         let name = self.take_name()?;
         let args = if matches!(self.peek(), Some(Token::Sym("("))) {
@@ -551,7 +551,7 @@ impl<'a> Parser<'a> {
                 }, span));
             }
             Some(Token::Kw("fn")) => (Target::Fn, self.take_name_after()?),
-            _ => return Err("call 后应接 val 或 fn".into()),
+            _ => return Err("call must be followed by val or fn".into()),
         };
         let args = self.args()?;
         Ok(Expr::new(ExprKind::Call {
@@ -588,8 +588,8 @@ impl<'a> Parser<'a> {
             Some(Token::Kw("val")) => {
                 self.i += 1;
             }
-            Some(Token::Kw("fn")) => return Err("take 只复制 val——fn 不占数据".into()),
-            _ => return Err("take 后应接 val".into()),
+            Some(Token::Kw("fn")) => return Err("take only copies val - fn holds no data".into()),
+            _ => return Err("take must be followed by val".into()),
         }
         let name = self.take_name()?;
         Ok(Expr::new(ExprKind::Call {
@@ -609,7 +609,7 @@ impl<'a> Parser<'a> {
                 self.i += 1;
                 Ok(n.to_string())
             }
-            _ => Err("这里要写名字".into()),
+            _ => Err("a name is required here".into()),
         }
     }
 
@@ -765,7 +765,7 @@ impl<'a> Parser<'a> {
                 }
                 Ok(Expr::new(ExprKind::Name { target: Target::Builtin, name: n.to_string() }, span))
             }
-            other => Err(format!("这里缺一个值，来的是 {:?}", other)),
+            other => Err(format!("a value is missing here, got {:?}", other)),
         }
     }
 }

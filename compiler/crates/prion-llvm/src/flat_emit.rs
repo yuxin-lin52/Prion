@@ -76,7 +76,7 @@ impl<'ctx> 迹<'ctx> {
         self.vals
             .get(id as usize)
             .and_then(|v| *v)
-            .ok_or_else(|| format!("指令 {} 没有值", id))
+            .ok_or_else(|| format!("instruction {} has no value", id))
     }
 
     fn 存(&mut self, id: u32, v: BasicValueEnum<'ctx>) {
@@ -130,7 +130,7 @@ pub fn emit_flat_object(
     let target = Target::from_triple(&triple).map_err(|e| e.to_string())?;
     let tm = target
         .create_target_machine(&triple, "generic", "", opt, RelocMode::PIC, CodeModel::Default)
-        .ok_or_else(|| "建不了 LLVM 目标机".to_string())?;
+        .ok_or_else(|| "cannot create LLVM target machine".to_string())?;
     module.set_triple(&triple);
     module.set_data_layout(&tm.get_target_data().get_data_layout());
     let td = tm.get_target_data();
@@ -207,12 +207,12 @@ pub fn emit_flat_object(
     lo.建树释放();
     crate::rt_emit::发射(&lo.ctx, &lo.module, 视窗, !debug, file)?;
     for (i, f) in p.functions.iter().enumerate() {
-        let ffn = flat.fns.get(i).ok_or_else(|| format!("扁平体缺函数 {}", f.name))?;
+        let ffn = flat.fns.get(i).ok_or_else(|| format!("flat body is missing function {}", f.name))?;
         lo.lower_fn_flat(f, ffn, p)?;
     }
     
     lo.dbg = None;
-    lo.module.verify().map_err(|e| format!("LLVM 校验失败：{}", e.to_string()))?;
+    lo.module.verify().map_err(|e| format!("LLVM verification failed: {}", e.to_string()))?;
     
     if opt != OptimizationLevel::None {
         use inkwell::passes::PassBuilderOptions;
@@ -290,7 +290,7 @@ impl<'ctx> Lower<'ctx> {
     ) -> Result<(), String> {
         
         crate::ESCAPED.with(|s| s.borrow_mut().clear());
-        let fv = *self.funcs.get(&f.name).ok_or_else(|| format!("缺函数 {}", f.name))?;
+        let fv = *self.funcs.get(&f.name).ok_or_else(|| format!("missing function {}", f.name))?;
         if let Some(d) = self.dbg.as_mut() {
             let ft = d.dib.create_subroutine_type(d.file, None, &[], DIFlags::PUBLIC);
             let sp = d.dib.create_function(
@@ -373,7 +373,7 @@ impl<'ctx> Lower<'ctx> {
             }
             let t = self.ty(&l.ty);
             let a = self.alloca(t, &format!("p{}", i)).map_err(|e| e.to_string())?;
-            let pv = fv.get_nth_param(pi).ok_or_else(|| "缺 LLVM 形参".to_string())?;
+            let pv = fv.get_nth_param(pi).ok_or_else(|| "missing LLVM parameter".to_string())?;
             self.builder.build_store(a, pv).map_err(|e| e.to_string())?;
             allocas[i] = Some(a);
             pi += 1;
@@ -418,14 +418,14 @@ impl<'ctx> Lower<'ctx> {
             if ffn.insts[iid].tag != Tag::ReadLocal {
                 continue;
             }
-            let pid = *pids.get(pk).ok_or_else(|| "块参数与扁平前区不齐".to_string())?;
+            let pid = *pids.get(pk).ok_or_else(|| "block parameters do not align with the pre-flatten region".to_string())?;
             pk += 1;
             let v = self
                 .值槽
                 .borrow()
                 .get(pid)
                 .and_then(|x| *x)
-                .ok_or_else(|| "块参数缺φ".to_string())?;
+                .ok_or_else(|| "block parameter is missing phi".to_string())?;
             迹.存(iid as u32, v);
         }
         
@@ -533,7 +533,7 @@ impl<'ctx> Lower<'ctx> {
                 }
                 Exit::Branch { cond, targets } => {
                     if targets.is_empty() {
-                        return Err("分支没有目标块".into());
+                        return Err("branch has no target block".into());
                     }
                     let c = self.value(f, &allocas, cond)?;
                     let i1 = self.to_bool(c)?;
@@ -541,7 +541,7 @@ impl<'ctx> Lower<'ctx> {
                         let cur = self
                             .builder
                             .get_insert_block()
-                            .ok_or_else(|| "分支不在基本块里".to_string())?;
+                            .ok_or_else(|| "branch is not inside a basic block".to_string())?;
                         self.邊φ(f, &allocas, &targets[0], cur)?;
                         self.builder
                             .build_unconditional_branch(bbs[targets[0].target])
@@ -552,7 +552,7 @@ impl<'ctx> Lower<'ctx> {
                             let cur = self
                                 .builder
                                 .get_insert_block()
-                                .ok_or_else(|| "分支不在基本块里".to_string())?;
+                                .ok_or_else(|| "branch is not inside a basic block".to_string())?;
                             self.邊φ(f, &allocas, &targets[k], cur)?;
                         }
                         self.builder
@@ -616,15 +616,15 @@ impl<'ctx> Lower<'ctx> {
                 记(迹, Some(x));
             }
             Tag::BinOp => {
-                let op = Op::from_u32(inst.a).ok_or_else(|| "未知运算".to_string())?;
-                let li = ffn.extra.get(inst.b as usize).copied().ok_or_else(|| "缺左目".to_string())?;
+                let op = Op::from_u32(inst.a).ok_or_else(|| "unknown operation".to_string())?;
+                let li = ffn.extra.get(inst.b as usize).copied().ok_or_else(|| "missing left operand".to_string())?;
                 let ri = ffn
                     .extra
                     .get(inst.b as usize + 1)
                     .copied()
-                    .ok_or_else(|| "缺右目".to_string())?;
-                let lv = self.flat值2(迹, ffn,li).ok_or_else(|| "运算左目不是局部或常量".to_string())?;
-                let rv = self.flat值2(迹, ffn,ri).ok_or_else(|| "运算右目不是局部或常量".to_string())?;
+                    .ok_or_else(|| "missing right operand".to_string())?;
+                let lv = self.flat值2(迹, ffn,li).ok_or_else(|| "left operand of the operation is not a local or constant".to_string())?;
+                let rv = self.flat值2(迹, ffn,ri).ok_or_else(|| "right operand of the operation is not a local or constant".to_string())?;
                 let a = 迹.取(li)?;
                 let b = 迹.取(ri)?;
                 let r = self.binop(f, op.to_binop(), &lv, &rv, a, b)?;
@@ -639,7 +639,7 @@ impl<'ctx> Lower<'ctx> {
                     .iter()
                     .map(|&id| {
                         self.flat值2(迹, ffn,id)
-                            .ok_or_else(|| format!("调用 {} 的实参不是局部或常量", name))
+                            .ok_or_else(|| format!("an argument of call {} is not a local or constant", name))
                     })
                     .collect::<Result<_, _>>()?;
                 if name == "print" {
@@ -678,12 +678,12 @@ impl<'ctx> Lower<'ctx> {
                 let fv = *self
                     .funcs
                     .get(&name)
-                    .ok_or_else(|| format!("LLVM 后端不认识函数 {}", name))?;
+                    .ok_or_else(|| format!("the LLVM backend does not recognize function {}", name))?;
                 记(迹, Some(fv.as_global_value().as_pointer_value().into()));
             }
             Tag::CallIndirect => {
                 let cid = inst.a;
-                let cv = self.flat值2(迹, ffn,cid).ok_or_else(|| "被调者不是局部".to_string())?;
+                let cv = self.flat值2(迹, ffn,cid).ok_or_else(|| "the callee is not a local".to_string())?;
                 let cty = self.arg_ty(f, &cv);
                 let raw = 迹.取(cid)?;
                 let pv = match raw {
@@ -692,10 +692,10 @@ impl<'ctx> Lower<'ctx> {
                         .builder
                         .build_int_to_ptr(i, self.ctx.ptr_type(AddressSpace::default()), "fp")
                         .map_err(|e| e.to_string())?,
-                    _ => return Err("间接调用的被调者不是函数值".into()),
+                    _ => return Err("the callee of an indirect call is not a function value".into()),
                 };
                 let (ps, ret) =
-                    fn_sig(&cty).ok_or_else(|| format!("认不出函数类型 {}", cty))?;
+                    fn_sig(&cty).ok_or_else(|| format!("unrecognized function type {}", cty))?;
                 let mps: Vec<inkwell::types::BasicMetadataTypeEnum<'ctx>> =
                     ps.iter().map(|t| self.ty(t).into()).collect();
                 let fty = match ret.as_ref().map(|t| self.ty(t)) {
@@ -704,7 +704,7 @@ impl<'ctx> Lower<'ctx> {
                     Some(inkwell::types::BasicTypeEnum::FloatType(t)) => t.fn_type(&mps, false),
                     Some(inkwell::types::BasicTypeEnum::PointerType(t)) => t.fn_type(&mps, false),
                     Some(inkwell::types::BasicTypeEnum::StructType(t)) => t.fn_type(&mps, false),
-                    Some(_) => return Err("不支持的 LLVM 返回类型".into()),
+                    Some(_) => return Err("unsupported LLVM return type".into()),
                 };
                 let ids: Vec<u32> = (0..inst.c)
                     .filter_map(|k| ffn.extra.get(inst.b as usize + k as usize).copied())
@@ -725,7 +725,7 @@ impl<'ctx> Lower<'ctx> {
                     .collect();
                 let elems: Vec<Value> = ids
                     .iter()
-                    .map(|&id| self.flat值2(迹, ffn,id).ok_or_else(|| "列表元素不是局部或常量".to_string()))
+                    .map(|&id| self.flat值2(迹, ffn,id).ok_or_else(|| "list element is not a local or constant".to_string()))
                     .collect::<Result<_, _>>()?;
                 let r = self.list_lit(f, allocas, &elems)?;
                 记(迹, Some(r));
@@ -738,12 +738,12 @@ impl<'ctx> Lower<'ctx> {
                         .extra
                         .get(inst.a as usize + k)
                         .copied()
-                        .ok_or_else(|| "缺映射键".to_string())?;
+                        .ok_or_else(|| "missing map key".to_string())?;
                     let vid = ffn
                         .extra
                         .get(inst.a as usize + k + 1)
                         .copied()
-                        .ok_or_else(|| "缺映射值".to_string())?;
+                        .ok_or_else(|| "missing map value".to_string())?;
                     let key = match ffn.insts.get(kid as usize).map(|x| x.tag) {
                         Some(Tag::ConstStr) => {
                             MapKey::Str(ffn.strings.get(ffn.insts[kid as usize].a as usize).cloned().unwrap_or_default())
@@ -751,11 +751,11 @@ impl<'ctx> Lower<'ctx> {
                         Some(Tag::ConstInt) => {
                             MapKey::Int(ffn.ints.get(ffn.insts[kid as usize].a as usize).copied().unwrap_or(0))
                         }
-                        _ => return Err("映射键不是常量".into()),
+                        _ => return Err("map key is not a constant".into()),
                     };
                     let v = self
                         .flat值2(迹, ffn,vid)
-                        .ok_or_else(|| "映射值不是局部或常量".to_string())?;
+                        .ok_or_else(|| "map value is not a local or constant".to_string())?;
                     pairs.push((key, v));
                     k += 2;
                 }
@@ -765,20 +765,20 @@ impl<'ctx> Lower<'ctx> {
             Tag::ListGet => {
                 let lv = self
                     .flat值2(迹, ffn,inst.a)
-                    .ok_or_else(|| "列表不是局部或常量".to_string())?;
+                    .ok_or_else(|| "list is not a local or constant".to_string())?;
                 let iv = self
                     .flat值2(迹, ffn,inst.b)
-                    .ok_or_else(|| "下标不是局部或常量".to_string())?;
+                    .ok_or_else(|| "index is not a local or constant".to_string())?;
                 let r = self.list_get(f, allocas, &lv, &iv)?;
                 记(迹, Some(r));
             }
             Tag::MapGet => {
                 let mv = self
                     .flat值2(迹, ffn,inst.a)
-                    .ok_or_else(|| "映射不是局部或常量".to_string())?;
+                    .ok_or_else(|| "map is not a local or constant".to_string())?;
                 let kv = self
                     .flat值2(迹, ffn,inst.b)
-                    .ok_or_else(|| "键不是局部或常量".to_string())?;
+                    .ok_or_else(|| "key is not a local or constant".to_string())?;
                 let mt = self.arg_ty(f, &mv);
                 let vt = map_value_ty(&mt).unwrap_or_else(|| "int".into());
                 let raw = self.value(f, allocas, &mv)?;
@@ -818,7 +818,7 @@ impl<'ctx> Lower<'ctx> {
                     .places
                     .get(iid)
                     .and_then(|x| x.clone())
-                    .ok_or_else(|| "取址没有位置".to_string())?;
+                    .ok_or_else(|| "address-of has no location".to_string())?;
                 let a = self.place_ptr(allocas, &pl, f)?;
                 记(迹, Some(a.into()));
             }
@@ -872,13 +872,13 @@ impl<'ctx> Lower<'ctx> {
                         .builder
                         .build_int_to_ptr(i, self.ctx.ptr_type(AddressSpace::default()), "ctxp")
                         .map_err(|e| e.to_string())?,
-                    _ => return Err("任务上下文不是指针".into()),
+                    _ => return Err("task context is not a pointer".into()),
                 };
                 let tid = ffn
                     .extra
                     .get(inst.b as usize)
                     .copied()
-                    .ok_or_else(|| "缺上下文槽类型".to_string())?;
+                    .ok_or_else(|| "missing context slot type".to_string())?;
                 let tyname = ffn.strings.get(tid as usize).cloned().unwrap_or_default();
                 let ix = self.ctx.i64_type().const_int(inst.c as u64, false);
                 let blob = self.ctx.i64_type().array_type(2);
@@ -901,7 +901,7 @@ impl<'ctx> Lower<'ctx> {
                     let n = self.builder.build_load(self.ity(), e1, "cn").map_err(|e| e.to_string())?;
                     let ni = match n {
                         BasicValueEnum::IntValue(i) => i,
-                        _ => return Err("上下文串长度不是整数".into()),
+                        _ => return Err("context string length is not an integer".into()),
                     };
                     记(迹, Some(self.mk_str(p, ni)));
                 } else {
@@ -922,7 +922,7 @@ impl<'ctx> Lower<'ctx> {
                     .collect();
                 let args: Vec<Value> = ids
                     .iter()
-                    .map(|&id| self.flat值2(迹, ffn,id).ok_or_else(|| "变体载荷不是局部或常量".to_string()))
+                    .map(|&id| self.flat值2(迹, ffn,id).ok_or_else(|| "variant payload is not a local or constant".to_string()))
                     .collect::<Result<_, _>>()?;
                 let tys: Vec<Ty> = p
                     .types
@@ -930,14 +930,14 @@ impl<'ctx> Lower<'ctx> {
                     .find(|st| st.name == tyname)
                     .and_then(|st| st.variants.get(tag))
                     .map(|v| v.fields.iter().map(|(_, t)| t.clone()).collect())
-                    .ok_or_else(|| format!("缺和类型变体 {}", tyname))?;
+                    .ok_or_else(|| format!("missing sum type variant {}", tyname))?;
                 let r = self.variant_lit(f, allocas, &tyname, tag, &args, &tys)?;
                 记(迹, Some(r));
             }
             Tag::VariantTag => {
                 let v = self
                     .flat值2(迹, ffn,inst.a)
-                    .ok_or_else(|| "变体不是局部或常量".to_string())?;
+                    .ok_or_else(|| "variant is not a local or constant".to_string())?;
                 let sv = self.struct_value(f, allocas, &v)?;
                 let x = self
                     .builder
@@ -948,17 +948,17 @@ impl<'ctx> Lower<'ctx> {
             Tag::VariantGet => {
                 let v = self
                     .flat值2(迹, ffn,inst.a)
-                    .ok_or_else(|| "变体不是局部或常量".to_string())?;
+                    .ok_or_else(|| "variant is not a local or constant".to_string())?;
                 let tyid = ffn
                     .extra
                     .get(inst.b as usize)
                     .copied()
-                    .ok_or_else(|| "缺载荷类型".to_string())?;
+                    .ok_or_else(|| "missing payload type".to_string())?;
                 let idx = ffn
                     .extra
                     .get(inst.b as usize + 1)
                     .copied()
-                    .ok_or_else(|| "缺载荷下标".to_string())?;
+                    .ok_or_else(|| "missing payload index".to_string())?;
                 let tyname = ffn.strings.get(tyid as usize).cloned().unwrap_or_default();
                 let sv = self.struct_value(f, allocas, &v)?;
                 let st = sv.get_type();
@@ -986,7 +986,7 @@ impl<'ctx> Lower<'ctx> {
                     let n = self.builder.build_load(self.ity(), e1, "vn").map_err(|e| e.to_string())?;
                     let ni = match n {
                         BasicValueEnum::IntValue(i) => i,
-                        _ => return Err("变体串长度不是整数".into()),
+                        _ => return Err("variant string length is not an integer".into()),
                     };
                     记(迹, Some(self.mk_str(p, ni)));
                 } else {
@@ -1000,7 +1000,7 @@ impl<'ctx> Lower<'ctx> {
                     .places
                     .get(iid)
                     .and_then(|x| x.clone())
-                    .ok_or_else(|| "赋值收口没有位置".to_string())?;
+                    .ok_or_else(|| "assignment close has no location".to_string())?;
                 let vi = inst.a;
                 let mut v = 迹.取(vi)?;
                 
@@ -1026,7 +1026,7 @@ impl<'ctx> Lower<'ctx> {
                     .places
                     .get(iid)
                     .and_then(|x| x.clone())
-                    .ok_or_else(|| "赋值收口没有位置".to_string())?;
+                    .ok_or_else(|| "assignment close has no location".to_string())?;
                 let old = self.load_place(f, allocas, &lhs)?;
                 let old_str = if self.place_ty(f, &lhs).0 == "str" {
                     Some(match old {
@@ -1062,7 +1062,7 @@ impl<'ctx> Lower<'ctx> {
                         .builder
                         .get_insert_block()
                         .and_then(|x| x.get_parent())
-                        .ok_or_else(|| "释放点不在函数里".to_string())?;
+                        .ok_or_else(|| "the drop point is not inside a function".to_string())?;
                     let 空 = self.ctx.append_basic_block(fnv, "rel.null");
                     let 有 = self.ctx.append_basic_block(fnv, "rel.has");
                     let 出 = self.ctx.append_basic_block(fnv, "rel.exit");
@@ -1083,18 +1083,18 @@ impl<'ctx> Lower<'ctx> {
                 }
             }
             Tag::ListSetStmt => {
-                let lid = ffn.extra.get(inst.a as usize).copied().ok_or_else(|| "缺列表".to_string())?;
-                let iid2 = ffn.extra.get(inst.a as usize + 1).copied().ok_or_else(|| "缺下标".to_string())?;
-                let vid = ffn.extra.get(inst.a as usize + 2).copied().ok_or_else(|| "缺值".to_string())?;
+                let lid = ffn.extra.get(inst.a as usize).copied().ok_or_else(|| "missing list".to_string())?;
+                let iid2 = ffn.extra.get(inst.a as usize + 1).copied().ok_or_else(|| "missing index".to_string())?;
+                let vid = ffn.extra.get(inst.a as usize + 2).copied().ok_or_else(|| "missing value".to_string())?;
                 let lv = self
                     .flat值2(迹, ffn,lid)
-                    .ok_or_else(|| "列表不是局部或常量".to_string())?;
+                    .ok_or_else(|| "list is not a local or constant".to_string())?;
                 let iv = self
                     .flat值2(迹, ffn,iid2)
-                    .ok_or_else(|| "下标不是局部或常量".to_string())?;
+                    .ok_or_else(|| "index is not a local or constant".to_string())?;
                 let vv = self
                     .flat值2(迹, ffn,vid)
-                    .ok_or_else(|| "值不是局部或常量".to_string())?;
+                    .ok_or_else(|| "value is not a local or constant".to_string())?;
                 let lt = self.arg_ty(f, &lv);
                 let et = seq_elem_ty(&lt).unwrap_or_else(|| "int".into());
                 let lraw = self.value(f, allocas, &lv)?;
@@ -1128,7 +1128,7 @@ impl<'ctx> Lower<'ctx> {
                             .map_err(|e| e.to_string())?;
                         let 数据 = match self.列表字段(lp, 4)? {
                             BasicValueEnum::PointerValue(pp) => pp,
-                            _ => return Err("列表数据指针类型不对".into()),
+                            _ => return Err("list data pointer type is wrong".into()),
                         };
                         let 偏 = self
                             .builder
@@ -1152,18 +1152,18 @@ impl<'ctx> Lower<'ctx> {
                 }
             }
             Tag::MapSetStmt => {
-                let mid = ffn.extra.get(inst.a as usize).copied().ok_or_else(|| "缺映射".to_string())?;
-                let kid = ffn.extra.get(inst.a as usize + 1).copied().ok_or_else(|| "缺键".to_string())?;
-                let vid = ffn.extra.get(inst.a as usize + 2).copied().ok_or_else(|| "缺值".to_string())?;
+                let mid = ffn.extra.get(inst.a as usize).copied().ok_or_else(|| "missing map".to_string())?;
+                let kid = ffn.extra.get(inst.a as usize + 1).copied().ok_or_else(|| "missing key".to_string())?;
+                let vid = ffn.extra.get(inst.a as usize + 2).copied().ok_or_else(|| "missing value".to_string())?;
                 let mv = self
                     .flat值2(迹, ffn,mid)
-                    .ok_or_else(|| "映射不是局部或常量".to_string())?;
+                    .ok_or_else(|| "map is not a local or constant".to_string())?;
                 let kv = self
                     .flat值2(迹, ffn,kid)
-                    .ok_or_else(|| "键不是局部或常量".to_string())?;
+                    .ok_or_else(|| "key is not a local or constant".to_string())?;
                 let vv = self
                     .flat值2(迹, ffn,vid)
-                    .ok_or_else(|| "值不是局部或常量".to_string())?;
+                    .ok_or_else(|| "value is not a local or constant".to_string())?;
                 let mt = self.arg_ty(f, &mv);
                 let vt = map_value_ty(&mt).unwrap_or_else(|| "int".into());
                 let mraw = self.value(f, allocas, &mv)?;
@@ -1218,12 +1218,12 @@ impl<'ctx> Lower<'ctx> {
                         .builder
                         .get_insert_block()
                         .and_then(|b| b.get_parent())
-                        .ok_or_else(|| "assert 不在函数里".to_string())?;
+                        .ok_or_else(|| "assert is not inside a function".to_string())?;
                     let ok = self.ctx.append_basic_block(fnv, "assert.ok");
                     let bad = self.ctx.append_basic_block(fnv, "assert.bad");
                     self.builder.build_conditional_branch(i1, ok, bad).map_err(|e| e.to_string())?;
                     self.builder.position_at_end(bad);
-                    let code = if msg.contains("空引用") { 1 } else { 7 };
+                    let code = if msg.contains("null reference") { 1 } else { 7 };
                     let m = self.fmt(&msg);
                     let fx = self.fmt(&fix);
                     let fname = self.cur_file.clone();
@@ -1274,14 +1274,14 @@ impl<'ctx> Lower<'ctx> {
             Tag::Alloc | Tag::Bind => {}
             Tag::AccessBegin | Tag::AccessEnd => {}
             
-            Tag::ListSet | Tag::MapSet => return Err("扁平载体不出现表达式式容器写".into()),
+            Tag::ListSet | Tag::MapSet => return Err("flat carrier does not emit expression-form container writes".into()),
             Tag::Asm => {
                 let blob = ffn
                     .strings
                     .get(inst.a as usize)
                     .cloned()
                     .unwrap_or_default();
-                let form = prion_ir::flat::解汇编(&blob).ok_or_else(|| "汇编形串坏".to_string())?;
+                let form = prion_ir::flat::解汇编(&blob).ok_or_else(|| "malformed assembly string".to_string())?;
                 self.asm_stmt(f, allocas, &form)?;
             }
         }
@@ -1474,7 +1474,7 @@ impl<'ctx> Lower<'ctx> {
                 .map_err(|e| e.to_string())?;
             let 数据 = match self.列表字段(lv.into_pointer_value(), 4)? {
                 BasicValueEnum::PointerValue(pp) => pp,
-                _ => return Err("列表数据指针类型不对".into()),
+                _ => return Err("list data pointer type is wrong".into()),
             };
             let 偏 = self
                 .builder
@@ -1509,7 +1509,7 @@ impl<'ctx> Lower<'ctx> {
             .map_err(|e| e.to_string())?;
         let 数据 = match self.列表字段(lv.into_pointer_value(), 4)? {
             BasicValueEnum::PointerValue(pp) => pp,
-            _ => return Err("列表数据指针类型不对".into()),
+            _ => return Err("list data pointer type is wrong".into()),
         };
         let 八 = self.ity().into_int_type().const_int(8, false);
         let 偏 = self.builder.build_int_mul(位, 八, "off").map_err(|e| e.to_string())?;
@@ -1593,7 +1593,7 @@ impl<'ctx> Lower<'ctx> {
         args: &[Value],
         tys: &[Ty],
     ) -> Result<BasicValueEnum<'ctx>, String> {
-        let st = *self.structs.get(ty).ok_or_else(|| format!("缺和类型 {}", ty))?;
+        let st = *self.structs.get(ty).ok_or_else(|| format!("missing sum type {}", ty))?;
         let slot = self.alloca(st, "var").map_err(|e| e.to_string())?;
         let tag_p = self
             .builder
@@ -1640,12 +1640,12 @@ impl<'ctx> Lower<'ctx> {
                             let ap = allocas
                                 .get(*id)
                                 .and_then(|x| *x)
-                                .ok_or_else(|| "变体载荷没有栈位".to_string())?;
+                                .ok_or_else(|| "variant payload has no stack slot".to_string())?;
                             self.builder
                                 .build_ptr_to_int(ap, self.ctx.i64_type(), "ph")
                                 .map_err(|e| e.to_string())?
                         }
-                        _ => return Err("把手载荷只能来自局部".into()),
+                        _ => return Err("handle payload may only come from a local".into()),
                     },
                 }
             } else {
