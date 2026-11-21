@@ -44,7 +44,7 @@ pub fn 报告() {
     let b = 字节.load(Ordering::Relaxed);
     let d = 释放.load(Ordering::Relaxed);
     eprintln!(
-        "[分配统计] 次数 {}，字节 {}（{:.1} MB），释放 {}",
+        "[alloc stats] count {}, bytes {} ({:.1} MB), freed {}",
         a,
         b,
         b as f64 / 1048576.0,

@@ -91,41 +91,41 @@ fn 找cc() -> String {
 }
 
 const USAGE: &str = "\
-prionc —— Prion 编译器
+prionc - Prion compiler
 
-用法：
-  prionc build [名] [--mode debug|release] [--opt 0-3]
-  prionc run   [名] [--mode …] [--opt …] [-- 参数…]
-  prionc check [名]
-  prionc fmt   [路径] [--check]
-  prionc clean [名]
+Usage:
+  prionc build [name] [--mode debug|release] [--opt 0-3]
+  prionc run   [name] [--mode ...] [--opt ...] [-- args...]
+  prionc check [name]
+  prionc fmt   [path] [--check]
+  prionc clean [name]
   prionc -V | prionc -h
 
-说明：
-  [名]     可省：省略 = 当前目录的项目（有 lib.prion）或目录下唯一的 .an；
-           给了 = 按名字找（lib.prion 的包名，或 <名>.an 文件）。
-  --mode   debug（全护栏）/ release（优化，护栏全抽——越界等成为未定义行为）。决定产物目录。
-  --opt    优化力度 0-3；缺省随模式（debug→0，release→3）。
-  --const-depth N  编译期求值最大嵌套层数，缺省 256；0 = 不设上限。
-  --const-steps N  编译期求值最大步数，缺省 1280000；0 = 不设上限。
-  --no-loop-reclaim  关闭圈尾回收（缺省开）
-  产物     build/<模式>/<名>.exe，中间产物 <名>.ll/<名>.o 同目录。
-  退出码   0 成功 / 101 失败 / 1 用法错误；run 透传被运行程序的退出码。";
+Notes:
+  [name]    Optional. Omitted = the project in the current directory (has lib.prion) or the single .an file;
+            Given = resolved by name (package name in lib.prion, or a <name>.an file).
+  --mode    debug (full guards) / release (optimized, all guards stripped -- out-of-bounds becomes undefined behavior). Sets the output directory.
+  --opt     Optimization level 0-3; default follows mode (debug->0, release->3).
+  --const-depth N  Max nesting depth for compile-time evaluation, default 256; 0 = no limit.
+  --const-steps N  Max steps for compile-time evaluation, default 1280000; 0 = no limit.
+  --no-loop-reclaim  Disable cycle-tail reclamation (enabled by default)
+  Output    build/<mode>/<name>.exe; intermediates <name>.ll/<name>.o in the same directory.
+  Exit codes  0 success / 101 failure / 1 usage error; run forwards the child's exit code.";
 
 const COMMAND_HELP: &[(&str, &str)] = &[
-    ("build", "把源码变成可执行文件（编译+链接一条龙）\n产物：build/<模式>/<名>.exe，中间产物 <名>.c 同目录"),
-    ("run", "先 build，成功就立刻运行\n`--` 之后的参数原样传给被运行的程序"),
-    ("check", "只检查代码有没有错，不产任何文件（最快）"),
-    ("fmt", "只补装饰性缩进，不动 token；`--check` 只列出需要格式化的文件"),
-    ("frontend", "只跑**前端**（词法→语法→检查→中间表示），不产文件、不调 clang\n用于测前端耗时：跑 3 次取最小，输出行数/字节/耗时/吞吐"),
-    ("clean", "删掉 build/ 目录里所有生成的东西"),
+    ("build", "Compile the source into an executable (compile + link in one step)\nOutput: build/<mode>/<name>.exe; intermediate <name>.c in the same directory"),
+    ("run", "Build, then run immediately on success\nArguments after `--` are passed through unchanged to the program"),
+    ("check", "Check the code for errors only; no files produced (fastest)"),
+    ("fmt", "Add decorative indentation only; tokens are untouched; `--check` lists files that need formatting"),
+    ("frontend", "Run the **front end** only (lex -> parse -> check -> IR); no files, no clang\nFor front-end timing: best of 3 runs, prints lines/bytes/time/throughput"),
+    ("clean", "Delete everything generated under build/"),
 ];
 
 fn main() -> ExitCode {
     let h = std::thread::Builder::new()
         .stack_size(256 * 1024 * 1024)
         .spawn(主逻辑)
-        .expect("起不了主线程");
+        .expect("failed to start main thread");
     let code = match h.join() {
         Ok(c) => c,
         Err(_) => ExitCode::from(101),
@@ -143,11 +143,11 @@ fn 主逻辑() -> ExitCode {
             .downcast_ref::<&str>()
             .map(|s| (*s).to_string())
             .or_else(|| info.payload().downcast_ref::<String>().cloned())
-            .unwrap_or_else(|| "（无消息）".to_string());
+            .unwrap_or_else(|| "(no message)".to_string());
         let code = prion_error::InternalCode::E701.number();
         eprintln!(
             "{}",
-            render_nofile(code, "", &format!("编译器内部错误：{}", msg), "")
+            render_nofile(code, "", &format!("internal compiler error: {}", msg), "")
         );
     }));
     let args: Vec<String> = env::args().skip(1).collect();
@@ -162,7 +162,7 @@ fn fail101(msg: impl AsRef<str>) -> ExitCode {
     if m.starts_with('[') {
         eprintln!("{}", m);
     } else {
-        eprintln!("错误：{}", m);
+        eprintln!("error: {}", m);
     }
     ExitCode::from(101)
 }
@@ -224,9 +224,9 @@ fn dispatch(args: &[String]) -> ExitCode {
         }
         other => usage_err(render_nofile(
             prion_error::CliCode::E501.number(),
-            "敲命令",
-            &format!("不认识的命令「{}」", other),
-            "用 `prionc -h` 看可用命令（build / run / check / clean）",
+            "run a command",
+            &format!("unknown command \"{}\"", other),
+            "run `prionc -h` to see available commands (build / run / check / clean)",
         )),
     }
 }
@@ -299,7 +299,7 @@ fn parse_opts(rest: &[String]) -> Result<Opts, String> {
                             i += 1;
                             match rest.get(i) {
                                 Some(v) => v.clone(),
-                                None => return Err(format!("--{} 缺值", k)),
+                                None => return Err(format!("--{} requires a value", k)),
                             }
                         }
                     }
@@ -311,9 +311,9 @@ fn parse_opts(rest: &[String]) -> Result<Opts, String> {
                     if v != "debug" && v != "release" {
                         return Err(render_nofile(
                             prion_error::CliCode::E503.number(),
-                            "写选项",
-                            &format!("`--mode` 只收 debug|release，给了 {}", v),
-                            "改成 `--mode debug` 或 `--mode release`",
+                            "option",
+                            &format!("`--mode` accepts only debug|release, got {}", v),
+                            "use `--mode debug` or `--mode release`",
                         ));
                     }
                     o.mode = Some(v);
@@ -326,9 +326,9 @@ fn parse_opts(rest: &[String]) -> Result<Opts, String> {
                     let n: usize = v.parse().map_err(|_| {
                         render_nofile(
                             prion_error::CliCode::E503.number(),
-                            "写选项",
-                            &format!("`--{}` 只收非负整数，给了 {}", k, v),
-                            "改成 0 或正整数；0 表示不设上限",
+                            "option",
+                            &format!("`--{}` accepts only a non-negative integer, got {}", k, v),
+                            "use 0 or a positive integer; 0 means no limit",
                         )
                     })?;
                     if k == "const-depth" { o.const_depth = Some(n); }
@@ -339,17 +339,17 @@ fn parse_opts(rest: &[String]) -> Result<Opts, String> {
                     let n: u32 = v.parse().map_err(|_| {
                         render_nofile(
                             prion_error::CliCode::E503.number(),
-                            "写选项",
-                            &format!("`--opt` 只收 0-3，给了 {}", v),
-                            "改成 0-3 之间的数",
+                            "option",
+                            &format!("`--opt` accepts only 0-3, got {}", v),
+                            "use a number between 0 and 3",
                         )
                     })?;
                     if n > 3 {
                         return Err(render_nofile(
                             prion_error::CliCode::E503.number(),
-                            "写选项",
-                            &format!("`--opt` 只收 0-3，给了 {}", n),
-                            "改成 0-3 之间的数",
+                            "option",
+                            &format!("`--opt` accepts only 0-3, got {}", n),
+                            "use a number between 0 and 3",
                         ));
                     }
                     o.opt = Some(n);
@@ -358,9 +358,9 @@ fn parse_opts(rest: &[String]) -> Result<Opts, String> {
                     let _ = val!();
                     return Err(render_nofile(
                         prion_error::CliCode::E503.number(),
-                        "写选项",
-                        "`--backend` 已移除：LLVM 是唯一后端",
-                        "去掉 `--backend` 参数即可",
+                        "option",
+                        "`--backend` has been removed: LLVM is the only backend",
+                        "remove the `--backend` argument",
                     ));
                 }
                 "dump-ir" => o.dump_ir = true,
@@ -370,9 +370,9 @@ fn parse_opts(rest: &[String]) -> Result<Opts, String> {
                 other => {
                     return Err(render_nofile(
                         prion_error::CliCode::E502.number(),
-                        "写选项",
-                        &format!("不认识的选项 --{}", other),
-                        "用 `prionc build -h` 看该命令支持的选项",
+                        "option",
+                        &format!("unknown option --{}", other),
+                        "run `prionc build -h` to see the options this command supports",
                     ))
                 }
             }
@@ -382,9 +382,9 @@ fn parse_opts(rest: &[String]) -> Result<Opts, String> {
                 other => {
                     return Err(render_nofile(
                         prion_error::CliCode::E502.number(),
-                        "写选项",
-                        &format!("不认识的选项 {}", other),
-                        "用 `prionc build -h` 看该命令支持的选项",
+                        "option",
+                        &format!("unknown option {}", other),
+                        "run `prionc build -h` to see the options this command supports",
                     ))
                 }
             }
@@ -393,9 +393,9 @@ fn parse_opts(rest: &[String]) -> Result<Opts, String> {
         } else {
             return Err(render_nofile(
                 prion_error::CliCode::E504.number(),
-                "写命令行",
-                &format!("多余的参数「{}」", a),
-                "去掉它——一个命令最多给一个名字",
+                "command line",
+                &format!("unexpected argument \"{}\"", a),
+                "remove it - a command takes at most one name",
             ));
         }
         i += 1;
@@ -426,9 +426,9 @@ fn resolve(name: Option<&str>) -> Result<Target, String> {
     let cwd = env::current_dir().map_err(|e| {
         render_nofile(
             prion_error::EnvCode::E602.number(),
-            "读当前目录",
-            &format!("拿不到当前目录：{}", e),
-            "检查当前目录是否存在、是否有权限",
+            "read current directory",
+            &format!("cannot get the current directory: {}", e),
+            "check that the current directory exists and is accessible",
         )
     })?;
 
@@ -453,9 +453,9 @@ fn resolve(name: Option<&str>) -> Result<Target, String> {
             }
             return Err(render_nofile(
                 prion_error::CliCode::E505.number(),
-                "找项目",
-                &format!("目录「{}」里没有 main.an——工程入口固定是 main.an", n),
-                "在目录根放一个 main.an，或把名字指向别的工程",
+                "locate project",
+                &format!("directory \"{}\" has no main.an - the project entry is always main.an", n),
+                "put a main.an in the directory root, or point the name to another project",
             ));
         }
         
@@ -467,9 +467,9 @@ fn resolve(name: Option<&str>) -> Result<Target, String> {
         }
         return Err(render_nofile(
             prion_error::CliCode::E505.number(),
-            "找项目",
-            &format!("找不到「{}」——当前目录下没有 {}.an，也没有同名项目目录", n, n),
-            &format!("检查名字拼写，或先建 {}.an", n),
+            "locate project",
+            &format!("cannot find \"{}\" - no {}.an in the current directory and no same-named project directory", n, n),
+            &format!("check the spelling, or create {}.an first", n),
         ));
     }
 
@@ -486,15 +486,15 @@ fn resolve(name: Option<&str>) -> Result<Target, String> {
         1 => single(ans.remove(0)),
         0 => Err(render_nofile(
             prion_error::CliCode::E505.number(),
-            "找源文件",
-            "当前目录既没有 lib.prion，也没有 .an 源文件——不知道要编什么",
-            "给个名字（如 `prionc build hello`），或先建一个 .an",
+            "locate source file",
+            "the current directory has neither lib.prion nor a .an source file - nothing to compile",
+            "pass a name (e.g. `prionc build hello`), or create a .an first",
         )),
         _ => Err(render_nofile(
             prion_error::CliCode::E505.number(),
-            "找源文件",
-            "当前目录有多个 .an 文件——不知道编哪个",
-            "给个名字（如 `prionc build hello`）",
+            "locate source file",
+            "the current directory has multiple .an files - cannot tell which to compile",
+            "pass a name (e.g. `prionc build hello`)",
         )),
     }
 }
@@ -507,7 +507,7 @@ fn single(f: PathBuf) -> Result<Target, String> {
             render_nofile(
                 prion_error::InternalCode::E701.number(),
                 "",
-                &format!("拿不到文件名：{}", f.display()),
+                &format!("cannot get file name: {}", f.display()),
                 "",
             )
         })?;
@@ -526,17 +526,17 @@ fn project(root: PathBuf, name: String) -> Result<Target, String> {
         0 => {
             return Err(render_nofile(
                 prion_error::CliCode::E505.number(),
-                "找源文件",
-                &format!("项目「{}」里没有 .an 源文件", name),
-                "项目根下要有一个 .an",
+                "locate source file",
+                &format!("project \"{}\" has no .an source file", name),
+                "the project root must contain one .an",
             ))
         }
         _ => {
             return Err(render_nofile(
                 prion_error::CliCode::E505.number(),
-                "找源文件",
-                &format!("项目「{}」里有多个 .an——一文件一程序", name),
-                "只留一个 .an",
+                "locate source file",
+                &format!("project \"{}\" has multiple .an files - one file per program", name),
+                "keep only one .an",
             ))
         }
     };
@@ -547,9 +547,9 @@ fn list_an(dir: &Path) -> Result<Vec<PathBuf>, String> {
     let rd = fs::read_dir(dir).map_err(|e| {
         render_nofile(
             prion_error::EnvCode::E602.number(),
-            "读目录",
-            &format!("读不了 {}：{}", dir.display(), e),
-            "检查目录是否存在、是否有读权限",
+            "read directory",
+            &format!("cannot read {}: {}", dir.display(), e),
+            "check that the directory exists and is readable",
         )
     })?;
     let mut out = Vec::new();
@@ -602,18 +602,18 @@ fn resolve_config(t: &Target, o: &Opts) -> Result<(String, u32), ExitCode> {
     if mode != "debug" && mode != "release" {
         return Err(usage_err(render_nofile(
             prion_error::CliCode::E503.number(),
-            "写选项",
-            &format!("`--mode` 只收 debug|release，给了 {}（`build.prion` 里也一样）", mode),
-            "改成 `--mode debug` 或 `--mode release`",
+            "option",
+            &format!("`--mode` accepts only debug|release, got {} (same in `build.prion`)", mode),
+            "use `--mode debug` or `--mode release`",
         )));
     }
     let opt = o.opt.or(f_opt).unwrap_or(if mode == "debug" { 0 } else { 3 });
     if opt > 3 {
         return Err(usage_err(render_nofile(
             prion_error::CliCode::E503.number(),
-            "写选项",
-            &format!("`--opt` 只收 0-3，给了 {}", opt),
-            "改成 0-3 之间的数",
+            "option",
+            &format!("`--opt` accepts only 0-3, got {}", opt),
+            "use a number between 0 and 3",
         )));
     }
     Ok((mode, opt))
@@ -653,22 +653,22 @@ fn do_fmt(args: &[String]) -> ExitCode {
             }
             if 只查 {
                 if 改.is_empty() {
-                    println!("{} 个文件已符合格式", 数);
+                    println!("{} file(s) already formatted", 数);
                     ExitCode::SUCCESS
                 } else {
-                    println!("{} / {} 个文件需要格式化", 改.len(), 数);
+                    println!("{} / {} file(s) need formatting", 改.len(), 数);
                     ExitCode::from(1)
                 }
             } else {
-                println!("已格式化 {} / {} 个文件", 改.len(), 数);
+                println!("formatted {} / {} file(s)", 改.len(), 数);
                 ExitCode::SUCCESS
             }
         }
         Err(e) => fail101(render_nofile(
             prion_error::EnvCode::E602.number(),
-            "格式化",
+            "format",
             &e,
-            "检查路径是否存在、是否有写权限",
+            "check that the path exists and is writable",
         )),
     }
 }
@@ -838,9 +838,9 @@ fn load_project(dir: &Path) -> Result<AstProgram, ExitCode> {
     if !entry.is_file() {
         return Err(fail101(render_nofile(
             prion_error::CliCode::E505.number(),
-            "找工程入口",
-            &format!("目录「{}」里找不到 main.an——工程入口固定是 main.an", dir.display()),
-            "在目录根放一个 main.an",
+            "locate project entry",
+            &format!("directory \"{}\" has no main.an - the project entry is always main.an", dir.display()),
+            "put a main.an in the directory root",
         )));
     }
     let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
@@ -854,9 +854,9 @@ fn load_project(dir: &Path) -> Result<AstProgram, ExitCode> {
         let text = fs::read_to_string(&path).map_err(|e| {
             fail101(render_nofile(
                 prion_error::EnvCode::E602.number(),
-                "读源文件",
-                &format!("读不到 {}：{}", path.display(), e),
-                "检查文件是否存在、是否有读权限",
+                "read source file",
+                &format!("cannot read {}: {}", path.display(), e),
+                "check that the file exists and is readable",
             ))
         })?;
         let 段 = lex(&text)
@@ -889,9 +889,9 @@ fn load_project(dir: &Path) -> Result<AstProgram, ExitCode> {
                 let root = std_root().ok_or_else(|| {
                     fail101(render_nofile(
                         prion_error::CliCode::E505.number(),
-                        "找标准库",
-                        "找不到标准库根——设 `PRION_STD`，或按 SDK 布局放 `<SDK>/lib/prion`",
-                        "把标准库目录放到上述位置，或设 PRION_STD",
+                        "locate standard library",
+                        "cannot find the standard library root - set `PRION_STD`, or place it at `<SDK>/lib/prion` per the SDK layout",
+                        "put the standard library directory in that location, or set PRION_STD",
                     ))
                 })?;
                 let p = root
@@ -903,9 +903,9 @@ fn load_project(dir: &Path) -> Result<AstProgram, ExitCode> {
                 }
                 return Err(fail101(render_nofile(
                     prion_error::CliCode::E505.number(),
-                    "找标准库",
-                    &format!("标准库里找不到模块「{}」", dep),
-                    &format!("确认 {} 存在", p.display()),
+                    "locate standard library",
+                    &format!("module \"{}\" not found in the standard library", dep),
+                    &format!("confirm {} exists", p.display()),
                 )));
             }
             let rel = dep.replace('.', std::path::MAIN_SEPARATOR_STR);
@@ -926,13 +926,13 @@ fn load_project(dir: &Path) -> Result<AstProgram, ExitCode> {
                         let names: Vec<String> = hits.iter().map(|(m, _)| m.clone()).collect();
                         return Err(fail101(render_nofile(
                             prion_error::CliCode::E505.number(),
-                            "找模块",
+                            "locate module",
                             &format!(
-                                "模块「{}」有歧义——{} 都叫这名，请写全路径",
+                                "module \"{}\" is ambiguous - {} all use this name; write the full path",
                                 dep,
-                                names.join("、")
+                                names.join(", ")
                             ),
-                            &format!("把引用改成 `##:{}`（或别的全路径）", names[0]),
+                            &format!("change the reference to `##:{}` (or another full path)", names[0]),
                         )));
                     }
                 }
@@ -942,9 +942,9 @@ fn load_project(dir: &Path) -> Result<AstProgram, ExitCode> {
                 None => {
                     return Err(fail101(render_nofile(
                         prion_error::CliCode::E505.number(),
-                        "找模块",
-                        &format!("模块「{}」找不到——模块名按目录路径映射", dep),
-                        &format!("确认 {} 存在，或把引用写全", want),
+                        "locate module",
+                        &format!("module \"{}\" not found - module names map to directory paths", dep),
+                        &format!("confirm {} exists, or write the full reference", want),
                     )))
                 }
             }
@@ -963,18 +963,18 @@ fn front(t: &Target) -> Result<AstProgram, ExitCode> {
         Err(e) => {
             return Err(fail101(render_nofile(
                 prion_error::EnvCode::E602.number(),
-                "读源文件",
-                &format!("读不到 {}：{}", t.src.display(), e),
-                "检查文件是否存在、是否有读权限",
+                "read source file",
+                &format!("cannot read {}: {}", t.src.display(), e),
+                "check that the file exists and is readable",
             )))
         }
     };
     if text.starts_with('\u{feff}') {
         return Err(fail101(render_file(
             prion_error::LexCode::E007.number(),
-            "读源文件",
-            "源文件带 BOM——契约要求 UTF-8 无 BOM",
-            "用编辑器把编码改成「UTF-8（不带 BOM）」再编",
+            "read source file",
+            "source file has a BOM - the contract requires UTF-8 without BOM",
+            "set the editor encoding to \"UTF-8 (no BOM)\" and recompile",
             &t.src,
         )));
     }
@@ -1013,7 +1013,7 @@ fn render_coded(code: &str, message: &str, line: usize, err_file: &std::path::Pa
         ""
     };
     let 哪 = if line > 0 {
-        format!("第 {} 行", line)
+        format!("line {}", line)
     } else {
         String::new()
     };
@@ -1056,7 +1056,7 @@ fn render_front(
 }
 
 fn print_diags(checks: &prion_check::CheckResult, src_path: &std::path::Path, src_text: &str) {
-    eprintln!("检查未通过，共 {} 个错误：", checks.errors().len());
+    eprintln!("check failed with {} error(s):", checks.errors().len());
     let mut cache: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
     for d in &checks.diags {
         
@@ -1087,9 +1087,9 @@ fn print_diags(checks: &prion_check::CheckResult, src_path: &std::path::Path, sr
             ""
         };
         let 哪 = if d.col > 0 {
-            format!("第 {} 行第 {} 列", d.line, d.col)
+            format!("line {}, column {}", d.line, d.col)
         } else if d.line > 0 {
-            format!("第 {} 行", d.line)
+            format!("line {}", d.line)
         } else {
             String::new()
         };
@@ -1150,7 +1150,7 @@ fn do_frontend(t: &Target) -> ExitCode {
             }
         };
         let dt = t0.elapsed().as_secs_f64();
-        eprintln!("[分段] 语法 {:.3}s | 检查 {:.3}s | 中间表示 {:.3}s", t_parse, t_check - t_parse, dt - t_check);
+        eprintln!("[phases] parse {:.3}s | check {:.3}s | ir {:.3}s", t_parse, t_check - t_parse, dt - t_check);
         if dt < best {
             best = dt;
             #[cfg(feature = "backend")]
@@ -1160,7 +1160,7 @@ fn do_frontend(t: &Target) -> ExitCode {
         }
     }
     println!(
-        "[前端] 耗时 {:.3}s | 行数 {} | 字节 {} | 函数 {} | 吞吐 {:.0} 行/秒",
+        "[frontend] time {:.3}s | lines {} | bytes {} | functions {} | throughput {:.0} lines/s",
         best,
         lines,
         bytes,
@@ -1197,9 +1197,9 @@ fn do_dump_tokens(t: &Target) -> ExitCode {
         Err(e) => {
             return fail101(render_nofile(
                 prion_error::EnvCode::E602.number(),
-                "读源文件",
-                &format!("读不了 {}：{}", src_file.display(), e),
-                "检查路径是否存在、是否有读权限",
+                "read source file",
+                &format!("cannot read {}: {}", src_file.display(), e),
+                "check that the path exists and is readable",
             ))
         }
     };
@@ -1228,9 +1228,9 @@ fn do_dump_ast(t: &Target) -> ExitCode {
         Err(e) => {
             return fail101(render_nofile(
                 prion_error::EnvCode::E602.number(),
-                "读源文件",
-                &format!("读不了 {}：{}", src_file.display(), e),
-                "检查路径是否存在、是否有读权限",
+                "read source file",
+                &format!("cannot read {}: {}", src_file.display(), e),
+                "check that the path exists and is readable",
             ))
         }
     };
@@ -1299,7 +1299,7 @@ fn do_check(t: &Target) -> ExitCode {
     };
     let checks = check(&ast);
     if checks.ok() {
-        println!("检查通过：{}", t.src.display());
+        println!("check passed: {}", t.src.display());
         ExitCode::SUCCESS
     } else {
         let src_file = if t.src.is_dir() { t.src.join("main.an") } else { t.src.clone() };
@@ -1347,9 +1347,9 @@ fn do_build_llvm(
     if let Err(e) = 发射 {
         return Err(fail101(render_nofile(
             prion_error::GenCode::E401.number(),
-            "LLVM 后端",
+            "LLVM backend",
             &e,
-            "修正源码后重试",
+            "fix the source and retry",
         )));
     }
     let st = Command::new(&cc).arg(&obj).arg("-o").arg(exe).status();
@@ -1357,15 +1357,15 @@ fn do_build_llvm(
         Ok(s) if s.success() => Ok(()),
         Ok(_) => Err(fail101(render_nofile(
             prion_error::GenCode::E401.number(),
-            "链接",
-            "LLVM 目标文件链接失败",
-            "检查 clang 是否可用",
+            "link",
+            "failed to link the LLVM object file",
+            "check that clang is available",
         ))),
         Err(e) => Err(fail101(render_nofile(
             prion_error::EnvCode::E601.number(),
-            "调编译器",
-            &format!("调不起编译器「{}」：{}", cc, e),
-            "设 PRION_CC 指向可用的 clang",
+            "invoke compiler",
+            &format!("cannot invoke compiler \"{}\": {}", cc, e),
+            "set PRION_CC to a working clang",
         ))),
     }
 }
@@ -1383,7 +1383,7 @@ fn do_build(
     _loop_reclaim: bool,
 ) -> Result<(PathBuf, PathBuf), ExitCode> {
     Err(fail101(
-        "这个 prionc 是精简构建（只有诊断与语言服务），不含代码生成——编译请换完整版",
+        "this prionc is a slim build (diagnostics and language service only) without code generation - use the full build to compile",
     ))
 }
 
@@ -1414,9 +1414,9 @@ fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, dbg: bool, native: 
     if let Err(e) = fs::create_dir_all(&dir) {
         return Err(fail101(render_nofile(
             prion_error::EnvCode::E602.number(),
-            "建产物目录",
-            &format!("建不了产物目录 {}：{}", dir.display(), e),
-            "检查路径是否有写权限",
+            "create output directory",
+            &format!("cannot create output directory {}: {}", dir.display(), e),
+            "check that the path is writable",
         )));
     }
     let mut exe = dir.join(&t.name);
@@ -1434,7 +1434,7 @@ fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, dbg: bool, native: 
     {
         let _ = (mode, opt, dir, exe);
         return Err(fail101(
-            "这个 prionc 构建未启用 LLVM 后端——请用默认特性重新构建",
+            "this prionc build has the LLVM backend disabled - rebuild with the default features",
         ));
     }
 }
@@ -1445,9 +1445,9 @@ fn do_run(exe: &Path, args: &[String]) -> ExitCode {
         Err(e) => {
             return fail101(render_nofile(
                 prion_error::EnvCode::E603.number(),
-                "跑程序",
-                &format!("跑不起 {}：{}", exe.display(), e),
-                "检查产物是否存在、是否有可执行权限",
+                "run program",
+                &format!("cannot run {}: {}", exe.display(), e),
+                "check that the output exists and is executable",
             ))
         }
     };
@@ -1456,15 +1456,15 @@ fn do_run(exe: &Path, args: &[String]) -> ExitCode {
         Some(c) if (1..=255).contains(&c) => ExitCode::from(c as u8),
         Some(c) => fail101(render_nofile(
             prion_error::EnvCode::E604.number(),
-            "交退出码",
-            &format!("程序退出码 {}（超出 8 位，无法透传）", c),
-            "程序退出码要在 0–255 之间才能原样交出去",
+            "forward exit code",
+            &format!("program exit code {} (out of 8-bit range, cannot forward)", c),
+            "the exit code must be between 0 and 255 to be forwarded as-is",
         )),
         None => fail101(render_nofile(
             prion_error::EnvCode::E604.number(),
-            "交退出码",
-            "程序被信号终止（没有可透传的退出码）",
-            "看程序是不是被 Ctrl-C 打断、被系统杀掉或自己崩了",
+            "forward exit code",
+            "program was terminated by a signal (no exit code to forward)",
+            "check whether the program was interrupted by Ctrl-C, killed by the system, or crashed",
         )),
     }
 }
@@ -1474,19 +1474,19 @@ fn do_run(exe: &Path, args: &[String]) -> ExitCode {
 fn do_clean(t: &Target) -> ExitCode {
     let bd = t.root.join("build");
     if !bd.exists() {
-        println!("没有可清理的（{} 不存在）", bd.display());
+        println!("nothing to clean ({} does not exist)", bd.display());
         return ExitCode::SUCCESS;
     }
     match fs::remove_dir_all(&bd) {
         Ok(_) => {
-            println!("已清理：{}", bd.display());
+            println!("cleaned: {}", bd.display());
             ExitCode::SUCCESS
         }
         Err(e) => fail101(render_nofile(
             prion_error::EnvCode::E602.number(),
-            "清产物目录",
-            &format!("清不了 {}：{}", bd.display(), e),
-            "检查是否有权限、目录是否被别的程序占用",
+            "clean output directory",
+            &format!("cannot clean {}: {}", bd.display(), e),
+            "check permissions and whether the directory is in use by another program",
         )),
     }
 }
@@ -1495,5 +1495,5 @@ fn 格式语法错(各: &[String]) -> String {
     if 各.len() == 1 {
         return 各[0].clone();
     }
-    format!("{}（共 {} 处语法错）", 各.join("\n"), 各.len())
+    format!("{} ({} syntax error(s) total)", 各.join("\n"), 各.len())
 }

@@ -220,7 +220,7 @@ pub fn 服务() -> i32 {
                 if let Some(id) = id.clone() {
                     回(&mut 写, json!({
                         "jsonrpc": "2.0", "id": id,
-                        "error": { "code": -32601, "message": "方法未实现" }
+                        "error": { "code": -32601, "message": "method not implemented" }
                     }));
                     已回 = true;
                 }
@@ -712,12 +712,12 @@ fn 选符号<'a>(a: &'a 分析, 词: &str) -> Option<&'a prion_check::SymbolInfo
 fn 种类名(k: &prion_check::SymKind) -> &'static str {
     use prion_check::SymKind as K;
     match k {
-        K::Type => "类型",
-        K::Variant => "变体",
-        K::Fn => "函数",
-        K::Val => "值",
-        K::Param => "参数",
-        K::Block => "块",
+        K::Type => "type",
+        K::Variant => "variant",
+        K::Fn => "function",
+        K::Val => "value",
+        K::Param => "parameter",
+        K::Block => "block",
     }
 }
 
@@ -732,12 +732,12 @@ fn 取悬停(态: &mut 状态, 参: &Value) -> Value {
         return Value::Null;
     }
     let 值 = match 选符号(a, &词) {
-        Some(s) => format!("**{}** `{}`\n\n定义于第 {} 行第 {} 列", 种类名(&s.kind), 词, s.line, s.col),
+        Some(s) => format!("**{}** `{}`\n\ndefined at line {}, column {}", 种类名(&s.kind), 词, s.line, s.col),
         
-        None if 类 == 9 => format!("**内置函数** `{}`", 词),
+        None if 类 == 9 => format!("**builtin function** `{}`", 词),
         
         None => match a.局部.iter().find(|l| l.name == 词) {
-            Some(l) => format!("**值** `{}` : {}", 词, l.ty),
+            Some(l) => format!("**value** `{}` : {}", 词, l.ty),
             None => return Value::Null,
         },
     };

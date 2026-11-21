@@ -126,12 +126,12 @@ pub fn 执行(p: &Path, 只查: bool) -> Result<(usize, Vec<PathBuf>), String> {
     收文件(p, &mut 文件);
     let mut 改 = Vec::new();
     for f in &文件 {
-        let 源 = fs::read_to_string(f).map_err(|e| format!("读不到 {}：{}", f.display(), e))?;
+        let 源 = fs::read_to_string(f).map_err(|e| format!("cannot read {}: {}", f.display(), e))?;
         let 新 = format_source(&源);
         if 新 != 源 {
             改.push(f.clone());
             if !只查 {
-                fs::write(f, 新).map_err(|e| format!("写不了 {}：{}", f.display(), e))?;
+                fs::write(f, 新).map_err(|e| format!("cannot write {}: {}", f.display(), e))?;
             }
         }
     }
