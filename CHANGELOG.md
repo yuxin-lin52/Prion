@@ -12,7 +12,7 @@
 - 常量：`fix` 的独立引用动词 `call fix`，支持跨块与跨模块可见性；编译期求值提供 `--const-depth` / `--const-steps` 配额。
 - 模块：字段级 `hide` 的跨模块限制。
 - 内置：`sqrt`、`print_raw`、`now`（单调纳秒时钟）。
-- 语法：名字的引号可省略；词表加入 `trait` / `impl` / `spawn` / `share` / `send`，其中 `trait` 与 `impl` 为保留字，尚未实现。
+- 语法：名字的引号可省略；词表加入 `spawn` / `share` / `send`。
 
 ### 优化
 
@@ -55,7 +55,7 @@ This release renames the language to **Prion** (formerly Anle): the compiler bin
 - Constants: the dedicated verb `call fix`, with cross-block and cross-module visibility; `--const-depth` / `--const-steps` quotas for compile-time evaluation.
 - Modules: field-level `hide` enforced across modules.
 - Builtins: `sqrt`, `print_raw`, and `now` (monotonic nanosecond clock).
-- Syntax: names may be written without quotes; the keyword set gains `trait` / `impl` / `spawn` / `share` / `send`, of which `trait` and `impl` are reserved and not implemented in this release.
+- Syntax: names may be written without quotes; the keyword set gains `spawn` / `share` / `send`.
 
 ### Improved
 

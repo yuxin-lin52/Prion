@@ -34,14 +34,14 @@ The following words are reserved and cannot be used as names:
 add call take fn val type hide give outs
 if else for while match case
 unsafe pub sle ABI asm fix
-trait impl spawn share send
+spawn share send
 int float bool str
 int_8 int_16 int_32 int_64 uint_8 uint_16 uint_32 uint_64
 list map que stack
 and or not null re fa
 ```
 
-A name may be written with or without quotes. Quoting is required only when the name is a reserved word or contains characters that cannot appear in an identifier: a keyword can be used as a name only when quoted, as in `add val "if" int = 1`. Of the reserved words, `trait` and `impl` are reserved for future use and are not implemented in this release. The loop words `in` and `max` are contextual: they carry meaning only within `for` and `while` syntax and are not reserved.
+A name may be written with or without quotes. Quoting is required only when the name is a reserved word or contains characters that cannot appear in an identifier: a keyword can be used as a name only when quoted, as in `add val "if" int = 1`. The loop words `in` and `max` are contextual: they carry meaning only within `for` and `while` syntax and are not reserved.
 
 ## Symbols and markers
 
