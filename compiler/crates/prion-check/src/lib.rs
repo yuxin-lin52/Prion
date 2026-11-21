@@ -3336,6 +3336,13 @@ fn calls_expr(b: &AstBlock, 处: 位置, 段: &[Token], cx: &mut Ctx) {
             _ => {}
         }
         if let Token::Ident(n) = &expr[i] {
+            if matches!(
+                expr.get(i.wrapping_sub(1)),
+                Some(Token::Kw("fn")) | Some(Token::Kw("val")) | Some(Token::Kw("type"))
+            ) {
+                i += 1;
+                continue;
+            }
             if BUILTINS.iter().any(|u| *u == n.as_ref()) {
                 if n.as_ref() == "concat" && matches!(expr.get(i + 1), Some(Token::Sym("("))) {
                     let args = call_args(expr, i + 1);
