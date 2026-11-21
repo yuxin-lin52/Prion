@@ -1,0 +1,9 @@
+#: 主程序 b
+add fn "fib" (n int) int = if n < 2 { n } else { call fn "fib"(n - 1) + call fn "fib"(n - 2) }
+add val "参" list(str) = args()
+add val "n" int = 35
+if len(call val "参") > 1:
+    val "n" = int(call val "参"[2])
+;
+print(call fn "fib"(call val "n"))
+#: 主程序 d

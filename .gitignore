@@ -12,3 +12,7 @@ target/
 *.exp
 *.lib
 *-report.txt
+
+# 基准测试输出
+bench/out/
+bench/obj/

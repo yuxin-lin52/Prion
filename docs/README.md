@@ -23,6 +23,7 @@ A hands-on tutorial for the Prion language: each chapter walks you through writi
 | 13 · Portability and targets | [13-portability.md](en/13-portability.md) |
 | 14 · Inline assembly | [14-inline-asm.md](en/14-inline-asm.md) |
 | 15 · Appendices (keywords, builtins, operators, error codes) | [15-appendix.md](en/15-appendix.md) |
+| 16 · Performance | [16-performance.md](en/16-performance.md) |
 
 ## 中文
 
@@ -43,3 +44,4 @@ A hands-on tutorial for the Prion language: each chapter walks you through writi
 | 13 · 可移植性与目标 | [13-可移植性.md](zh/13-%E5%8F%AF%E7%A7%BB%E6%A4%8D%E6%80%A7.md) |
 | 14 · 内联汇编 | [14-内联汇编.md](zh/14-%E5%86%85%E8%81%94%E6%B1%87%E7%BC%96.md) |
 | 15 · 附录（关键字 / 内置名 / 运算符 / 错误码） | [15-附录.md](zh/15-%E9%99%84%E5%BD%95.md) |
+| 16 · 性能 | [16-性能.md](zh/16-%E6%80%A7%E8%83%BD.md) |

@@ -1,0 +1,20 @@
+#: 主程序 b
+add val "参" list(str) = args()
+add val "n" int = 2000000
+if len(call val "参") > 1:
+    val "n" = int(call val "参"[2])
+;
+add val "表" list(int) = []
+add val "i" int = 0
+while call val "i" < call val "n" max 5000001:
+    push(call val "表", call val "i")
+    val "i" = call val "i" + 1
+;
+add val "和" int = 0
+add val "j" int = 0
+while call val "j" < call val "n" max 5000001:
+    val "和" = call val "和" + call val "表"[call val "j" + 1]
+    val "j" = call val "j" + 1
+;
+print(call val "和")
+#: 主程序 d

@@ -1,0 +1,16 @@
+#: 主程序 b
+add val "参" list(str) = args()
+add val "n" int = 200000
+if len(call val "参") > 1:
+    val "n" = int(call val "参"[2])
+;
+add val "s" str = "z"
+add val "i" int = 0
+add val "k" int = 0
+while call val "i" < call val "n" max 5000001:
+    val "s" = concat("ab", "cd", "ef")
+    val "k" = call val "k" + len(call val "s")
+    val "i" = call val "i" + 1
+;
+print(call val "k")
+#: 主程序 d
