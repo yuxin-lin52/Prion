@@ -51,7 +51,9 @@ The model gives every programmer the same simple default: put the code in blocks
 
 ## Download
 
-A prebuilt Windows x64 compiler is published on the [releases page](https://github.com/yuxin-lin52/Prion/releases). It uses the LLVM backend, so compiling a program additionally needs a linker toolchain: `clang` on `PATH`, or `PRION_CC` pointing at one. LLVM itself is linked into the compiler and does not need to be installed separately.
+Prebuilt compilers for Windows x64 and Linux x86_64 are published on the [releases page](https://github.com/yuxin-lin52/Prion/releases): `prionc-0.3.0-windows-x64.zip` and `prionc-0.3.0-linux-x64.tar.gz`. Each archive holds the compiler, a short README and the third-party notices.
+
+LLVM is linked into the compiler, so no separate LLVM installation is needed. Compiling a program additionally needs a C linker toolchain: `clang` on `PATH`, or `PRION_CC` pointing at one. On Windows the Microsoft Visual C++ runtime is required; it normally comes with clang or Visual Studio.
 
 ## Building
 

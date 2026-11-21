@@ -51,7 +51,9 @@ Prion 三种取舍都不取。程序按块结构化，值长在声明它的块�
 
 ## 下载
 
-[releases 页](https://github.com/yuxin-lin52/Prion/releases) 提供 Windows x64 的预构建编译器。它使用 LLVM 后端，因此编译程序时还需要一个链接工具链：`PATH` 里有 `clang`，或用 `PRION_CC` 指向一个。LLVM 本身已链接进编译器，无需单独安装。
+[releases 页](https://github.com/yuxin-lin52/Prion/releases) 提供 Windows x64 与 Linux x86_64 的预构建编译器：`prionc-0.3.0-windows-x64.zip` 与 `prionc-0.3.0-linux-x64.tar.gz`。压缩包里是编译器、一份简短说明和第三方声明。
+
+LLVM 已链接进编译器，无需单独安装。编译程序还需要一个 C 链接工具链：`PATH` 里有 `clang`，或用 `PRION_CC` 指向一个。Windows 上还需要 Microsoft Visual C++ 运行库，通常随 clang 或 Visual Studio 一起安装。
 
 ## 构建
 
