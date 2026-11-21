@@ -258,7 +258,7 @@ fn 走(stmts: &[prion_parser::Stmt], cx: &Ctx, block: &str) {
                 
                 if 新.is_none() {
                     let 旧 = crate::infer(&t[起..], &cx.locals, &cx.local_idx, &cx.names, block, &cx.types);
-                    eprintln!("[推不出] 第{}行 旧={:?} AST={}", line, 旧, e);
+                    eprintln!("[infer] line{} old={:?} AST={}", line, 旧, e);
                 }
             }
             S::Struct { body, .. } => 走(body, cx, block),

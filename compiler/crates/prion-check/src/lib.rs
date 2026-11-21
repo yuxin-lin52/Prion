@@ -98,7 +98,7 @@ impl CheckResult {
 }
 
 const MAX_DIAGS: usize = 20;
-const UNKNOWN: &str = "未知";
+const UNKNOWN: &str = "unknown";
 
 
 pub const BUILTINS: &[&str] = &[
@@ -432,11 +432,11 @@ pub fn check(ast: &AstProgram) -> CheckResult {
                     位置 { 行: line, 列: col, 长: kw.chars().count() },
                     CheckCode::E201,
                     &DiagParts::full(
-                        format!("第 {} 行", line),
-                        "写声明",
-                        format!("关键字「{}」不能作自定名", kw),
+                        format!("line {}", line),
+                        "declaration",
+                        format!("keyword \"{}\" cannot be used as a user-defined name", kw),
                         "",
-                        "另起一个名字，或写带引号的 \"名\"（引号内允许用关键字作名字）",
+                        "choose another name, or write the quoted form \"name\" (keywords are allowed inside quotes)",
                     ),
                     Tone::Fix,
                 );
@@ -498,19 +498,18 @@ pub fn check(ast: &AstProgram) -> CheckResult {
                     位置{ 行: b.line, 列: b.col, 长: b.len },
                     CheckCode::E201,
                     &DiagParts::full(
-                        format!("第 {} 行", b.line),
-                        "建块",
+                        format!("line {}", b.line),
+                        "block definition",
                         format!(
-                            "块「{}」重名——同模块内块不许重名（第一次在第 {} 行）",
+                            "block \"{}\" is duplicated - block names must be unique within a module (first defined at line {})",
                             b.name, first
                         ),
                         "",
-                        "换个块名；跨模块的同名块是合法的（引用时写 `##:模块 #:块` 区分）",
+                        "choose another block name; same-named blocks across modules are allowed (distinguish them as `##:module #:block` when referencing)",
                     )
-                    .预期("同一个模块里块名唯一")
+                    .预期("block names are unique within a module")
                     .详解(
-                        "块名在**同模块内**必须唯一：两个同名块会被当成两个链根各跑一遍，`call #:块` 也无从判断调哪个。\
-                         不同模块可以有同名块——引用时 `##:模块 #:块` 天然区分。",
+                        "Block names must be unique **within a module**: two same-named blocks are treated as two separate chain roots and each run once, and `call #:block` cannot tell which to call. Different modules may have same-named blocks - referencing with `##:module #:block` distinguishes them naturally.",
                     ),
                     Tone::Fix,
                 );
@@ -532,11 +531,11 @@ pub fn check(ast: &AstProgram) -> CheckResult {
                     位置{ 行: b.line, 列: b.col, 长: b.len },
                     CheckCode::E203,
                     &DiagParts::full(
-                        format!("第 {} 行", line),
-                        "块行属性",
-                        format!("块「{}」属性顺序不合法：`unsafe` 未紧贴 `b`", b.name),
+                        format!("line {}", line),
+                        "block attributes",
+                        format!("block \"{}\" has an invalid attribute order: `unsafe` is not adjacent to `b`", b.name),
                         "",
-                        "写成 `#: 名 b unsafe [pub|sle] [ABI]`",
+                        "write it as `#: name b unsafe [pub|sle] [ABI]`",
                     ),
                     Tone::Fix,
                 );
@@ -548,11 +547,11 @@ pub fn check(ast: &AstProgram) -> CheckResult {
                     位置{ 行: b.line, 列: b.col, 长: b.len },
                     CheckCode::E203,
                     &DiagParts::full(
-                        format!("第 {} 行", line),
-                        "块行属性",
-                        format!("块「{}」属性顺序不合法：`ABI` 未殿后", b.name),
+                        format!("line {}", line),
+                        "block attributes",
+                        format!("block \"{}\" has an invalid attribute order: `ABI` is not last", b.name),
                         "",
-                        "把 `ABI` 写到最后一个属性位",
+                        "put `ABI` in the last attribute position",
                     ),
                     Tone::Fix,
                 );
@@ -562,11 +561,11 @@ pub fn check(ast: &AstProgram) -> CheckResult {
                     位置{ 行: b.line, 列: b.col, 长: b.len },
                     CheckCode::E203,
                     &DiagParts::full(
-                        format!("第 {} 行", line),
-                        "块行属性",
-                        format!("块「{}」标了 `ABI` 却没标 `pub`", b.name),
+                        format!("line {}", line),
+                        "block attributes",
+                        format!("block \"{}\" is marked `ABI` but not `pub`", b.name),
                         "",
-                        "补上 `pub`（导出面必须显式开门，不做隐式蕴含）",
+                        "add `pub` (the export surface must be opened explicitly; no implicit implication)",
                     ),
                     Tone::Fix,
                 );
@@ -608,7 +607,7 @@ pub fn check(ast: &AstProgram) -> CheckResult {
             file: String::new(),
             code: String::new(),
             message: format!(
-                "提示：还有 {} 条未报告（单次诊断上限 {} 条）—— 先修上面这些，再编一次会露出后面的",
+                "note: {} more not reported (per-run diagnostic limit {}). Fix the above first, then recompile to reveal the rest",
                 cx.suppressed, MAX_DIAGS
             ),
             parts: DiagParts::default(),
@@ -622,13 +621,13 @@ pub fn check(ast: &AstProgram) -> CheckResult {
             位置 { 行: span.line, 列: span.col, 长: span.len },
             CheckCode::E201,
             &DiagParts::full(
-                format!("第 {} 行", span.line),
-                "字段隐藏",
-                format!("字段「{}」在类型「{}」上被 hide 了", field, ty),
+                format!("line {}", span.line),
+                "field hiding",
+                format!("field \"{}\" is hidden on type \"{}\"", field, ty),
                 "",
-                "跨模块只能读公开字段；要读请在本模块内提供取值函数",
+                "across modules only public fields can be read; to read it, provide an accessor function in this module",
             )
-            .预期("hide 字段不在跨模块的可见面上"),
+            .预期("the hidden field is not part of the cross-module visible surface"),
             Tone::Fix,
         );
     }
@@ -886,11 +885,11 @@ fn collect_stmts(stmts: &[AstStmt], b: &AstBlock, cx: &mut Ctx) {
                                 位置{ 行: *line, 列: *col, 长: *len },
                                 CheckCode::E204,
                                 &DiagParts::full(
-                                    format!("第 {} 行", line),
-                                    "match 判别",
-                                    format!("无字段变体的判别也要写括号——`case {}()`", n),
+                                    format!("line {}", line),
+                                    "match dispatch",
+                                    format!("a fieldless variant dispatch still needs parentheses - `case {}()`", n),
                                     "",
-                                    "判别统一带括号：有字段写 `case 变体(绑定)`，无字段写 `case 变体()`，兜底写 `case _:`",
+                                    "dispatch always uses parentheses: with fields write `case variant(binding)`, without fields write `case variant()`, fallback write `case _:`",
                                 ),
                                 Tone::Fix,
                             );
@@ -906,11 +905,11 @@ fn collect_stmts(stmts: &[AstStmt], b: &AstBlock, cx: &mut Ctx) {
                             位置{ 行: *line, 列: *col, 长: *len },
                             CheckCode::E201,
                             &DiagParts::full(
-                                format!("第 {} 行", line),
-                                "循环变量",
-                                format!("循环变量「{}」没加引号——自定义名一律带引号（块名除外）", n),
+                                format!("line {}", line),
+                                "loop variable",
+                                format!("loop variable \"{}\" is not quoted - all user-defined names are quoted (except block names)", n),
                                 "",
-                                format!("写成 `for \"{}\" in …`；体内读取写 val \"{}\"", n, n),
+                                format!("write `for \"{}\" in ...`; read it in the body as val \"{}\"", n, n),
                             ),
                             Tone::Fix,
                         );
@@ -964,7 +963,7 @@ fn collect_val(b: &AstBlock, 处: 位置, 段: &[Token], exprs: &[Expr], cx: &mu
         if matches!(head.as_ref(), "list" | "que" | "stack") {
             if let Some(e) = elem_ty_str(&ty) {
                 if is_container_ty(&e) {
-                    bad = Some(format!("元素是 {}", e));
+                    bad = Some(format!("element is {}", e));
                 }
             }
         }
@@ -974,9 +973,9 @@ fn collect_val(b: &AstBlock, 处: 位置, 段: &[Token], exprs: &[Expr], cx: &mu
                 let k = inner.split(',').next().unwrap_or("").trim();
 
                 if is_container_ty(k) {
-                    bad = Some(format!("键是容器 {}", k));
+                    bad = Some(format!("key is a container {}", k));
                 } else if k.ends_with('*') {
-                    bad = Some(format!("键是把手 {}", k));
+                    bad = Some(format!("key is a handle {}", k));
                 }
             }
         }
@@ -985,11 +984,11 @@ fn collect_val(b: &AstBlock, 处: 位置, 段: &[Token], exprs: &[Expr], cx: &mu
                 处,
                 CheckCode::E203,
                 &DiagParts::full(
-                    format!("第 {} 行", line),
-                    "建 val",
-                    format!("容器里不能套容器——{}", why),
+                    format!("line {}", line),
+                    "value definition",
+                    format!("a container cannot nest a container - {}", why),
                     "",
-                    "改成一维扁平 + 手工索引；要装容器就放进 map 的值或结构体字段（有名字的地方可以装）",
+                    "flatten to one dimension and index manually; to hold a container, put it in a map value or a struct field (named places can hold them)",
                 ),
                 Tone::Fix,
             );
@@ -1005,11 +1004,11 @@ fn collect_val(b: &AstBlock, 处: 位置, 段: &[Token], exprs: &[Expr], cx: &mu
                         处,
                         CheckCode::E203,
                         &DiagParts::full(
-                            format!("第 {} 行", line),
-                            "建 val",
-                            format!("「{}」是内置类型，加不了星", t),
+                            format!("line {}", line),
+                            "value definition",
+                            format!("\"{}\" is a builtin type and cannot take a star", t),
                             "",
-                            "内置类型本来就是值；要引用语义请用自定义类型（如 node*）",
+                            "builtin types are values already; for reference semantics use a user-defined type (e.g. node*)",
                         ),
                         Tone::Fix,
                     );
@@ -1040,21 +1039,21 @@ fn collect_val(b: &AstBlock, 处: 位置, 段: &[Token], exprs: &[Expr], cx: &mu
         let 同fn = cx.find_local(&b.name, &name).is_some();
         let (标题, 正文, 改法) = if 同fn {
             (
-                format!("块「{}」里已经有 val「{}」", b.name, name),
+                format!("block \"{}\" already has val \"{}\"", b.name, name),
                 "",
-                "换个名字（同一个块里 val 不许重名）".to_string(),
+                "choose another name (val names must be unique within a block)".to_string(),
             )
         } else {
             (
-                format!("fn 局部「{}」不许与块级 val 重名", name),
-                "fn 的局部和形参有自己的名字空间，但不得占用块级 val 的名字",
-                "给 fn 局部换个名字，与块级 val 错开".to_string(),
+                format!("fn local \"{}\" must not share a name with a block-level val", name),
+                "fn locals and parameters have their own namespace but must not take names of block-level vals",
+                "rename the fn local so it does not collide with a block-level val".to_string(),
             )
         };
         cx.err(
             处,
             CheckCode::E201,
-            &DiagParts::full(format!("第 {} 行", line), "建 val", 标题, 正文, 改法),
+            &DiagParts::full(format!("line {}", line), "value definition", 标题, 正文, 改法),
             Tone::Fix,
         );
         return;
@@ -1588,11 +1587,11 @@ fn collect_case_bindings(b: &AstBlock, head: &[Token], cx: &mut Ctx) {
                     位置{ 行: b.line, 列: b.col, 长: b.len },
                     CheckCode::E201,
                     &DiagParts::full(
-                        format!("第 {} 行", b.line),
-                        "case 绑定",
-                        format!("解构绑定「{}」没加引号——自定义名一律带引号（块名除外）", n),
+                        format!("line {}", b.line),
+                        "case binding",
+                        format!("destructuring binding \"{}\" is not quoted - all user-defined names are quoted (except block names)", n),
                         "",
-                        format!("写成 `case 变体(\"{}\")：`；体内读取写 val \"{}\"", n, n),
+                        format!("write `case variant(\"{}\"):`; read it in the body as val \"{}\"", n, n),
                     ),
                     Tone::Fix,
                 );
@@ -1669,13 +1668,13 @@ fn check_hidden_field_access(cx: &mut Ctx, ast: &AstProgram, 处: &位置, b: &A
             处.clone(),
             CheckCode::E201,
             &DiagParts::full(
-                format!("第 {} 行", 处.行),
-                "字段隐藏",
-                format!("字段「{}」在类型「{}」上被 hide 了", fname, plain),
+                format!("line {}", 处.行),
+                "field hiding",
+                format!("field \"{}\" is hidden on type \"{}\"", fname, plain),
                 "",
-                "跨模块只能读公开字段；要读请在本模块内提供取值函数",
+                "across modules only public fields can be read; to read it, provide an accessor function in this module",
             )
-            .预期("hide 字段不在跨模块的可见面上"),
+            .预期("the hidden field is not part of the cross-module visible surface"),
             Tone::Fix,
         );
     }
@@ -1755,11 +1754,11 @@ fn check_type_cycles(types: &TypeTable, cx: &mut Ctx) {
                     *tline,
                     CheckCode::E203,
                     &DiagParts::full(
-                        "类型定义",
-                        "写字段",
-                        format!("裸环：字段「{}」的类型回到自己", fname),
+                        "type definition",
+                        "field access",
+                        format!("direct cycle: field \"{}\" has a type that leads back to itself", fname),
                         "",
-                        format!("写 {}*（把手）就不成环", name),
+                        format!("write {}* (a handle) to break the cycle", name),
                     ),
                     Tone::Fix,
                 );
@@ -1771,11 +1770,11 @@ fn check_type_cycles(types: &TypeTable, cx: &mut Ctx) {
                 *tline,
                 CheckCode::E203,
                 &DiagParts::full(
-                    "类型定义",
-                    "写字段",
-                    format!("互指成环：{} 沿值字段又能回到自己", name),
+                    "type definition",
+                    "field access",
+                    format!("mutual cycle: {} can reach itself again through value fields", name),
                     "",
-                    "把回环的那一端改成把手（加 *）",
+                    "make the closing end a handle (add *)",
                 ),
                 Tone::Fix,
             );
@@ -1851,11 +1850,11 @@ fn collect_val_rebind(b: &AstBlock, 处: 位置, 段: &[Token], cx: &mut Ctx) {
             处,
             CheckCode::E201,
             &DiagParts::full(
-                format!("第 {} 行", line),
-                "改值",
-                format!("取不到「{}」的当前值——先给它一个值", name),
+                format!("line {}", line),
+                "reassignment",
+                format!("cannot read the current value of \"{}\" - give it a value first", name),
                 "",
-                "delta 是「取当前值再改」：先 `add val \"名\" 类型 = 初值`，或先用 `val \"名\" = 值` 给过值",
+                "delta reads the current value then writes: first `add val \"name\" type = initial`, or assign once with `val \"name\" = value`",
             ),
             Tone::Fix,
         );
@@ -1886,11 +1885,11 @@ fn check_hide_decls(ast: &AstProgram, cx: &mut Ctx) {
                         处,
                         CheckCode::E203,
                         &DiagParts::full(
-                            format!("第 {} 行", line),
-                            "hide 可见性",
-                            "hide 只能对 fn / type / fix 写".to_string(),
+                            format!("line {}", line),
+                            "hide visibility",
+                            "hide can only be applied to fn / type / fix".to_string(),
                             "",
-                            "val 本就在公开面里，不许单独藏",
+                            "val is part of the public surface already and cannot be hidden on its own",
                         ),
                         Tone::Fix,
                     );
@@ -1902,11 +1901,11 @@ fn check_hide_decls(ast: &AstProgram, cx: &mut Ctx) {
                     处,
                     CheckCode::E203,
                     &DiagParts::full(
-                        format!("第 {} 行", line),
-                        "hide 可见性",
-                        format!("块「{}」不是 pub 块，不许 hide", b.name),
+                        format!("line {}", line),
+                        "hide visibility",
+                        format!("block \"{}\" is not a pub block and cannot hide", b.name),
                         "",
-                        "hide 是给 pub 块开窗又拉帘用的；普通块本来就不对外",
+                        "hide is for opening a window in a pub block and then drawing the curtain; ordinary blocks are not exported anyway",
                     ),
                     Tone::Fix,
                 );
@@ -1917,15 +1916,15 @@ fn check_hide_decls(ast: &AstProgram, cx: &mut Ctx) {
                     处,
                     CheckCode::E203,
                     &DiagParts::full(
-                        format!("第 {} 行", line),
-                        "hide 可见性",
+                        format!("line {}", line),
+                        "hide visibility",
                         format!(
-                            "`add hide {}` 后应接{}名",
+                            "`add hide {}` must be followed by a {} name",
                             cat,
-                            if cat == "fn" { "fn" } else { "类型" }
+                            if cat == "fn" { "fn" } else { "type" }
                         ),
                         "",
-                        "写成 `add hide fn \"名\"` / `add hide type \"名\"`",
+                        "write `add hide fn \"name\"` / `add hide type \"name\"`",
                     ),
                     Tone::Fix,
                 );
@@ -1962,11 +1961,11 @@ fn register_fn(
             处,
             CheckCode::E201,
             &DiagParts::full(
-                format!("第 {} 行", line),
-                "建 fn",
-                format!("「{}」是内置函数名，不能拿来当 fn 名", name),
+                format!("line {}", line),
+                "fn definition",
+                format!("\"{}\" is a builtin function name and cannot be used as an fn name", name),
                 "",
-                "换个名字（内置名开箱即用，不允许被覆盖）",
+                "choose another name (builtin names work out of the box and cannot be overridden)",
             ),
             Tone::Suggest,
         );
@@ -1980,11 +1979,11 @@ fn register_fn(
             处,
             CheckCode::E201,
             &DiagParts::full(
-                format!("第 {} 行", line),
-                "建 fn",
-                format!("fn「{}」已经建过", name),
+                format!("line {}", line),
+                "fn definition",
+                format!("fn \"{}\" is already defined", name),
                 "",
-                "换个名字（同一个块里 fn 不许重名；补体/重绑定写 `fn \"名\" (参) 返 = 体`）",
+                "choose another name (fn names must be unique within a block; to supply a body or rebind write `fn \"name\" (params) ret = body`)",
             ),
             Tone::Fix,
         );
@@ -2007,14 +2006,14 @@ fn register_fn(
                     处,
                     CheckCode::E202,
                     &DiagParts::full(
-                        format!("第 {} 行", line),
-                        "声明外部函数",
-                        format!("参数「{}」是 {}——外部函数只收标量", pname, pty),
+                        format!("line {}", line),
+                        "external function declaration",
+                        format!("parameter \"{}\" is {} - external functions accept scalars only", pname, pty),
                         "",
-                        "字符串进出写 to_c_str / from_c_str 显式转换",
+                        "convert strings explicitly with to_c_str / from_c_str",
                     )
-                    .预期("外部函数的参数只能是 int / float / bool 标量")
-                .详解("字符串进出 C 必须显式转换：进去写 to_c_str(串)，出来写 from_c_str(指针)——这是安全边界，不能让指针悄悄穿过。"),
+                    .预期("external function parameters can only be int / float / bool scalars")
+                .详解("Strings crossing into C must be converted explicitly: use to_c_str(string) going in and from_c_str(pointer) coming out - this is a safety boundary; pointers must not slip through silently."),
                     Tone::Fix,
                 );
                 return;
@@ -2025,14 +2024,14 @@ fn register_fn(
                 处,
                 CheckCode::E202,
                 &DiagParts::full(
-                    format!("第 {} 行", line),
-                    "声明外部函数",
-                    format!("返回类型 {}——外部函数只收标量", ret),
+                    format!("line {}", line),
+                    "external function declaration",
+                    format!("return type {} - external functions accept scalars only", ret),
                     "",
-                    "字符串进出写 to_c_str / from_c_str 显式转换",
+                    "convert strings explicitly with to_c_str / from_c_str",
                 )
-                .预期("外部函数的返回只能是 int / float / bool 标量")
-                .详解("字符串进出 C 必须显式转换：进去写 to_c_str(串)，出来写 from_c_str(指针)。"),
+                .预期("external function returns can only be int / float / bool scalars")
+                .详解("Strings crossing into C must be converted explicitly: to_c_str(string) going in and from_c_str(pointer) coming out."),
                 Tone::Fix,
             );
             return;
@@ -2069,11 +2068,11 @@ fn register_fn(
                     处,
                     CheckCode::E201,
                     &DiagParts::full(
-                        format!("第 {} 行", 处.行),
-                        "fn 形参",
-                        format!("形参「{}」与块级 val 重名", pname),
-                        "fn 局部与形参不许和块级 val 同名——名字空间分开，歧义在编译期消灭",
-                        "给形参换个名字",
+                        format!("line {}", 处.行),
+                        "fn parameter",
+                        format!("parameter \"{}\" collides with a block-level val", pname),
+                        "fn locals and parameters must not share names with block-level vals - namespaces are separate so ambiguity is eliminated at compile time",
+                        "rename the parameter",
                     ),
                     Tone::Fix,
                 );
@@ -2112,7 +2111,7 @@ fn parse_type_ref(段: &[Token], at: usize) -> Result<(String, usize), String> {
                         _ => {}
                     }
                 }
-                let 尽 = 尽.ok_or_else(|| format!("容器类型「{}」的括号没闭合", 基))?;
+                let 尽 = 尽.ok_or_else(|| format!("parentheses of container type \"{}\" are not closed", 基))?;
                 let mut 实参: Vec<String> = Vec::new();
                 for 段 in split_commas(&段[at + 2..尽]) {
                     let (ty, _) = parse_type_ref(&段, 0)?;
@@ -2161,7 +2160,7 @@ fn parse_type_ref(段: &[Token], at: usize) -> Result<(String, usize), String> {
                         _ => {}
                     }
                 }
-                let 尽 = 尽.ok_or_else(|| "函数类型「fn」的括号没闭合".to_string())?;
+                let 尽 = 尽.ok_or_else(|| "parentheses of function type \"fn\" are not closed".to_string())?;
                 let mut 实参: Vec<String> = Vec::new();
                 for 段 in split_commas(&段[at + 2..尽]) {
                     let (ty, _) = parse_type_ref(&段, 0)?;
@@ -2198,18 +2197,18 @@ fn parse_type_ref(段: &[Token], at: usize) -> Result<(String, usize), String> {
                     }
                 }
                 if !matches!(段.get(j), Some(Token::HashColon)) {
-                    return Err("`##:` 后应接模块名再接 `#:块`——形如 `##:前端.拆词 #:分句`".into());
+                    return Err("`##:` must be followed by a module name then `#:block` - e.g. `##:frontend.tokenizer #:split`".into());
                 }
                 j
             } else {
                 at
             };
             if !matches!(段.get(colon_at + 2), Some(Token::Kw("type"))) {
-                return Err("跨块取类型要写 `#:块 type \"名\"`".into());
+                return Err("to take a type across blocks write `#:block type \"name\"`".into());
             }
             let tname = match 段.get(colon_at + 3) {
                 Some(Token::Str(n)) | Some(Token::Ident(n)) => n.clone(),
-                _ => return Err("`#:块 type` 后应接类型名".into()),
+                _ => return Err("`#:block type` must be followed by a type name".into()),
             };
             if matches!(段.get(colon_at + 4), Some(Token::Sym("*"))) {
                 Ok((format!("{}*", tname), colon_at + 5))
@@ -2217,7 +2216,7 @@ fn parse_type_ref(段: &[Token], at: usize) -> Result<(String, usize), String> {
                 Ok((tname.to_string(), colon_at + 4))
             }
         }
-        _ => Err("这里应当是类型（内置类型名 / 自定义类型名 / `#:块 type \"名\"`）".into()),
+        _ => Err("expected a type here (builtin type name / user-defined type name / `#:block type \"name\"`)".into()),
     }
 }
 
@@ -2225,7 +2224,7 @@ fn parse_params(段: &[Token]) -> Result<(Vec<(String, String)>, usize), String>
     let open = 段
         .iter()
         .position(|t| *t == Token::Sym("("))
-        .ok_or("缺参数表")?;
+        .ok_or("missing parameter list")?;
     let mut depth = 0i32;
     let mut end = None;
     for (k, t) in 段.iter().enumerate().skip(open) {
@@ -2241,16 +2240,16 @@ fn parse_params(段: &[Token]) -> Result<(Vec<(String, String)>, usize), String>
             _ => {}
         }
     }
-    let end = end.ok_or("参数表没闭合")?;
+    let end = end.ok_or("parameter list is not closed")?;
     let mut out = Vec::new();
     for a in split_commas(&段[open + 1..end]) {
         let name = match a.first() {
             Some(Token::Ident(n)) | Some(Token::Str(n)) => n.to_string(),
-            _ => return Err("参数缺名字".into()),
+            _ => return Err("parameter is missing a name".into()),
         };
         let (ty, _) = match a.get(1) {
             Some(_) => parse_type_ref(&a, 1)?,
-            None => return Err(format!("参数「{}」缺类型", name)),
+            None => return Err(format!("parameter \"{}\" is missing a type", name)),
         };
         out.push((name, ty));
     }
@@ -2379,17 +2378,17 @@ fn check_caps(cx: &mut Ctx) {
                     处,
                     CheckCode::E201,
                     &DiagParts::full(
-                        format!("第 {} 行", 行),
-                        "能力约束",
+                        format!("line {}", 行),
+                        "capability constraint",
                         format!(
-                            "泛型 fn「{}」的体里对类型参数用了「{}」，参数表没声明这个能力",
+                            "the body of generic fn \"{}\" uses \"{}\" on a type parameter, but the parameter list does not declare this capability",
                             名, op
                         ),
-                        "能力集 = 运算符集，声明了才能用",
+                        "the capability set is the operator set; a capability must be declared before use",
                         format!(
-                            "在类型参数上标注（当前已声明：{}）",
+                            "annotate it on the type parameter (currently declared: {})",
                             if 可用.is_empty() {
-                                "无".to_string()
+                                "none".to_string()
                             } else {
                                 可用.join(" ")
                             }
@@ -2426,11 +2425,11 @@ fn check_call(b: &AstBlock, 处: 位置, name: &str, args: &[Vec<Token>], cx: &m
                 处,
                 CheckCode::E201,
                 &DiagParts::full(
-                    format!("第 {} 行", line),
-                    "调函数",
-                    format!("fn「{}」还没建过", name),
+                    format!("line {}", line),
+                    "function call",
+                    format!("fn \"{}\" has not been defined", name),
                     "",
-                    "先用 add fn \"名\" (参数) 返回类型 = 表达式 建",
+                    "define it first with add fn \"name\" (params) return type = expression",
                 ),
                 Tone::Fix,
             );
@@ -2450,15 +2449,15 @@ fn check_call(b: &AstBlock, 处: 位置, name: &str, args: &[Vec<Token>], cx: &m
                 处,
                 CheckCode::E201,
                 &DiagParts::full(
-                    format!("第 {} 行", line),
-                    "调函数",
-                    format!("fn「{}」用在它被建出来之前——它到第 {} 行才建", name, decl),
+                    format!("line {}", line),
+                    "function call",
+                    format!("fn \"{}\" is used before it is defined - it is defined at line {}", name, decl),
                     "",
-                    format!("把建「{}」的那行 `add fn` 移到这一行之前", name),
+                    format!("move the `add fn` line for \"{}\" above this line", name),
                 )
-                .预期("函数要先建出来，再调它")
+                .预期("define the function before calling it")
                 .详解(
-                    "Prion 是「先建后用」：调用要排在 `add fn` 之后。`add type`（类型）不受这条约束，可以先用后写。",
+                    "Prion is define-before-use: a call must come after its `add fn`. `add type` (types) is exempt and may be used before defined.",
                 ),
                 Tone::Fix,
             );
@@ -2470,13 +2469,13 @@ fn check_call(b: &AstBlock, 处: 位置, name: &str, args: &[Vec<Token>], cx: &m
             处,
             CheckCode::E201,
             &DiagParts::full(
-                format!("第 {} 行", line),
-                "调函数",
-                format!("fn「{}」只有声明，还没有体", name),
+                format!("line {}", line),
+                "function call",
+                format!("fn \"{}\" has only a declaration, no body yet", name),
                 "",
-                format!("用 `fn \"{}\" (参数) 返回类型 = 表达式` 给它补体", name),
+                format!("supply its body with `fn \"{}\" (params) return type = expression`", name),
             )
-            .预期("声明过的 fn 要补体才能调用"),
+            .预期("a declared fn must get a body before it can be called"),
             Tone::Fix,
         );
         return;
@@ -2499,14 +2498,14 @@ fn check_sig_args(
             处,
             CheckCode::E202,
             &DiagParts::full(
-                format!("第 {} 行", line),
-                "调函数",
-                format!("fn「{}」要 {} 个参数，给了 {} 个", name, sig.params.len(), args.len()),
+                format!("line {}", line),
+                "function call",
+                format!("fn \"{}\" takes {} parameter(s), {} given", name, sig.params.len(), args.len()),
                 "",
-                "按定义给够参数",
+                "give the number of parameters the definition requires",
             )
-            .预期(format!("按定义给够 {} 个参数", sig.params.len()))
-                .详解("参数个数由 add fn 的声明说了算；给多了给少了都拦——调用和定义必须对得上。"),
+            .预期(format!("give {} parameter(s) as the definition requires", sig.params.len()))
+                .详解("the parameter count is determined by the `add fn` declaration; too many or too few are both rejected - the call and the definition must match."),
             Tone::Fix,
         );
         return;
@@ -2523,14 +2522,14 @@ fn check_sig_args(
                     处,
                     CheckCode::E202,
                     &DiagParts::full(
-                        format!("第 {} 行", line),
-                        "调函数",
-                        format!("fn「{}」第 {} 个参数要 {}，给了 {}", name, k + 1, want, got),
+                        format!("line {}", line),
+                        "function call",
+                        format!("fn \"{}\" parameter {} must be {}, got {}", name, k + 1, want, got),
                         "",
-                        format!("改成 {} 的值", want),
+                        format!("change it to a {} value", want),
                     )
-                    .预期(format!("第 {} 个参数应当是 {} 型", k + 1, want))
-                .详解("实参类型要和形参声明一致；类型不合时用 int(值) / str(值) / float(值) / bool(值) 显式转换再传。"),
+                    .预期(format!("parameter {} must be of type {}", k + 1, want))
+                .详解("argument types must match the parameter declarations; when they differ, convert explicitly with int(value) / str(value) / float(value) / bool(value) before passing."),
                     Tone::Fix,
                 );
             }
@@ -2680,11 +2679,11 @@ fn match_object_ty(
                     处,
                     CheckCode::E201,
                     &DiagParts::full(
-                        format!("第 {} 行", line),
-                        "match 判别",
-                        format!("val「{}」还没建过", n),
+                        format!("line {}", line),
+                        "match dispatch",
+                        format!("val \"{}\" has not been defined", n),
                         "",
-                        "先用 add val \"名\" 和类型 = … 建，再 match",
+                        "define it first with add val \"name\" type = ..., then match",
                     ),
                     Tone::Fix,
                 );
@@ -2724,13 +2723,13 @@ fn match_object_ty(
                     处,
                     CheckCode::E201,
                     &DiagParts::full(
-                        format!("第 {} 行", line),
-                        "match 判别",
-                        format!("match 对象里的「{}」是裸名——取 val 请写 val \"{}\"", n, n),
+                        format!("line {}", line),
+                        "match dispatch",
+                        format!("\"{}\" in the match subject is a bare name - read the val as val \"{}\"", n, n),
                         "",
-                        "match 对象必须显式：写 val \"名\"，或直接给一个表达式（如 call fn \"名\"(…)）",
+                        "the match subject must be explicit: write val \"name\", or give an expression directly (e.g. call fn \"name\"(...))",
                     )
-                    .预期("match 对象不留裸名别名（全面显式：fn 与 val 可重名，裸名消不了歧义）"),
+                    .预期("the match subject allows no bare-name alias (fully explicit: fn and val may share a name, so a bare name cannot resolve ambiguity)"),
                     Tone::Fix,
                 );
                 return None;
@@ -2739,11 +2738,11 @@ fn match_object_ty(
                 处,
                 CheckCode::E201,
                 &DiagParts::full(
-                    format!("第 {} 行", line),
-                    "match 判别",
-                    format!("「{}」还没建过", n),
+                    format!("line {}", line),
+                    "match dispatch",
+                    format!("\"{}\" has not been defined", n),
                     "",
-                    "先建再用：add val \"名\" 和类型 = …，match 对象写 val \"名\"",
+                    "define before use: add val \"name\" type = ..., and write the match subject as val \"name\"",
                 ),
                 Tone::Fix,
             );
@@ -2758,13 +2757,13 @@ fn match_object_ty(
         处,
         CheckCode::E202,
         &DiagParts::full(
-            format!("第 {} 行", line),
-            "match 判别",
-            "match 对象的类型推不出来",
+            format!("line {}", line),
+            "match dispatch",
+            "cannot infer the type of the match subject",
             "",
-            "先存带类型 val 再 match（add val \"名\" 和类型 = …），或换成一个能看出类型的表达式",
+            "store it in a typed val first then match (add val \"name\" type = ...), or use an expression whose type is evident",
         )
-        .预期("match 对象的类型必须编译期可推：val 声明类型 / fn 声明返回类型 / 变体构造"),
+        .预期("the match subject type must be inferable at compile time: val declared type / fn declared return type / variant construction"),
         Tone::Fix,
     );
     None
@@ -2830,11 +2829,11 @@ fn check_match_exhaustive_block(
                     位置{ 行: *line, 列: *col, 长: *len },
                     CheckCode::E204,
                     &DiagParts::full(
-                        format!("第 {} 行", line),
-                        "match 判别",
-                        format!("没覆盖变体 {}", missing.join("、")),
+                        format!("line {}", line),
+                        "match dispatch",
+                        format!("variant {} is not covered", missing.join("、")),
                         "",
-                        "补上缺的 case，或写 `case _:` 兜底",
+                        "add the missing case, or write `case _:` as a fallback",
                     ),
                     Tone::Fix,
                 );
@@ -2926,11 +2925,11 @@ fn scan_expr_matches(
                 处,
                 CheckCode::E204,
                 &DiagParts::full(
-                    format!("第 {} 行", line),
-                    "match 判别",
-                    format!("无字段变体的判别也要写括号——`case {}()`", n),
+                    format!("line {}", line),
+                    "match dispatch",
+                    format!("a fieldless variant dispatch still needs parentheses - `case {}()`", n),
                     "",
-                    "判别统一带括号：有字段写 `case 变体(绑定)`，无字段写 `case 变体()`，兜底写 `case _:`",
+                    "dispatch always uses parentheses: with fields write `case variant(binding)`, without fields write `case variant()`, fallback write `case _:`",
                 ),
                 Tone::Fix,
             );
@@ -2948,11 +2947,11 @@ fn scan_expr_matches(
                             处,
                             CheckCode::E204,
                             &DiagParts::full(
-                                format!("第 {} 行", line),
-                                "match 判别",
-                                format!("没覆盖变体 {}", missing.join("、")),
+                                format!("line {}", line),
+                                "match dispatch",
+                                format!("variant {} is not covered", missing.join("、")),
                                 "",
-                                "补上缺的 case，或写 `case _:` 兜底",
+                                "add the missing case, or write `case _:` as a fallback",
                             ),
                             Tone::Fix,
                         );
@@ -3138,21 +3137,21 @@ fn calls_expr(b: &AstBlock, 处: 位置, 段: &[Token], cx: &mut Ctx) {
             && 段.iter().any(|t| *t == Token::Sym("="));
         if 是写位置 {
             let 写法 = if matches!(段.get(1), Some(Token::Sym("."))) {
-                format!("val \"{}\".字段 = 值", n)
+                format!("val \"{}\".field = value", n)
             } else {
-                format!("val \"{}\"[下标] = 值", n)
+                format!("val \"{}\"[index] = value", n)
             };
             cx.err(
                 处,
                 CheckCode::E201,
                 &DiagParts::full(
-                    format!("第 {} 行", line),
-                    "写位置",
-                    format!("「{}」左边的裸名没加 val——写 `{}`", n, 写法),
+                    format!("line {}", line),
+                    "write target",
+                    format!("the bare name for \"{}\" is missing val - write `{}`", n, 写法),
                     "",
-                    "写位置也要显式：字段写与下标写都写成 `val \"名\"…` 形态，不留裸名",
+                    "the write target must also be explicit: field and index writes both use the `val \"name\"...` form, with no bare names",
                 )
-                .预期("写位置与读位置同一套名字规则，只有一种写法"),
+                .预期("write target and read target follow the same naming rules; there is only one way to write it"),
                 Tone::Fix,
             );
         }
@@ -3183,16 +3182,15 @@ fn calls_expr(b: &AstBlock, 处: 位置, 段: &[Token], cx: &mut Ctx) {
                     处,
                     CheckCode::E201,
                     &DiagParts::full(
-                        format!("第 {} 行", line),
-                        "危险模式",
-                        "「asm」是危险模式专属——当前块未进入危险模式",
+                        format!("line {}", line),
+                        "unsafe mode",
+                        "\"asm\" is exclusive to unsafe mode - the current block is not in unsafe mode",
                         "",
-                        "把这块的开块行写成 `#: 块名 b unsafe`（危险模式），再在这里用它",
+                        "write this block's opening line as `#: blockname b unsafe` (unsafe mode), then use it here",
                     )
-                    .预期("内联汇编只能出现在 unsafe 块里")
+                    .预期("inline assembly may only appear in unsafe blocks")
                     .详解(
-                        "asm 是 unsafe 的第四类能力（与裸地址读写、C 互操作并列）：\
-                         汇编绕开了 Prion 的全部类型与内存规则，只在 `#: 块名 b unsafe` 的块里放行。",
+                        "asm is the fourth unsafe capability (alongside raw address read/write and C interop): assembly bypasses all of Prion's type and memory rules and is only allowed in blocks declared `#: blockname b unsafe`.",
                     ),
                     Tone::Fix,
                 );
@@ -3203,10 +3201,10 @@ fn calls_expr(b: &AstBlock, 处: 位置, 段: &[Token], cx: &mut Ctx) {
                         处,
                         CheckCode::E201,
                         &DiagParts::full(
-                            format!("第 {} 行", line),
-                            "内联汇编",
-                            format!("asm 隔离区不合规：{}", 原因),
-                            "括号内是隔离区，按 asm 自己的微语法写",
+                            format!("line {}", line),
+                            "inline assembly",
+                            format!("invalid asm isolation region: {}", 原因),
+                            "inside the parentheses is an isolation region; write it using asm's own microsyntax",
                             prion_lexer::asm::映射表说明(),
                         ),
                         Tone::Fix,
@@ -3257,13 +3255,13 @@ fn calls_expr(b: &AstBlock, 处: 位置, 段: &[Token], cx: &mut Ctx) {
                                 处,
                                 CheckCode::E201,
                                 &DiagParts::full(
-                                    format!("第 {} 行", line),
-                                    "调函数",
-                                    format!("fn「{}」只有声明，还没有体", fname),
+                                    format!("line {}", line),
+                                    "function call",
+                                    format!("fn \"{}\" has only a declaration, no body yet", fname),
                                     "",
-                                    format!("用 `fn \"{}\" (参数) 返回类型 = 表达式` 给它补体", fname),
+                                    format!("supply its body with `fn \"{}\" (params) return type = expression`", fname),
                                 )
-                                .预期("声明过的 fn 要补体才能调用"),
+                                .预期("a declared fn must get a body before it can be called"),
                                 Tone::Fix,
                             );
                         } else {
@@ -3300,13 +3298,13 @@ fn calls_expr(b: &AstBlock, 处: 位置, 段: &[Token], cx: &mut Ctx) {
                             处,
                             CheckCode::E201,
                             &DiagParts::full(
-                                format!("第 {} 行", line),
-                                "函数值",
-                                format!("fn「{}」还没建过", n),
+                                format!("line {}", line),
+                                "function value",
+                                format!("fn \"{}\" has not been defined", n),
                                 "",
-                                format!("先用 `add fn \"{}\" (参数) 返回类型 = …` 建出来", n),
+                                format!("define it first with `add fn \"{}\" (params) return type = ...`", n),
                             )
-                            .预期("函数值只能取自本块已声明的 fn"),
+                            .预期("a function value may only come from an fn already declared in this block"),
                             Tone::Fix,
                         );
                     }
@@ -3320,17 +3318,15 @@ fn calls_expr(b: &AstBlock, 处: 位置, 段: &[Token], cx: &mut Ctx) {
                         处,
                         CheckCode::E201,
                         &DiagParts::full(
-                            format!("第 {} 行", line),
-                            "危险模式",
-                            format!("「{}」是危险模式专属——当前块未进入危险模式", n),
+                            format!("line {}", line),
+                            "unsafe mode",
+                            format!("\"{}\" is exclusive to unsafe mode - the current block is not in unsafe mode", n),
                             "",
-                            "把这块的开块行写成 `#: 块名 b unsafe`（危险模式），再在这里用它",
+                            "write this block's opening line as `#: blockname b unsafe` (unsafe mode), then use it here",
                         )
-                        .预期("危险模式专属词只能出现在 unsafe 块里")
+                        .预期("unsafe-mode-exclusive words may only appear in unsafe blocks")
                         .详解(
-                            "「未进入危险模式」和「这个名字不存在」是两回事：\
-                             `read_8` / `write_8` 这类裸地址读写、以及 `str_to_c` / `str_from_c` 这类 C 互操作词，\
-                             只在 `#: 块名 b unsafe` 的块里放行；在普通块里它们是**被模式挡住了**，不是没定义。",
+                            "Not being in unsafe mode and the name not existing are two different things: raw address read/write such as `read_8` / `write_8`, and C interop words such as `str_to_c` / `str_from_c`, are only allowed in blocks declared `#: blockname b unsafe`; in ordinary blocks they are **blocked by the mode**, not undefined.",
                         ),
                         Tone::Fix,
                     );
@@ -3352,14 +3348,14 @@ fn calls_expr(b: &AstBlock, 处: 位置, 段: &[Token], cx: &mut Ctx) {
                                     处,
                                     CheckCode::E202,
                                     &DiagParts::full(
-                                        format!("第 {} 行", 处.行),
-                                        "调 concat",
-                                        format!("concat 第 {} 段要 str，给了 {}", k + 1, got),
+                                        format!("line {}", 处.行),
+                                        "concat call",
+                                        format!("concat segment {} must be str, got {}", k + 1, got),
                                         "",
-                                        "把这一段改成 str 的值（数字先 str(值)）",
+                                        "change this segment to a str value (convert numbers with str(value) first)",
                                     )
-                                    .预期("concat 的每一段都必须是 str")
-                                    .详解("concat 把若干段字符串按顺序接成一段；数值转文字用 str(值)，别把数字直接丢进去。"),
+                                    .预期("every concat segment must be str")
+                                    .详解("concat joins several string segments in order; convert numbers to text with str(value) instead of passing numbers directly."),
                                     Tone::Fix,
                                 );
                             }
@@ -3424,11 +3420,11 @@ fn calls_expr(b: &AstBlock, 处: 位置, 段: &[Token], cx: &mut Ctx) {
                             处,
                             CheckCode::E202,
                             &DiagParts::full(
-                                format!("第 {} 行", line),
-                                "构造",
-                                format!("类型「{}」有 {} 个字段，给了 {} 个", 构造键, fields.len(), args.len()),
+                                format!("line {}", line),
+                                "construction",
+                                format!("type \"{}\" has {} field(s), {} given", 构造键, fields.len(), args.len()),
                                 "",
-                                "按定义给够字段",
+                                "give the number of fields the definition requires",
                             ),
                             Tone::Fix,
                         );
@@ -3444,11 +3440,11 @@ fn calls_expr(b: &AstBlock, 处: 位置, 段: &[Token], cx: &mut Ctx) {
                                         处,
                                         CheckCode::E202,
                                         &DiagParts::full(
-                                            format!("第 {} 行", line),
-                                            "构造",
-                                            format!("字段「{}」要 {}，给了 {}", fields[k].0, want, got),
+                                            format!("line {}", line),
+                                            "construction",
+                                            format!("field \"{}\" must be {}, got {}", fields[k].0, want, got),
                                             "",
-                                            format!("改成 {} 的值", want),
+                                            format!("change it to a {} value", want),
                                         ),
                                         Tone::Fix,
                                     );
@@ -3468,11 +3464,11 @@ fn calls_expr(b: &AstBlock, 处: 位置, 段: &[Token], cx: &mut Ctx) {
                             处,
                             CheckCode::E201,
                             &DiagParts::full(
-                                format!("第 {} 行", line),
-                                "调外部函数",
-                                format!("外部函数「{}」只能在 unsafe 块里调", n),
+                                format!("line {}", line),
+                                "external function call",
+                                format!("external function \"{}\" may only be called in an unsafe block", n),
                                 "",
-                                "把这块的开块行写成 `#: 块名 b unsafe`",
+                                "write this block's opening line as `#: blockname b unsafe`",
                             ),
                             Tone::Fix,
                         );
@@ -3484,13 +3480,13 @@ fn calls_expr(b: &AstBlock, 处: 位置, 段: &[Token], cx: &mut Ctx) {
                                 处,
                                 CheckCode::E201,
                                 &DiagParts::full(
-                                    format!("第 {} 行", line),
-                                    "调函数",
-                                    format!("调用要写 `call`——形如 `call fn \"{}\"(…)`", n),
+                                    format!("line {}", line),
+                                    "function call",
+                                    format!("calls require `call` - the form is `call fn \"{}\"(...)`", n),
                                     "",
-                                    "把 `名(…)` 改成 `call fn \"名\"(…)`（同块调用也要写）",
+                                    "change `name(...)` to `call fn \"name\"(...)` (same-block calls require it too)",
                                 )
-                                .预期("调用户 fn 必须写 `call fn \"名\"(…)`（全面显式）"),
+                                .预期("calling a user fn requires `call fn \"name\"(...)` (fully explicit)"),
                                 Tone::Fix,
                             );
                         } else {
@@ -3615,13 +3611,13 @@ fn scan_bare_reads(b: &AstBlock, 处: 位置, expr: &[Token], full: &[Token], cx
             处,
             CheckCode::E201,
             &DiagParts::full(
-                format!("第 {} 行", line),
-                "读值",
-                format!("「{}」前面缺 call —— 读值写 `call val \"{}\"`", n, n),
+                format!("line {}", line),
+                "value read",
+                format!("\"{}\" is missing call - read a value with `call val \"{}\"`", n, n),
                 "",
-                format!("改成 `call val \"{}\"`；改值仍是 `val \"{}\" = 值`（= 已承担动词）", n, n),
+                format!("change it to `call val \"{}\"`; reassignment stays `val \"{}\" = value` (= already acts as the verb)", n, n),
             )
-            .预期("读 val 是动作，要带 call；改 val 有 = 当动词，不再带 call"),
+            .预期("reading a val is an action and needs call; reassigning a val uses = as the verb and does not need call"),
             Tone::Fix,
         );
     }
@@ -3641,13 +3637,13 @@ fn scan_bare_reads(b: &AstBlock, 处: 位置, expr: &[Token], full: &[Token], cx
                 处,
                 CheckCode::E201,
                 &DiagParts::full(
-                    format!("第 {} 行", line),
-                    "改值",
-                    format!("改值要写 `val \"{}\" = 值`——裸名「{}」消不了歧义", n, n),
+                    format!("line {}", line),
+                    "reassignment",
+                    format!("reassignment requires `val \"{}\" = value` - the bare name \"{}\" cannot resolve ambiguity", n, n),
                     "",
-                    "改值的行首写 `val \"名\" = 新值`；声明才用 `add val`",
+                    "start a reassignment line with `val \"name\" = newvalue`; only declarations use `add val`",
                 )
-                .预期("改值必须显式写 `val \"名\" = 值`"),
+                .预期("reassignment must be written explicitly as `val \"name\" = value`"),
                 Tone::Fix,
             );
             return;
@@ -3670,13 +3666,13 @@ fn scan_bare_reads(b: &AstBlock, 处: 位置, expr: &[Token], full: &[Token], cx
                             处,
                             CheckCode::E201,
                             &DiagParts::full(
-                                format!("第 {} 行", line),
-                                "取值",
-                                format!("「{}」是语句体 fn 里的局部——函数外不能用", n),
-                                "fn 的局部只活在该函数体里",
-                                format!("在块里另建一个 val，或用 `call fn \"…\"` 把值取出来"),
+                                format!("line {}", line),
+                                "value access",
+                                format!("\"{}\" is a local inside a statement-body fn - it cannot be used outside the function", n),
+                                "fn locals live only within that function body",
+                                format!("create a val in the block, or retrieve the value with `call fn \"...\"`"),
                             )
-                            .预期("fn 局部不能在函数体外读"),
+                            .预期("fn locals cannot be read outside the function"),
                             Tone::Fix,
                         );
                         return;
@@ -3688,13 +3684,13 @@ fn scan_bare_reads(b: &AstBlock, 处: 位置, expr: &[Token], full: &[Token], cx
                             处,
                             CheckCode::E201,
                             &DiagParts::full(
-                                format!("第 {} 行", line),
-                                "取值",
-                                format!("「{}」没建过——本块和引用链里都没有这个名字", n),
+                                format!("line {}", line),
+                                "value access",
+                                format!("\"{}\" has not been defined - this name is in neither this block nor its reference chain", n),
                                 "",
-                                "先 `add val \"名\" 类型 = 值` 建它；跨块读要写 `call #:块名 val \"名\"`",
+                                "define it first with `add val \"name\" type = value`; to read it across blocks write `call #:blockname val \"name\"`",
                             )
-                            .预期("读的 val 必须先在当前块或引用链里建过"),
+                            .预期("a val you read must have been defined in the current block or its reference chain"),
                             Tone::Fix,
                         );
                         return;
@@ -3800,13 +3796,13 @@ fn scan_bare_reads(b: &AstBlock, 处: 位置, expr: &[Token], full: &[Token], cx
                 处,
                 CheckCode::E201,
                 &DiagParts::full(
-                    format!("第 {} 行", line),
-                    "取值",
-                    format!("裸名「{}」——取 val 请写 val \"{}\"", n, n),
+                    format!("line {}", line),
+                    "value access",
+                    format!("bare name \"{}\" - read the val as val \"{}\"", n, n),
                     "",
-                    "全面显式：fn 与 val 可重名，裸名消不了歧义。把读取处写成 val \"名\"",
+                    "fully explicit: fn and val may share a name, so a bare name cannot resolve ambiguity. Write the read as val \"name\"",
                 )
-                .预期("读 val 必须写 val \"名\""),
+                .预期("reading a val requires val \"name\""),
                 Tone::Fix,
             );
             return;
@@ -3817,13 +3813,13 @@ fn scan_bare_reads(b: &AstBlock, 处: 位置, expr: &[Token], full: &[Token], cx
                 处,
                 CheckCode::E201,
                 &DiagParts::full(
-                    format!("第 {} 行", line),
-                    "取值",
-                    format!("裸名「{}」——取 val 请写 val \"{}\"", n, n),
+                    format!("line {}", line),
+                    "value access",
+                    format!("bare name \"{}\" - read the val as val \"{}\"", n, n),
                     "",
-                    "全面显式：fn 与 val 可重名，裸名消不了歧义。把读取处写成 val \"名\"",
+                    "fully explicit: fn and val may share a name, so a bare name cannot resolve ambiguity. Write the read as val \"name\"",
                 )
-                .预期("读 val 必须写 val \"名\""),
+                .预期("reading a val requires val \"name\""),
                 Tone::Fix,
             );
             return;
@@ -3938,11 +3934,11 @@ fn uses_line(b: &AstBlock, 处: 位置, 段: &[Token], cx: &mut Ctx) {
                         处,
                         CheckCode::E201,
                         &DiagParts::full(
-                            format!("第 {} 行", line),
-                            "改常量",
-                            format!("常量「{}」不许改赋", n),
-                            "它是 add fix 声明的编译期常量，值在编译期定死",
-                            "要能改的值就改用 add val 声明",
+                            format!("line {}", line),
+                            "constant reassignment",
+                            format!("constant \"{}\" cannot be reassigned", n),
+                            "it is a compile-time constant declared with add fix; its value is fixed at compile time",
+                            "for a mutable value, declare it with add val instead",
                         ),
                         Tone::Fix,
                     );
@@ -3976,15 +3972,15 @@ fn require_known(b: &AstBlock, 处: 位置, name: &str, cx: &mut Ctx) {
                     处,
                     CheckCode::E201,
                     &DiagParts::full(
-                        format!("第 {} 行", line),
-                        "用名字",
-                        format!("val「{}」用在它被建出来之前——它到第 {} 行才建", name, decl),
+                        format!("line {}", line),
+                        "name use",
+                        format!("val \"{}\" is used before it is defined - it is defined at line {}", name, decl),
                         "",
-                        format!("把建「{}」的那行 `add val` 移到这一行之前", name),
+                        format!("move the `add val` line for \"{}\" above this line", name),
                     )
-                    .预期("名字要先建出来，再用它")
+                    .预期("define the name before using it")
                     .详解(
-                        "Prion 是「先建后用」：val 的读和写都要排在它的 `add val` 之后——排在前面会读到还没放值的内存。`add fn`（函数）与 `add type`（类型）是声明，不受这条约束，可以先用后写。",
+                        "Prion is define-before-use: reading and writing a val must both come after its `add val` - doing so earlier reads memory that has not been given a value yet. `add fn` (functions) and `add type` (types) are declarations and are exempt; they may be used before defined.",
                     ),
                     Tone::Fix,
                 );
@@ -3996,15 +3992,15 @@ fn require_known(b: &AstBlock, 处: 位置, name: &str, cx: &mut Ctx) {
         处,
         CheckCode::E201,
         &DiagParts::full(
-            format!("第 {} 行", line),
-            "用名字",
-            format!("val「{}」还没建过", name),
+            format!("line {}", line),
+            "name use",
+            format!("val \"{}\" has not been defined", name),
             "",
-            format!("在用它之前先建：add val \"{}\" <类型> = <初值>", name),
+            format!("define it before use: add val \"{}\" <type> = <initial>", name),
         )
-        .预期("这里的名字应当是【本块已建过】的 val / 函数")
+        .预期("the name here must be a val / function already defined in this block")
         .详解(
- "Prion 的规则是「先建后用」：名字要先由 `add val`（值）/ `add fn`（函数）/ `add type`（类型）建出来，才能在表达式里读；如果名字在别的块里，跨块取 val 要写 `call #:块 val \"名\"`；跨块调函数要写 `call #:块 fn \"名\"(…)`；同块直接用。",
+ "Prion's rule is define-before-use: a name must first be defined by `add val` (value) / `add fn` (function) / `add type` (type) before it can be read in an expression; if the name lives in another block, read a val across blocks with `call #:block val \"name\"`, and call a function across blocks with `call #:block fn \"name\"(...)`; within the same block just use it directly.",
         ),
         Tone::Fix,
     );
@@ -4073,15 +4069,15 @@ fn uses_expr_tokens(b: &AstBlock, 处: 位置, 段: &[Token], cx: &mut Ctx) {
                 处,
                 CheckCode::E201,
                 &DiagParts::full(
-                    format!("第 {} 行", 处.行),
-                    "读常量",
-                    format!("常量「{}」要用 `call fix \"{}\"` 读", n, n),
+                    format!("line {}", 处.行),
+                    "constant read",
+                    format!("constant \"{}\" must be read with `call fix \"{}\"`", n, n),
                     "",
-                    format!("把 `call val \"{}\"` 改成 `call fix \"{}\"`", n, n),
+                    format!("change `call val \"{}\"` to `call fix \"{}\"`", n, n),
                 )
-                .预期("常量有独立的引用动词 call fix")
+                .预期("constants have their own reference verb, call fix")
                 .详解(
-                    "`val` 与 `fix` 是两个家族：val 是可改的运行期值，fix 是编译期定死的常量。读 val 用 `call val \"名\"`，读常量用 `call fix \"名\"`；两者不混用。",
+                    "`val` and `fix` are two separate families: val is a mutable runtime value, fix is a compile-time constant. Read a val with `call val \"name\"` and a constant with `call fix \"name\"`; they are not mixed.",
                 ),
                 Tone::Fix,
             );
@@ -4862,11 +4858,11 @@ fn types_block(b: &AstBlock, cx: &mut Ctx) {
                                     位置{ 行: *line, 列: *col, 长: *len },
                                     CheckCode::E201,
                                     &DiagParts::full(
-                                        format!("第 {} 行", line),
-                                        "类型名",
-                                        format!("没有类型「{}」", t),
-                                        "re / fa 是真假值的字面量，不是类型名",
-                                        "类型名写 bool",
+                                        format!("line {}", line),
+                                        "type name",
+                                        format!("no such type \"{}\"", t),
+                                        "re / fa are boolean literals, not type names",
+                                        "write the type name as bool",
                                     ),
                                     Tone::Fix,
                                 );
@@ -4892,18 +4888,15 @@ fn types_block(b: &AstBlock, cx: &mut Ctx) {
                                         位置{ 行: *line, 列: *col, 长: *len },
                                         CheckCode::E201,
                                         &DiagParts::full(
-                                            format!("第 {} 行", line),
-                                            "类型名",
-                                            format!("没有类型「{}」", t),
+                                            format!("line {}", line),
+                                            "type name",
+                                            format!("no such type \"{}\"", t),
                                             "",
-                                            "内置类型：int / float / bool / str / list(T) / map(K,V) / que(T) / stack(T) \
-                                             / int_8…int_64 / uint_8…uint_64；自定义类型要先 `add type \"名\" (…)`。\
-                                             旧名 int8 / uint8 / size 已废止（2026-10-08 词名重构）。",
+                                            "Builtin types: int / float / bool / str / list(T) / map(K,V) / que(T) / stack(T) / int_8...int_64 / uint_8...uint_64; user-defined types must be declared with `add type \"name\" (...)`. The old names int8 / uint8 / size are retired.",
                                         )
-                                        .预期("类型名必须是内置类型或已 add type 的类型")
+                                        .预期("a type name must be a builtin type or a type already declared with add type")
                                         .详解(
-                                            "类型名做**存在性校验**：不在内置表、又没有 `add type` 声明过 ⇒ 报错。\
-                                             这样废止名与被拼错的类型名都会当场暴露，不需要维护废止名单。",
+                                            "Type names undergo an **existence check**: not in the builtin table and not declared with `add type` means an error. This surfaces retired names and misspelled type names on the spot without maintaining a retirement list.",
                                         ),
                                         Tone::Fix,
                                     );
@@ -4922,11 +4915,11 @@ fn types_block(b: &AstBlock, cx: &mut Ctx) {
                                 位置{ 行: *line, 列: *col, 长: *len },
                                 CheckCode::E201,
                                 &DiagParts::full(
-                                    format!("第 {} 行", line),
-                                    "map 键型",
-                                    format!("map 的键型「{}」不支持", k),
-                                    "map 的键只支持 str 或 int",
-                                    "把键型改成 str 或 int",
+                                    format!("line {}", line),
+                                    "map key type",
+                                    format!("map key type \"{}\" is not supported", k),
+                                    "map keys only support str or int",
+                                    "change the key type to str or int",
                                 ),
                                 Tone::Fix,
                             );
@@ -4964,11 +4957,11 @@ fn types_block(b: &AstBlock, cx: &mut Ctx) {
                                             位置{ 行: *line, 列: *col, 长: *len },
                                             CheckCode::E201,
                                             &DiagParts::full(
-                                                format!("第 {} 行", line),
-                                                "精化条件",
-                                                format!("「{}」的值 {} 不满足类型 {} 的条件", name, v, decl),
+                                                format!("line {}", line),
+                                                "refinement condition",
+                                                format!("value {} of \"{}\" does not satisfy the condition of type {}", name, v, decl),
                                                 "",
-                                                format!("把值改成满足 {} 的数", decl),
+                                                format!("change the value to a number satisfying {}", decl),
                                             ),
                                             Tone::Fix,
                                         );
@@ -4980,14 +4973,14 @@ fn types_block(b: &AstBlock, cx: &mut Ctx) {
                                     位置{ 行: *line, 列: *col, 长: *len },
                                     CheckCode::E202,
                                     &DiagParts::full(
-                                        format!("第 {} 行", line),
-                                        "赋值",
-                                        format!("「{}」声明是 {}，右边是 {}", name, decl, got),
+                                        format!("line {}", line),
+                                        "assignment",
+                                        format!("\"{}\" is declared as {}, the assigned value is {}", name, decl, got),
                                         "",
-                                        format!("改成 {} 的值，或把声明改成 {}", decl, got),
+                                        format!("change it to a {} value, or change the declaration to {}", decl, got),
                                     )
-                                    .预期(format!("右边的值应当是 {} 型（左边声明说了算）", decl))
-                .详解("Prion 不悄悄转换类型：int 不会自动变 str。要换类型请显式写 int(值) / str(值) / float(值) / bool(值) 转换；若是声明写错了，就把左边类型改成右边的型。"),
+                                    .预期(format!("the assigned value must be of type {} (the declaration decides)", decl))
+                .详解("Prion does not convert types silently: int does not become str automatically. To change the type, convert explicitly with int(value) / str(value) / float(value) / bool(value); if the declaration is wrong, change the declared type to match the value."),
                                     Tone::Fix,
                                 );
                             }
@@ -5015,14 +5008,14 @@ fn types_block(b: &AstBlock, cx: &mut Ctx) {
                                         位置{ 行: *line, 列: *col, 长: *len },
                                         CheckCode::E202,
                                         &DiagParts::full(
-                                        format!("第 {} 行", line),
-                                        "改值",
-                                        format!("「{}」是 {}，右边是 {}", n, decl, got),
+                                        format!("line {}", line),
+                                        "reassignment",
+                                        format!("\"{}\" is {}, the assigned value is {}", n, decl, got),
                                         "",
-                                        format!("改成 {} 的值", decl),
+                                        format!("change it to a {} value", decl),
                                         )
-                                        .预期(format!("新值应当是 {} 型", decl))
-                .详解("改值必须和它当初声明的类型一致——同一条 val 不改类型，要另一种型请用转换函数。"),
+                                        .预期(format!("the new value must be of type {}", decl))
+                .详解("a reassignment must match the type it was declared with - a val does not change type; for another type use a conversion function."),
                                         Tone::Fix,
                                     );
                                 }
@@ -5060,14 +5053,14 @@ fn types_block(b: &AstBlock, cx: &mut Ctx) {
                                             位置{ 行: el, 列: *col, 长: *len },
                                             CheckCode::E202,
                                             &DiagParts::full(
-                                                format!("第 {} 行", el),
-                                                "写 give",
-                                                format!("fn「{}」声明返回 {}，中途 give 的是 {}", fname, ret, got),
+                                                format!("line {}", el),
+                                                "give statement",
+                                                format!("fn \"{}\" declares return {}, but an intermediate give is {}", fname, ret, got),
                                                 "",
-                                                format!("give 一个 {} 的值", ret),
+                                                format!("give a {} value", ret),
                                             )
-                                            .预期("中途 give 与末尾 give 同型")
-                                            .详解("中途 give 即立即返回；所有 give 都要和声明的返回类型一致。"),
+                                            .预期("intermediate give and final give must have the same type")
+                                            .详解("an intermediate give returns immediately; every give must match the declared return type."),
                                             Tone::Fix,
                                         );
                                     }
@@ -5080,13 +5073,13 @@ fn types_block(b: &AstBlock, cx: &mut Ctx) {
                                         位置{ 行: *gl, 列: *col, 长: *len },
                                         CheckCode::E202,
                                         &DiagParts::full(
-                                            format!("第 {} 行", gl),
-                                            "写 give",
-                                            format!("fn「{}」声明返回 {}，give 的是 {}", fname, ret, got),
+                                            format!("line {}", gl),
+                                            "give statement",
+                                            format!("fn \"{}\" declares return {}, but give is {}", fname, ret, got),
                                             "",
-                                            format!("give 一个 {} 的值", ret),
+                                            format!("give a {} value", ret),
                                         )
-                                        .预期(format!("give 的表达式应当是 {} 型", ret)),
+                                        .预期(format!("the give expression must be of type {}", ret)),
                                         Tone::Fix,
                                     );
                                 }
@@ -5097,14 +5090,14 @@ fn types_block(b: &AstBlock, cx: &mut Ctx) {
                                 位置{ 行: *line, 列: *col, 长: *len },
                                 CheckCode::E202,
                                 &DiagParts::full(
-                                    format!("第 {} 行", line),
-                                    "写语句体 fn",
-                                    format!("fn「{}」的最后一条不是 give", fname),
-                                    "语句体必须有返回值",
-                                    "在函数体末尾写 `give 表达式`",
+                                    format!("line {}", line),
+                                    "statement-body fn",
+                                    format!("the last statement of fn \"{}\" is not give", fname),
+                                    "a statement body must return a value",
+                                    "write `give expression` at the end of the function body",
                                 )
-                                .预期("语句体 fn 末尾要写 give 表达式")
-                                .详解("fn 是算值的：语句体允许中间步骤，但最后要用 give 把值交回调用者。"),
+                                .预期("a statement-body fn must end with a give expression")
+                                .详解("an fn computes a value: a statement body may have intermediate steps, but must finish with give to hand the value back to the caller."),
                                 Tone::Fix,
                             );
                         }
@@ -5127,11 +5120,11 @@ fn types_block(b: &AstBlock, cx: &mut Ctx) {
                                     位置{ 行: *line, 列: *col, 长: *len },
                                     CheckCode::E202,
                                     &DiagParts::full(
-                                        format!("第 {} 行", line),
-                                        "写条件",
-                                        format!("{} 的条件不是真假值（是 {}）", kind.unwrap(), got),
+                                        format!("line {}", line),
+                                        "condition",
+                                        format!("the {} condition is not a boolean (it is {})", kind.unwrap(), got),
                                         "",
-                                        "写成比较式（如 x == 1），或直接用 re / fa",
+                                        "write a comparison (e.g. x == 1), or use re / fa directly",
                                     ),
                                     Tone::Fix,
                                 );
@@ -5163,11 +5156,11 @@ fn types_block(b: &AstBlock, cx: &mut Ctx) {
                                         位置{ 行: *line, 列: *col, 长: *len },
                                         CheckCode::E202,
                                         &DiagParts::full(
-                                            format!("第 {} 行", line),
-                                            "写守卫",
-                                            format!("case 守卫的条件不是真假值（是 {}）", got),
+                                            format!("line {}", line),
+                                            "guard",
+                                            format!("the case guard condition is not a boolean (it is {})", got),
                                             "",
-                                            "写成比较式（如 x > 10），或直接用 re / fa",
+                                            "write a comparison (e.g. x > 10), or use re / fa directly",
                                         ),
                                         Tone::Fix,
                                     );
@@ -5281,11 +5274,11 @@ fn pass_sle_calls(ast: &AstProgram, cx: &mut Ctx) {
             位置 { 行: line, 列: col, 长: len },
             CheckCode::E203,
             &DiagParts::full(
-                format!("第 {} 行", line),
-                "sle 块时序",
-                format!("sle 块「{}」没人显式跑过，它的 val 还不存在", blk),
-                "sle 块不自动跑；取用它的 val 前，程序里要有一句 `call #:块名` 把它跑一遍",
-                "先写一句 `call #:块名`，再取用它的 val",
+                format!("line {}", line),
+                "sle block scheduling",
+                format!("sle block \"{}\" has never been run explicitly, so its val does not exist yet", blk),
+                "sle blocks do not run automatically; before taking its val, the program must run it once with `call #:blockname`",
+                "write `call #:blockname` first, then take its val",
             ),
             Tone::Fix,
         );
@@ -5418,13 +5411,13 @@ fn check_conc(ast: &AstProgram, cx: &mut Ctx) {
                         位置 { 行: line, 列: col, 长: len },
                         CheckCode::E201,
                         &DiagParts::full(
-                            format!("第 {} 行", line),
-                            "任务 token",
-                            format!("token「{}」装进了容器「{}」，但这个容器没在块内整体 join", n, c),
-                            "装进容器只是暂存，任务还等着收",
-                            format!("在本块收尾写 `join(call val \"{}\")`，一次把容器里的任务全等完", c),
+                            format!("line {}", line),
+                            "task token",
+                            format!("token \"{}\" was placed into container \"{}\", but that container is not joined as a whole within the block", n, c),
+                            "placing it in a container only stages it; the task still awaits collection",
+                            format!("at the end of this block write `join(call val \"{}\")` to wait for all tasks in the container at once", c),
                         )
-                        .预期("装过 token 的容器必须在块内整体 join 一次"),
+                        .预期("a container that holds tokens must be joined as a whole once within the block"),
                         Tone::Fix,
                     );
                     continue;
@@ -5433,13 +5426,13 @@ fn check_conc(ast: &AstProgram, cx: &mut Ctx) {
                     位置 { 行: line, 列: col, 长: len },
                     CheckCode::E201,
                     &DiagParts::full(
-                        format!("第 {} 行", line),
-                        "任务 token",
-                        format!("token「{}」没被 join——任务不许逃出块", n),
+                        format!("line {}", line),
+                        "task token",
+                        format!("token \"{}\" is not joined - tasks must not escape the block", n),
                         "",
-                        format!("写 `join(call val \"{}\")` 取回结果；不要返回值时，任务体末行写单独一行 `join` 表示自结束", n),
+                        format!("write `join(call val \"{}\")` to collect the result; when no value is needed, put a lone `join` as the last line of the task body to mark self-termination", n),
                     )
-                    .预期("每个 spawn 出来的 token 都要显式 join，或任务体末行写 join 自结束"),
+                    .预期("every spawned token must be joined explicitly, or the task body's last line must be `join` to self-terminate"),
                     Tone::Fix,
                 );
             }
@@ -5468,13 +5461,13 @@ fn conc_stmts(stmts: &[AstStmt], b: &AstBlock, cx: &mut Ctx, st: &mut 并发表)
                                 处,
                                 CheckCode::E201,
                                 &DiagParts::full(
-                                    format!("第 {} 行", line),
-                                    "并发标记",
-                                    format!("val「{}」不能既是 share 又标 (send)", n),
-                                    "一个数据要么共享、要么移交，没有第三种",
-                                    "去掉其中一个：多任务只读用 `add share val`，交给一个任务用 `add val(send)`",
+                                    format!("line {}", line),
+                                    "concurrency marker",
+                                    format!("val \"{}\" cannot be both share and marked (send)", n),
+                                    "a value is either shared or moved, there is no third option",
+                                    "remove one: for multi-task read-only use `add share val`, to hand it to one task use `add val(send)`",
                                 )
-                                .预期("share 与 (send) 互斥"),
+                                .预期("share and (send) are mutually exclusive"),
                                 Tone::Fix,
                             );
                         }
@@ -5531,13 +5524,13 @@ fn conc_stmts(stmts: &[AstStmt], b: &AstBlock, cx: &mut Ctx, st: &mut 并发表)
                                 处,
                                 CheckCode::E201,
                                 &DiagParts::full(
-                                    format!("第 {} 行", line),
-                                    "写共享值",
-                                    format!("「{}」是 share 值——多任务只读，不许写", n),
-                                    "共享写会让任务读到半截状态",
-                                    "要可变共享请用库层 Mutex；share 只给读",
+                                    format!("line {}", line),
+                                    "shared value write",
+                                    format!("\"{}\" is a share value - read-only across tasks, writing is not allowed", n),
+                                    "writing a shared value would let tasks read a half-updated state",
+                                    "for mutable sharing use a library-level Mutex; share is read-only",
                                 )
-                                .预期("share 值只读"),
+                                .预期("share values are read-only"),
                                 Tone::Fix,
                             );
                         }
@@ -5551,13 +5544,13 @@ fn conc_stmts(stmts: &[AstStmt], b: &AstBlock, cx: &mut Ctx, st: &mut 并发表)
                                     处,
                                     CheckCode::E201,
                                     &DiagParts::full(
-                                        format!("第 {} 行", line),
-                                        "读已移交的值",
-                                        format!("「{}」已经移交给任务——原件失效，不能再读", n),
-                                        "移交后所有权归任务",
-                                        "要用就给任务传一个副本，或改用 add share val 只读共享",
+                                        format!("line {}", line),
+                                        "read of a moved value",
+                                        format!("\"{}\" has already been moved to a task - the original is invalid and cannot be read", n),
+                                        "after a move, ownership belongs to the task",
+                                        "to use it, pass a copy to the task, or switch to add share val for read-only sharing",
                                     )
-                                    .预期("移交后原件失效"),
+                                    .预期("the original is invalid after a move"),
                                     Tone::Fix,
                                 );
                             }
@@ -5598,13 +5591,13 @@ fn conc_stmts(stmts: &[AstStmt], b: &AstBlock, cx: &mut Ctx, st: &mut 并发表)
                                         位置 { 行: *line, 列: *col, 长: *len },
                                         CheckCode::E201,
                                         &DiagParts::full(
-                                            format!("第 {} 行", line),
-                                            "自结束任务",
-                                            format!("自结束的任务不能引用外层 val「{}」", n),
-                                            "父块可能先退出，外层值届时已释放",
-                                            "去掉末行 `join`（改为 `give` + 外层 join），或让任务只用体内自己的值",
+                                            format!("line {}", line),
+                                            "self-terminating task",
+                                            format!("a self-terminating task cannot reference outer val \"{}\"", n),
+                                            "the parent block may exit first, by which time the outer value is released",
+                                            "remove the last-line `join` (switch to `give` + outer join), or make the task use only its own body values",
                                         )
-                                        .预期("自结束任务不捕获外层值"),
+                                        .预期("a self-terminating task does not capture outer values"),
                                         Tone::Fix,
                                     );
                                 }
@@ -5619,13 +5612,13 @@ fn conc_stmts(stmts: &[AstStmt], b: &AstBlock, cx: &mut Ctx, st: &mut 并发表)
                                                 位置 { 行: *line, 列: *col, 长: *len },
                                                 CheckCode::E201,
                                                 &DiagParts::full(
-                                                    format!("第 {} 行", line),
-                                                    "重复移交",
-                                                    format!("「{}」已经移交给第 {} 行的任务——一个值只能搬一次", n, 首行),
-                                                    "移交后所有权归第一个任务，第二个任务拿到的是同一个指针",
-                                                    "要多个任务读同一个值，改用 `add share val`；要各写各的，给每个任务各建一份",
+                                                    format!("line {}", line),
+                                                    "double move",
+                                                    format!("\"{}\" has already been moved to the task at line {} - a value can be moved only once", n, 首行),
+                                                    "after a move, ownership belongs to the first task; the second task gets the same pointer",
+                                                    "for multiple tasks to read the same value, switch to `add share val`; for independent writes, create a separate copy per task",
                                                 )
-                                                .预期("非复制的值只能移交一次"),
+                                                .预期("a non-copyable value can be moved only once"),
                                                 Tone::Fix,
                                             );
                                         } else {
@@ -5637,18 +5630,18 @@ fn conc_stmts(stmts: &[AstStmt], b: &AstBlock, cx: &mut Ctx, st: &mut 并发表)
                             None => {
                                 if st.值表.contains_key(&n) {
                                     let 提示 = if 自结束 {
-                                        "自结束任务不能引用外层 val"
+                                        "a self-terminating task cannot reference an outer val"
                                     } else {
-                                        "任务体引用外层 val——先标 add share val（只读）或 add val(send)（移交）"
+                                        "the task body references an outer val - first mark it add share val (read-only) or add val(send) (move)"
                                     };
                                     cx.err(
                                         位置 { 行: *line, 列: *col, 长: *len },
                                         CheckCode::E201,
                                         &DiagParts::full(
-                                            format!("第 {} 行", line),
-                                            "任务引用外层值",
-                                            format!("任务体用了外层 val「{}」，但没标并发标记", n),
-                                            "没标 share 也没标 (send)，编译器推不出跨线程是否安全",
+                                            format!("line {}", line),
+                                            "task referencing an outer value",
+                                            format!("the task body uses outer val \"{}\", but no concurrency marker is set", n),
+                                            "neither share nor (send) is set, so the compiler cannot infer whether it is thread-safe",
                                             提示,
                                         ),
                                         Tone::Fix,
