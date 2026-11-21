@@ -2071,8 +2071,12 @@ fn register_fn(
                         format!("line {}", 处.行),
                         "fn parameter",
                         format!("parameter \"{}\" collides with a block-level val", pname),
-                        "fn locals and parameters must not share names with block-level vals - namespaces are separate so ambiguity is eliminated at compile time",
-                        "rename the parameter",
+                        "",
+                        "rename the parameter so it does not reuse the block-level val name",
+                    )
+                    .预期("fn parameters must not reuse a block-level val name")
+                    .详解(
+                        "fn locals and parameters must not share names with block-level vals; the two namespaces are separate, so the clash is reported at compile time instead of being resolved silently.",
                     ),
                     Tone::Fix,
                 );
