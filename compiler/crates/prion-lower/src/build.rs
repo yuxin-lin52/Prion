@@ -5513,7 +5513,7 @@ Ok(v) => v,
         }
 
         err(format!(
-            "暂不支持的语句（当前支持 add val / add fn / add type / add outs fn / val \"名\" = / call fn / call #:块 / call ##:模块 #:块 / print / if / while / for / match / kill / asm / 下标写 / 字段写）：{:?}",
+            "暂不支持的语句（当前支持 add val / add fn / add type / add outs fn / val \"名\" = / call fn / call #:块 / call ##:模块 #:块 / print / if / while / for / match / asm / 下标写 / 字段写）：{:?}",
             段
         ))
     }
