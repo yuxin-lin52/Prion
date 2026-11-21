@@ -111,7 +111,7 @@ pub const BUILTINS: &[&str] = &[
 
     "run",
 
-    "sle_ms", "rnd",
+    "sle_ms", "rnd", "now", "sqrt", "print_raw",
 
     "read_8", "read_16", "read_32", "read_64", "write_8", "write_16", "write_32", "write_64",
 
@@ -412,7 +412,7 @@ pub fn check(ast: &AstProgram) -> CheckResult {
         aliases: 别名表,
     };
 
-
+    
     for b in &ast.blocks {
         for st in &b.stmts {
             let toks = match st { AstStmt::Line { kind, .. } => kind.tokens(), _ => continue };
@@ -478,223 +478,13 @@ pub fn check(ast: &AstProgram) -> CheckResult {
         for (处, 段, _nested) in flat_b.iter() {
             check_hidden_field_access(&mut cx, ast, 处, b, 段);
         }
-        for (处, 段, nested) in flat_b.iter() {
-            {
-                let 段 = *段;
-                if !matches!(段.first(), Some(Token::Kw("kill"))) {
-                    continue;
-                }
-                let target = 段.iter().skip(1).filter_map(|t| match t {
-                    Token::Ident(n) | Token::Str(n) => Some(n.clone()),
-                    _ => None,
-                }).next_back();
-                let target = match target {
-                    Some(t) => t,
-                    None => continue,
-                };
-                
-                if *nested {
-                    cx.err(
-                        *处,
-                        CheckCode::E201,
-                        &DiagParts::full(
-                            format!("第 {} 行", 处.行),
-                            "danger",
-                            format!("`kill #:{}` 写在函数体或条件体里", target),
-                            "",
-                            "把 kill 挪到块体的顺序语句位置——fn 体与 if/while 体里不合法",
-                        )
-                        .预期("`kill` 只许写在块体的顺序语句位置")
-                        .详解("`kill` 标注的是块链上的回收点；fn 体不在块链上，条件体让回收点依赖运行期值——都与回收点编译期定死相抵。"),
-                        Tone::Fix,
-                    );
-                    continue;
-                }
-                if !is_unsafe_blk {
-                    cx.err(
-                        *处,
-                        CheckCode::E201,
-                        &DiagParts::full(
-                            format!("第 {} 行", 处.行),
-                            "danger",
-                            format!("块「{}」里用了 `kill #:{}`，但它不是危险块", b.name, target),
-                            "",
-                            "把开块行写成 `#: 块名 b unsafe`——kill 与 asm 一样，只在危险模式里放行",
-                        )
-                        .预期("`kill` 语句只能出现在 unsafe 块里")
-                        .详解("`kill` 是 unsafe 的第四类能力：它提前回收别的块的地皮，需开发者自己担保 ⇒ 只在危险块里合法。"),
-                        Tone::Fix,
-                    );
-                }
-                
-                
-                
-                
-                
-                let mut taint: std::collections::BTreeMap<prion_lexer::Name, bool> =
-                    std::collections::BTreeMap::new();
-                let mut seen_kill = false;
-                let mut violations: Vec<String> = Vec::new();
-                for (ln, tk, nested) in flat_b.clone() {
-                    let is_kill_line = matches!(tk.first(), Some(Token::Kw("kill")));
 
-                    let eq_pos = tk.iter().position(|t| matches!(t, Token::Sym("=")));
-                    let lhs_name: Option<&prion_lexer::Name> = match tk.first() {
-                        Some(Token::Kw("add")) => match tk.get(2) {
-                            Some(Token::Str(v)) => Some(v),
-                            _ => None,
-                        },
-                        Some(Token::Kw("val")) => match tk.get(1) {
-                            Some(Token::Str(v)) => Some(v),
-                            _ => None,
-                        },
-                        _ => None,
-                    };
-                    let rhs_start = eq_pos.map(|p| p + 1).unwrap_or(0);
-                    let rhs_names: Vec<&prion_lexer::Name> = tk[rhs_start..]
-                        .iter()
-                        .filter_map(|t| match t {
-                            Token::Str(v) => Some(v),
-                            _ => None,
-                        })
-                        .collect();
-
-                    let mut refs_target = false;
-                    let mut ci = 0usize;
-                    while ci < tk.len() {
-                        if matches!(tk.get(ci), Some(Token::Kw("call"))) {
-                            let mut k = ci + 2;
-                            if matches!(tk.get(ci + 1), Some(Token::HashHashColon))
-                                && matches!(tk.get(ci + 3), Some(Token::HashColon))
-                            {
-                                k = ci + 4;
-                            }
-                            if let Some(Token::Ident(n)) = tk.get(k) {
-                                if *n == target {
-                                    refs_target = true;
-                                }
-                            }
-                        }
-                        ci += 1;
-                    }
-
-                    let rhs_tainted = rhs_names.iter().any(|v| taint.get(*v) == Some(&true));
-
-                    if let Some(name) = lhs_name {
-                        if refs_target || rhs_tainted {
-                            taint.insert((*name).clone(), true);
-                        } else if !nested {
-                            
-                            
-                            taint.insert((*name).clone(), false);
-                        }
-                    }
-
-                    if seen_kill && !is_kill_line {
-                        for v in rhs_names.iter().chain(lhs_name.iter()) {
-                            if taint.get(*v) == Some(&true) {
-                                violations.push(format!("第 {} 行的「{}」", ln, v));
-                            }
-                        }
-                    }
-                    if is_kill_line {
-                        seen_kill = true;
-                    }
-                }
-                if !violations.is_empty() {
-                    violations.dedup();
-                    cx.err(
-                        位置{ 行: b.line, 列: b.col, 长: b.len },
-                        CheckCode::E201,
-                        &DiagParts::full(
-                            format!("第 {} 行", b.line),
-                            "kill 追踪",
-                            format!("`kill #:{}` 之后还有指向该块地皮的引用（{} 处）", target, violations.len()),
-                            "",
-                            "把这些引用在 kill 之前用完并清掉，或把 kill 移到它们之后",
-                        )
-                        .预期("kill 点之后不得存在指向待回收段的活引用")
-                        .详解(&format!(
-                            "编译器追踪到下面这些位置仍在引用「{}」的地皮：{}。\
-                             kill 会连整棵子树一起回收 ⇒ 这些引用会变成悬空。\
-                             （保守判定：流不敏感，宁可多报不可漏。）",
-                            target,
-                            violations.join("、")
-                        )),
-                        Tone::Fix,
-                    );
-                }
-
-                
-                if target != b.name && !called_in_block.contains(&target) {
-                    cx.err(
-                        位置{ 行: b.line, 列: b.col, 长: b.len },
-                        CheckCode::E201,
-                        &DiagParts::full(
-                            format!("第 {} 行", b.line),
-                            "kill 目标",
-                            format!("`kill #:{}` 的目标块没有被本块调用过", target),
-                            "",
-                            "kill 只能回收**本链已经调用过**的块的活跃实例段；若只是想清理本块自己，用 `#: 块名 d kill`",
-                        )
-                        .预期("kill 的目标必须是本块调用过的块")
-                        .详解(
-                            "块的活跃实例段由调用产生：没调用过 ⇒ 没有可回收的段 ⇒ 这条 kill 是笔误\
-                             （多半是块名写错，或该块其实没在这个链上被调用）。",
-                        ),
-                        Tone::Fix,
-                    );
-                }
-                if target == b.name {
-                    cx.err(
-                        位置{ 行: b.line, 列: b.col, 长: b.len },
-                        CheckCode::E201,
-                        &DiagParts::full(
-                            format!("第 {} 行", b.line),
-                            "danger",
-                            format!("`kill #:{}` 指向当前块自己", target),
-                            "",
-                            "kill 要回收**别的块**的活跃实例段；要本块跑完即清理，用关块行后缀 `#: 块名 d kill`",
-                        )
-                        .预期("kill 的目标必须是**非当前块**")
-                        .详解("语句 `kill #:块名` 回收别的块的活跃实例段；`#: 块名 d kill` 回收本块自己——两个挂载点，别混。"),
-                        Tone::Fix,
-                    );
-                }
-            }
-        }
     }
 
     
     
     
-    for b in &ast.blocks {
-        cx.cur_file = b.file.clone();
-        let has_kill = b.attrs.iter().any(|a| a == "kill");
-        if !has_kill {
-            continue;
-        }
-        let is_unsafe = b.attrs.iter().any(|a| a == "unsafe");
-        if !is_unsafe {
-            cx.err(
-                位置{ 行: b.line, 列: b.col, 长: b.len },
-                CheckCode::E201,
-                &DiagParts::full(
-                    format!("第 {} 行", b.line),
-                    "danger",
-                    format!("块「{}」用了 `d kill`，但它不是危险块", b.name),
-                    "",
-                    "把开块行写成 `#: 块名 b unsafe`——kill 与 asm 一样，只在危险模式里放行",
-                )
-                .预期("`d kill` 的块必须是 unsafe 块")
-                .详解(
-                    "`kill` 是 unsafe 的第四类能力（与裸地址读写、C 互操作、内联汇编并列）：\
-                     它提前回收别的块的活跃地皮，属于需要开发者自己担保的事 ⇒ 只在危险块里合法。",
-                ),
-                Tone::Fix,
-            );
-        }
-    }
+
 
     
     {
@@ -734,7 +524,7 @@ pub fn check(ast: &AstProgram) -> CheckResult {
     for b in &ast.blocks {
         cx.cur_file = b.file.clone();
         
-        let a: Vec<&String> = b.attrs.iter().filter(|x| x.as_str() != "kill").collect();
+        let a: Vec<&String> = b.attrs.iter().collect();
         let line = b.line;
         if let Some(pos) = a.iter().position(|x| x.as_str() == "unsafe") {
             if pos != 0 {
@@ -1427,7 +1217,7 @@ fn scan_types(ast: &AstProgram) -> (TypeTable, BTreeMap<String, String>) {
                         if 段.iter().any(|t| *t == Token::Sym("|")) {
                             out.entry(name).or_insert((处.clone(), b.file.clone(), Vec::new()));
                         } else if let Some(eq) = 段.iter().position(|t| *t == Token::Sym("=")) {
-
+                            
                             if let Some(t) = 段.get(eq + 1) {
                                 let target = match t {
                                     Token::Kw(k) => Some((*k).to_string()),
@@ -3946,7 +3736,7 @@ fn scan_bare_reads(b: &AstBlock, 处: 位置, expr: &[Token], full: &[Token], cx
                 _ => {}
             }
         }
-
+        
         if i > 0 && 是名字位前驱(expr, i - 1) {
             i += 1;
             continue;
@@ -4594,6 +4384,48 @@ fn infer_named(
         return 查局部(locals, idx, names, block, &n).map(|l| l.ty.clone());
     }
     
+    if let Some(Token::Ident(n)) = 段.first() {
+        if matches!(段.get(1), Some(Token::Sym(".")) | Some(Token::Sym("["))) {
+            let mut cur = 查局部(locals, idx, names, block, &n).map(|l| l.ty.clone());
+            let mut k = 1usize;
+            loop {
+                if matches!(段.get(k), Some(Token::Sym("."))) {
+                    let Some(Token::Ident(f) | Token::Str(f)) = 段.get(k + 1) else { break };
+                    cur = match cur {
+                        Some(b) => 字段型(types, &b, f),
+                        None => None,
+                    };
+                    k += 2;
+                    continue;
+                }
+                if matches!(段.get(k), Some(Token::Sym("["))) {
+                    cur = match cur {
+                        Some(b) if b == "str" => Some("str".to_string()),
+                        Some(b) => elem_ty_str(&b),
+                        None => None,
+                    };
+                    let mut 深 = 0i32;
+                    while k < 段.len() {
+                        match &段[k] {
+                            Token::Sym("[") => 深 += 1,
+                            Token::Sym("]") => {
+                                深 -= 1;
+                                if 深 == 0 {
+                                    k += 1;
+                                    break;
+                                }
+                            }
+                            _ => {}
+                        }
+                        k += 1;
+                    }
+                    continue;
+                }
+                break;
+            }
+            return cur;
+        }
+    }
 
     if let Some(Token::Ident(n)) = 段.first() {
         if let Some(base) = 查局部(locals, idx, names, block, &n).map(|l| l.ty.clone()) {
@@ -4759,9 +4591,10 @@ fn infer(
     if matches!(段.get(1), Some(Token::Sym("("))) && paren_spans_all(段) {
         if let Some(name) = head_name {
             match name.as_ref() {
-                "int" | "code" | "len" | "char_len" | "index" | "rnd" | "str_to_c" => {
+                "int" | "code" | "len" | "char_len" | "index" | "rnd" | "str_to_c" | "now" => {
                     return Some("int".to_string())
                 }
+                "sqrt" => return Some("float".to_string()),
                 "empty" | "has" => return Some("bool".to_string()),
                 "map" => return Some("map".to_string()),
                 

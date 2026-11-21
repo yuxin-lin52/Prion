@@ -933,7 +933,6 @@ fn stmt_c(
         
         Stmt::Alloc { .. } | Stmt::Bind { .. } => {}
         
-        Stmt::Kill { .. } => {}
         
         Stmt::Drop { obj } => {
             let lids: Vec<usize> = f

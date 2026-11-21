@@ -155,7 +155,6 @@ pub enum LineKind {
     
     CallBlock(TokStream),
     
-    Kill(TokStream),
     
     Assign(TokStream),
     
@@ -169,7 +168,7 @@ impl LineKind {
     pub fn tokens(&self) -> &TokStream {
         match self {
             LineKind::Give(t) | LineKind::AddVal(t) | LineKind::AddFn(t) | LineKind::AddOutsFn(t)
-            | LineKind::CallFn(t) | LineKind::CallBlock(t) | LineKind::Kill(t) | LineKind::Assign(t)
+            | LineKind::CallFn(t) | LineKind::CallBlock(t)  | LineKind::Assign(t)
             | LineKind::BareCall(t) | LineKind::Other(t) => t,
             LineKind::AddType(t) | LineKind::AddHide(t) => t,
         }
@@ -198,7 +197,6 @@ pub fn line_kind(toks: &TokStream) -> LineKind {
             Some(Token::Kw("fn")) => LineKind::CallFn(own),
             _ => LineKind::CallBlock(own),
         },
-        Some(Token::Kw("kill")) => LineKind::Kill(own),
         Some(Token::Kw("val")) => LineKind::Assign(own),
         Some(Token::Ident(_)) if matches!(toks.get(1), Some(Token::Sym("("))) => LineKind::BareCall(own),
         _ => LineKind::Other(own),
@@ -367,7 +365,7 @@ fn is_block_line(t: &[Token]) -> Option<(String, bool, Vec<String>)> {
     let mut attrs: Vec<String> = Vec::new();
     for a in rest {
         match a {
-            Token::Kw(k) if *k == "unsafe" || *k == "pub" || *k == "sle" || *k == "ABI" || *k == "kill" || *k == "asm" => {
+            Token::Kw(k) if *k == "unsafe" || *k == "pub" || *k == "sle" || *k == "ABI" || *k == "asm" => {
                 attrs.push((*k).to_string())
             }
             _ => return None, 
@@ -468,20 +466,6 @@ pub fn parse_all(spanned: Vec<Spanned>) -> (Program, Vec<ParseError>) {
                 }
             }
 
-            if attrs.iter().any(|a| a == "kill") {
-                报错!(ParseError::with_code(
-                    line_no,
-                    ParseCode::E101,
-                    &DiagParts::full(
-                        format!("第 {} 行", line_no),
-                        "写块行",
-                        format!("块「{}」的开块行写了 `kill`", name),
-                        "`kill` 只能作关块行后缀",
-                        "要本块跑完即清理 ⇒ 写 `#: 块名 d kill`；要回收别的块 ⇒ 在块体内写 `kill #:块名`",
-                    ),
-                    Tone::Fix,
-                ));
-            }
             stack.push(Frame { kind: Kind::Block, name, head: TokStream::new(Vec::new()), body: Vec::new(), line: line_no, col: span.col, len: span.len, attrs, asm_lines: Vec::new() });
             after_semi = false;
             continue;
@@ -646,28 +630,6 @@ pub fn parse_all(spanned: Vec<Spanned>) -> (Program, Vec<ParseError>) {
             continue;
         }
 
-        
-        
-        
-        if matches!(toks.first(), Some(Token::Kw("kill"))) {
-            if let Some(p) = stack.last() {
-                if matches!(p.kind, Kind::Struct) {
-                    报错!(ParseError::with_code(
-                        line_no,
-                        ParseCode::E101,
-                        &DiagParts::full(
-                            format!("第 {} 行", line_no),
-                            "写 kill",
-                            "`kill` 不能写在 if / while 体里",
-                            "`kill` 只能在块的顺序语句位置",
-                            "把 kill 移到块体的顺序位置（不在任何 if / while 内）；条件释放的需求在追踪到位后会蒸发",
-                        )
-                        .详解("条件 kill 会让「这段地皮死不死」依赖运行期才知道的值，与「回收点编译期定死」直接冲突"),
-                        Tone::Fix,
-                    ));
-                }
-            }
-        }
         
         if let [Token::RawAsm(s)] = &toks[..] {
             match stack.last_mut() {

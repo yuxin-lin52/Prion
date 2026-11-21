@@ -141,7 +141,6 @@ pub enum Tag {
     Alloc,
     Bind,
     Drop,
-    Kill,
     DropVar,
     ListSetStmt,
     MapSetStmt,
@@ -747,10 +746,26 @@ fn 转语句(t: &mut 转中, st: &Stmt) {
                 };
             }
             let v = t.rvalue(rhs);
-            let nop = t.push(Tag::Nop, v, 0, 0) as usize;
-            let _ = cur;
-            if nop < t.places.len() {
-                t.places[nop] = Some(lhs.clone());
+            let 基ty = t.f.locals.get(lhs.base).map(|l| l.ty.0.clone()).unwrap_or_default();
+            let 内ty = 基ty.trim_end_matches('*').to_string();
+            if 内ty == "str" {
+                let nc: u32 = if matches!(rhs, Rvalue::BinOp { .. })
+                    || matches!(rhs, Rvalue::Call { name, .. } if crate::返回自有串(name))
+                {
+                    0
+                } else {
+                    1
+                };
+                let nop = t.push(Tag::NopRel, v, 0, nc) as usize;
+                if nop < t.places.len() {
+                    t.places[nop] = Some(lhs.clone());
+                }
+            } else {
+                let nop = t.push(Tag::Nop, v, 0, 0) as usize;
+                let _ = cur;
+                if nop < t.places.len() {
+                    t.places[nop] = Some(lhs.clone());
+                }
             }
         }
         Stmt::Call { name, args } => {
@@ -772,10 +787,6 @@ fn 转语句(t: &mut 转中, st: &Stmt) {
         }
         Stmt::DropVar { lid } => {
             t.push(Tag::DropVar, *lid as u32, 0, 0);
-        }
-        Stmt::Kill { block } => {
-            let bid = t.intern(block);
-            t.push(Tag::Kill, bid, 0, 0);
         }
         Stmt::ListSet { list, index, value } => {
             let l = t.val(list);
@@ -1063,9 +1074,6 @@ fn 还原语句(
         Tag::Drop => Stmt::Drop { obj: inst.a },
         Tag::DropVar => Stmt::DropVar {
             lid: inst.a as usize,
-        },
-        Tag::Kill => Stmt::Kill {
-            block: ffn.strings.get(inst.a as usize).cloned()?,
         },
         Tag::Assert => {
             let mid = ffn.extra.get(inst.b as usize).copied()?;

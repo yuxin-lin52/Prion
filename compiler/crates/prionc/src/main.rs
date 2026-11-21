@@ -108,6 +108,7 @@ prionc —— Prion 编译器
   --opt    优化力度 0-3；缺省随模式（debug→0，release→3）。
   --const-depth N  编译期求值最大嵌套层数，缺省 256；0 = 不设上限。
   --const-steps N  编译期求值最大步数，缺省 1280000；0 = 不设上限。
+  --no-loop-reclaim  关闭圈尾回收（缺省开）
   产物     build/<模式>/<名>.exe，中间产物 <名>.ll/<名>.o 同目录。
   退出码   0 成功 / 101 失败 / 1 用法错误；run 透传被运行程序的退出码。";
 
@@ -121,7 +122,14 @@ const COMMAND_HELP: &[(&str, &str)] = &[
 ];
 
 fn main() -> ExitCode {
-    let code = 主逻辑();
+    let h = std::thread::Builder::new()
+        .stack_size(256 * 1024 * 1024)
+        .spawn(主逻辑)
+        .expect("起不了主线程");
+    let code = match h.join() {
+        Ok(c) => c,
+        Err(_) => ExitCode::from(101),
+    };
     alloc_stat::报告();
     code
 }
@@ -235,6 +243,7 @@ struct Opts {
     
     const_depth: Option<usize>,
     const_steps: Option<usize>,
+    loop_reclaim: bool,
     pass_args: Vec<String>,
     dump_ir: bool, 
     
@@ -254,6 +263,7 @@ impl Opts {
             debug_info: None,
             const_depth: None,
             const_steps: None,
+            loop_reclaim: true,
             pass_args: Vec::new(),
             dump_ir: false,
             dump_tokens: false,
@@ -310,6 +320,7 @@ fn parse_opts(rest: &[String]) -> Result<Opts, String> {
                 }
                 "debug-info" | "g" => { o.debug_info = Some(true); }
                 "march-native" => { o.march_native = Some(true); }
+                "no-loop-reclaim" => { o.loop_reclaim = false; }
                 "const-depth" | "const-steps" => {
                     let v = val!();
                     let n: usize = v.parse().map_err(|_| {
@@ -700,7 +711,7 @@ fn run_command(cmd: &str, rest: &[String]) -> ExitCode {
                 Err(e) => return e,
             };
             
-            let exe = match do_build(&t, &mode, opt, o.dump_ir, o.debug_info.unwrap_or(false), o.march_native.unwrap_or(false)) {
+            let exe = match do_build(&t, &mode, opt, o.dump_ir, o.debug_info.unwrap_or(false), o.march_native.unwrap_or(false), o.loop_reclaim) {
                 Ok((_, exe)) => exe,
                 Err(e) => return e,
             };
@@ -1369,6 +1380,7 @@ fn do_build(
     _dump_ir: bool,
     _dbg: bool,
     _native: bool,
+    _loop_reclaim: bool,
 ) -> Result<(PathBuf, PathBuf), ExitCode> {
     Err(fail101(
         "这个 prionc 是精简构建（只有诊断与语言服务），不含代码生成——编译请换完整版",
@@ -1376,7 +1388,7 @@ fn do_build(
 }
 
 #[cfg(feature = "backend")]
-fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, dbg: bool, native: bool) -> Result<(PathBuf, PathBuf), ExitCode> {
+fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, dbg: bool, native: bool, loop_reclaim: bool) -> Result<(PathBuf, PathBuf), ExitCode> {
     let ast = front(t)?;
     
     let src_file = if t.src.is_dir() { t.src.join("main.an") } else { t.src.clone() };
@@ -1392,7 +1404,7 @@ fn do_build(t: &Target, mode: &str, opt: u32, dump_ir: bool, dbg: bool, native: 
     };
     
     prion_opt::run(&mut ir);
-    prion_walk::drop_pass::对象挂名(&mut ir);
+    prion_walk::drop_pass::对象挂名(&mut ir, loop_reclaim);
     if dump_ir {
         println!("{}", ir.dump());
         let flat = prion_ir::flat::from_program(&ir);

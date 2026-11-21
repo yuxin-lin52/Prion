@@ -210,16 +210,26 @@ fn 外提(f: &mut prion_ir::Function) {
         }
         
         let mut 定义: BTreeMap<LocalId, BlockId> = BTreeMap::new();
+        let mut 多次: BTreeSet<LocalId> = BTreeSet::new();
         for (bi, b) in f.blocks.iter().enumerate() {
             
             for (pid, _) in &b.params {
-                定义.insert(*pid, bi as BlockId);
+                if 定义.insert(*pid, bi as BlockId).is_some() {
+                    多次.insert(*pid);
+                }
             }
             for s in &b.stmts {
                 if let Stmt::Assign { lhs, .. } = s {
                     
-                    定义.insert(lhs.base, bi as BlockId);
+                    if 定义.insert(lhs.base, bi as BlockId).is_some() {
+                        多次.insert(lhs.base);
+                    }
                 }
+            }
+        }
+        for (i, l) in f.locals.iter().enumerate() {
+            if l.name.as_deref().map(|n| n.contains('#')).unwrap_or(false) {
+                多次.insert(i);
             }
         }
         
@@ -248,14 +258,17 @@ fn 外提(f: &mut prion_ir::Function) {
                     let Stmt::Assign { lhs, rhs } = s else {
                         continue;
                     };
-                    if !lhs.proj.is_empty() || !纯(rhs) {
+                    if !lhs.proj.is_empty() || !纯(rhs) || 多次.contains(&lhs.base) {
                         continue;
                     }
                     let mut 参 = Vec::new();
                     操作数(rhs, &mut 参);
-                    let 好 = 参.iter().all(|id| match 定义.get(id) {
-                        Some(d) => !节点.contains(d),
-                        None => true,
+                    let 好 = 参.iter().all(|id| {
+                        !多次.contains(id)
+                            && match 定义.get(id) {
+                                Some(d) => !节点.contains(d),
+                                None => true,
+                            }
                     });
                     if 好 {
                         搬.push((b, si));

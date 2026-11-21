@@ -200,8 +200,6 @@ pub enum Stmt {
     
     DropVar { lid: LocalId },
     
-    Kill { block: String },
-    
     ListSet { list: Value, index: Value, value: Value },
     
     MapSet { map: Value, key: Value, value: Value },
@@ -299,7 +297,6 @@ pub struct Function {
     
     pub is_sle: bool,
     
-    pub is_kill: bool,
     
     pub is_abi: bool,
     
@@ -351,6 +348,8 @@ pub struct Program {
     pub 值入列: std::collections::BTreeSet<ObjId>,
     
     pub 平铺: std::collections::BTreeMap<String, std::collections::BTreeSet<LocalId>>,
+    
+    pub owned_fields: std::collections::BTreeMap<String, std::collections::BTreeSet<String>>,
 }
 
 
@@ -506,7 +505,6 @@ fn stmt_str(f: &Function, s: &Stmt) -> String {
         Stmt::Bind { var, obj } => format!("bind {} o{}", local_name(f, *var), obj),
         Stmt::Drop { obj } => format!("drop o{}", obj),
         Stmt::DropVar { lid } => format!("dropvar {}", local_name(f, *lid)),
-        Stmt::Kill { block } => format!("kill #:{}", block),
         Stmt::ListSet { list, index, value } => format!(
             "list_set({}, {}, {})",
             value_str(f, list),

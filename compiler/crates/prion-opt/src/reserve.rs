@@ -111,7 +111,6 @@ pub fn run(prog: &mut Program) {
             环.insert(h);
             let 有早退 = 环.iter().any(|i| {
                 matches!(f.blocks[*i].exit, Exit::Return(_))
-                    || f.blocks[*i].stmts.iter().any(|s| matches!(s, Stmt::Kill { .. }))
             });
             if 有早退 {
                 continue;
@@ -136,15 +135,16 @@ pub fn run(prog: &mut Program) {
                     目标.insert(*l);
                 }
             }
-            if 目标.len() != 1 {
+            if 目标.is_empty() {
                 continue;
             }
-            let l = *目标.iter().next().unwrap();
             let 前置: Vec<usize> = 前驱[h].iter().copied().filter(|p| !环.contains(p)).collect();
             if 前置.len() != 1 {
                 continue;
             }
-            计划.push((前置[0], l, 界));
+            for l in 目标 {
+                计划.push((前置[0], l, 界.clone()));
+            }
         }
         for (pre, l, 界) in 计划 {
             let t = f.locals[l].ty.0.clone();

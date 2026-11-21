@@ -229,7 +229,7 @@ fn 读语句(s: &Stmt, out: &mut Vec<(LocalId, usize, usize)>) {
                 out.push((p.base, 1, 0));
             }
         }
-        Stmt::Alloc { .. } | Stmt::Bind { .. } | Stmt::Drop { .. } | Stmt::DropVar { .. } | Stmt::Kill { .. } => {}
+        Stmt::Alloc { .. } | Stmt::Bind { .. } | Stmt::Drop { .. } | Stmt::DropVar { .. } => {}
         Stmt::Asm(form) => {
             
             for (_, v, _) in &form.outs {

@@ -367,7 +367,7 @@ pub const 图例: [&str; 10] = [
 fn 关键字类(k: &str) -> u32 {
     match k {
         "if" | "else" | "while" | "for" | "match" | "case" | "call" | "give"
-        | "add" | "kill" | "asm" | "unsafe" | "and" | "or" | "not" => 0,
+        | "add" | "asm" | "unsafe" | "and" | "or" | "not" => 0,
         "fn" | "val" | "type" | "fix" => 0,
         "pub" | "sle" | "ABI" | "hide" | "outs" => 6,
         "int" | "float" | "bool" | "str" | "int_8" | "int_16" | "int_32" | "int_64"
@@ -546,7 +546,7 @@ fn 取补全(态: &mut 状态, 参: &Value) -> Vec<Value> {
 fn 关键字全集() -> &'static [&'static str] {
     &[
         "add", "call", "fn", "val", "type", "hide", "give", "outs", "if", "else", "for",
-        "while", "match", "case", "unsafe", "pub", "sle", "ABI", "kill", "asm", "fix", "int",
+        "while", "match", "case", "unsafe", "pub", "sle", "ABI", "asm", "fix", "int",
         "float", "bool", "str", "int_8", "int_16", "int_32", "int_64", "uint_8", "uint_16",
         "uint_32", "uint_64", "list", "map", "que", "stack", "and", "or", "not", "null", "re", "fa",
     ]

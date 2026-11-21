@@ -140,9 +140,12 @@ pub fn emit_object(
         owned: p.owned_elem.clone(),
         循环环: std::cell::RefCell::new(Vec::new()),
         值入列: p.值入列.clone(),
+        owned_fields: p.owned_fields.clone(),
+        树释放: BTreeMap::new(),
     };
     lo.declare_types(p)?;
     lo.declare(p)?;
+    lo.建树释放();
     rt_emit::发射(&lo.ctx, &lo.module, 视窗, !debug, file)?;
     for f in &p.functions {
         lo.lower_fn(f, p)?;
@@ -207,6 +210,9 @@ struct Lower<'ctx> {
     循环环: std::cell::RefCell<Vec<(FunctionValue<'ctx>, String, u64)>>,
     
     值入列: std::collections::BTreeSet<prion_ir::ObjId>,
+    
+    owned_fields: BTreeMap<String, std::collections::BTreeSet<String>>,
+    树释放: BTreeMap<String, FunctionValue<'ctx>>,
 }
 
 
@@ -788,6 +794,8 @@ impl<'ctx> Lower<'ctx> {
                                                 
                                                 *x = Some(c.into());
                                             }
+                                            let fr = self.rt_free();
+                                            self.builder.build_call(fr, &[pv.into()], "").map_err(|e| e.to_string())?;
                                             ESCAPED.with(|s| s.borrow_mut().insert(*lid));
                                             x = c;
                                         }
@@ -1390,6 +1398,59 @@ impl<'ctx> Lower<'ctx> {
         Ok(())
     }
 
+    fn 建树释放(&mut self) {
+        let pt = self.ctx.ptr_type(AddressSpace::default());
+        let 名s: Vec<String> = self.owned_fields.keys().cloned().collect();
+        for n in &名s {
+            let fname = format!("#树释放_{}", n);
+            let f = match self.module.get_function(&fname) {
+                Some(f) => f,
+                None => {
+                    let ft = self.ctx.void_type().fn_type(&[pt.into()], false);
+                    self.module.add_function(&fname, ft, None)
+                }
+            };
+            self.树释放.insert(n.clone(), f);
+        }
+        for n in 名s {
+            let Some(f) = self.树释放.get(&n).copied() else { continue };
+            if f.get_first_basic_block().is_some() {
+                continue;
+            }
+            let Some(字段s) = self.owned_fields.get(&n).cloned() else { continue };
+            let Some(st) = self.structs.get(&n).copied() else { continue };
+            let 字段 = self.type_fields.get(&n).cloned().unwrap_or_default();
+            let bb = self.ctx.append_basic_block(f, "entry");
+            self.builder.position_at_end(bb);
+            let obj = f.get_nth_param(0).unwrap().into_pointer_value();
+            for (idx, (fname, ty)) in 字段.iter().enumerate() {
+                if !字段s.contains(fname) {
+                    continue;
+                }
+                let sub = ty.0.trim_end_matches('*').to_string();
+                let Ok(fp) = self.builder.build_struct_gep(st, obj, idx as u32, "tf") else { continue };
+                let Ok(pv) = self.builder.build_load(pt, fp, "tv") else { continue };
+                let pv = pv.into_pointer_value();
+                let nn = self.ctx.append_basic_block(f, "tnn");
+                let nx = self.ctx.append_basic_block(f, "tnx");
+                let isnull = self.builder.build_is_null(pv, "tisn").unwrap();
+                self.builder.build_conditional_branch(isnull, nx, nn).unwrap();
+                self.builder.position_at_end(nn);
+                if let Some(sf) = self.树释放.get(&sub).copied() {
+                    self.builder.build_call(sf, &[pv.into()], "").unwrap();
+                } else {
+                    let free = self.rt_free();
+                    self.builder.build_call(free, &[pv.into()], "").unwrap();
+                }
+                self.builder.build_unconditional_branch(nx).unwrap();
+                self.builder.position_at_end(nx);
+            }
+            let free = self.rt_free();
+            self.builder.build_call(free, &[obj.into()], "").unwrap();
+            self.builder.build_return(None).unwrap();
+        }
+    }
+
     fn 释放局部(
         &mut self,
         f: &Function,
@@ -1478,9 +1539,13 @@ impl<'ctx> Lower<'ctx> {
         
         self.builder.position_at_end(有);
         if 把手 {
-            
-            let free = if ty == "str" { self.rt_str_free() } else { self.rt_free() };
-            self.builder.build_call(free, &[p.into()], "").map_err(|e| e.to_string())?;
+            let base = ty.trim_end_matches('*').to_string();
+            if let Some(tf) = self.树释放.get(&base).copied() {
+                self.builder.build_call(tf, &[p.into()], "").map_err(|e| e.to_string())?;
+            } else {
+                let free = self.rt_free();
+                self.builder.build_call(free, &[p.into()], "").map_err(|e| e.to_string())?;
+            }
         } else if ty.starts_with("map(") {
             
             let vstr = Self::map_value_ty(&ty).as_deref() == Some("str");
@@ -1534,7 +1599,10 @@ impl<'ctx> Lower<'ctx> {
                 } else {
                     self.聚合宽(&ety).unwrap_or(8)
                 };
-                self.逐元素释放(dp2, len, ety == "str", 元宽)?;
+                let 树释 = ety
+                    .strip_suffix('*')
+                    .and_then(|b| self.树释放.get(b).copied());
+                self.逐元素释放(dp2, len, ety == "str", 元宽, 树释)?;
             }
             let free = self.rt_free();
             self.builder.build_call(free, &[dv.into()], "").map_err(|e| e.to_string())?;
@@ -1562,6 +1630,7 @@ impl<'ctx> Lower<'ctx> {
         len: inkwell::values::IntValue<'ctx>,
         串: bool,
         元宽: i64,
+        树释: Option<FunctionValue<'ctx>>,
     ) -> Result<(), String> {
         let fnv = self
             .builder
@@ -1600,7 +1669,14 @@ impl<'ctx> Lower<'ctx> {
             .map_err(|e| e.to_string())?
             .into_pointer_value();
         let free = if 串 { self.rt_str_free() } else { self.rt_free() };
-        self.builder.build_call(free, &[ep.into()], "").map_err(|e| e.to_string())?;
+        match 树释 {
+            Some(tf) => {
+                self.builder.build_call(tf, &[ep.into()], "").map_err(|e| e.to_string())?;
+            }
+            None => {
+                self.builder.build_call(free, &[ep.into()], "").map_err(|e| e.to_string())?;
+            }
+        }
         let 下一 = self
             .builder
             .build_int_add(当前, i64t.const_int(1, false), "en")
@@ -1659,16 +1735,9 @@ impl<'ctx> Lower<'ctx> {
         
         if p.proj.is_empty() && Self::是槽参(f, p.base) {
             let pt = self.ctx.ptr_type(AddressSpace::default());
-            let slot = self
-                .builder
-                .build_load(pt, a, "slotref")
-                .map_err(|e| e.to_string())?
-                .into_pointer_value();
-            let inner = src_ty.0.trim_end_matches('*').to_string();
-            let lty = self.ty(&Ty(inner));
             return self
                 .builder
-                .build_load(lty, slot, "load")
+                .build_load(pt, a, "slotref")
                 .map_err(|e| e.to_string());
         }
         let lty = self.field_ty(&src_ty);
@@ -1905,6 +1974,17 @@ impl<'ctx> Lower<'ctx> {
             Stmt::AssignRelease { lhs, rhs } if lhs.proj.is_empty() => {
                 self.want = Some(self.local_ty(f, lhs.base));
                 let old = self.load_place(f, allocas, &Place::local(lhs.base))?;
+                let old_str = if self.place_ty(f, lhs).0 == "str" {
+                    Some(match old {
+                        BasicValueEnum::StructValue(_) => old,
+                        BasicValueEnum::PointerValue(p) => {
+                            self.builder.build_load(self.pstr_ty(), p, "olds").map_err(|e| e.to_string())?
+                        }
+                        _ => old,
+                    })
+                } else {
+                    None
+                };
                 let v = self.rvalue(f, allocas, rhs)?;
                 self.want = None;
                 let v = if self.place_ty(f, lhs).0 == "str"
@@ -1917,7 +1997,10 @@ impl<'ctx> Lower<'ctx> {
                 };
                 self.store_place(f, allocas, lhs, v)?;
                 self.容器移交(f, allocas, lhs, rhs)?;
-                if let BasicValueEnum::PointerValue(p) = old {
+                if let Some(s) = old_str {
+                    let p = self.str_p(s)?;
+                    self.释放指针(p)?;
+                } else if let BasicValueEnum::PointerValue(p) = old {
                     self.释放指针(p)?;
                 }
             }
@@ -1941,7 +2024,6 @@ impl<'ctx> Lower<'ctx> {
             
             Stmt::Alloc { .. } | Stmt::Bind { .. } => {}
             
-            Stmt::Kill { .. } => {}
             
             Stmt::DropVar { lid } => {
                 self.释放局部(f, allocas, *lid)?;
@@ -3327,7 +3409,8 @@ impl<'ctx> Lower<'ctx> {
                 | "nth_char" | "#str_copy" | "#dc_list" | "#dc_map" | "#str_byte_at"
                 | "#预留列表" | "#预留映射"
                 | "#str_iter_start" | "#str_iter_next"
-                | "args" | "read_file" | "save_file" | "run" | "rnd" | "sle_ms"
+                | "args" | "read_file" | "save_file" | "run" | "rnd" | "sle_ms" | "now"
+                | "sqrt" | "print_raw"
                 | "str_to_c" | "str_from_c"
                 | "read_8" | "read_16" | "read_32" | "read_64"
                 | "write_8" | "write_16" | "write_32" | "write_64"
@@ -3765,6 +3848,23 @@ impl<'ctx> Lower<'ctx> {
                 )?
             }
             "rnd" => self.call_rt("prion_random", &[self.ity()], Some(self.ity()), &vals)?,
+            "now" => self.call_rt("prion_now", &[], Some(self.ity()), &[])?,
+            "sqrt" => {
+                let ft = BasicTypeEnum::from(self.ctx.f64_type());
+                let x = match vals[0] {
+                    BasicValueEnum::FloatValue(f) => f,
+                    BasicValueEnum::IntValue(i) => self
+                        .builder
+                        .build_signed_int_to_float(i, self.ctx.f64_type(), "sqi")
+                        .map_err(|e| e.to_string())?,
+                    _ => return Err("sqrt 只收数值".into()),
+                };
+                self.call_rt("llvm.sqrt.f64", &[ft], Some(ft), &[x.into()])?
+            }
+            "print_raw" => {
+                self.call_rt("prion_print_raw", &[self.str_ty()], None, &vals[0..1])?;
+                self.ci(0)
+            }
             "prion_spawn" | "prion_join" | "join" => {
                 self.call_rt(if name == "join" { "prion_join" } else { name }, &[self.ity()], Some(self.ity()), &vals)?
             }

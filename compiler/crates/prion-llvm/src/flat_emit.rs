@@ -199,9 +199,12 @@ pub fn emit_flat_object(
         owned: p.owned_elem.clone(),
         循环环: std::cell::RefCell::new(Vec::new()),
         值入列: p.值入列.clone(),
+        owned_fields: p.owned_fields.clone(),
+        树释放: std::collections::BTreeMap::new(),
     };
     lo.declare_types(p)?;
     lo.declare(p)?;
+    lo.建树释放();
     crate::rt_emit::发射(&lo.ctx, &lo.module, 视窗, !debug, file)?;
     for (i, f) in p.functions.iter().enumerate() {
         let ffn = flat.fns.get(i).ok_or_else(|| format!("扁平体缺函数 {}", f.name))?;
@@ -506,6 +509,7 @@ impl<'ctx> Lower<'ctx> {
                                                 
                                                 *x = Some(c.into());
                                             }
+                                            self.call_rt("free", &[self.pty()], None, &[pv.into()])?;
                                             crate::ESCAPED.with(|s| s.borrow_mut().insert(*lid));
                                             x = c;
                                         }
@@ -1023,14 +1027,29 @@ impl<'ctx> Lower<'ctx> {
                     .get(iid)
                     .and_then(|x| x.clone())
                     .ok_or_else(|| "赋值收口没有位置".to_string())?;
-                let old = self.load_place(f, allocas, &Place::local(lhs.base))?;
+                let old = self.load_place(f, allocas, &lhs)?;
+                let old_str = if self.place_ty(f, &lhs).0 == "str" {
+                    Some(match old {
+                        BasicValueEnum::StructValue(_) => old,
+                        BasicValueEnum::PointerValue(p) => self
+                            .builder
+                            .build_load(self.pstr_ty(), p, "olds")
+                            .map_err(|e| e.to_string())?,
+                        _ => old,
+                    })
+                } else {
+                    None
+                };
                 let vi = inst.a;
                 let mut v = 迹.取(vi)?;
                 if self.place_ty(f, &lhs).0 == "str" && inst.c != 0 {
                     v = self.call_rt("prion_str_copy", &[self.str_ty()], Some(self.str_ty()), &[v])?;
                 }
                 self.store_place(f, allocas, &lhs, v)?;
-                if let BasicValueEnum::PointerValue(p) = old {
+                if let Some(s) = old_str {
+                    let p = self.str_p(s)?;
+                    self.释放指针(p)?;
+                } else if let BasicValueEnum::PointerValue(p) = old {
                     let pi = self
                         .builder
                         .build_ptr_to_int(p, self.ctx.i64_type(), "relp")
@@ -1056,10 +1075,12 @@ impl<'ctx> Lower<'ctx> {
                     self.builder.build_unconditional_branch(出).map_err(|e| e.to_string())?;
                     self.builder.position_at_end(出);
                 }
-                let cur = self.load_place(f, allocas, &Place::local(lhs.base))?;
-                迹.存(vi, cur);
-                记(迹, Some(cur));
-                迹.记(lhs.base, vi);
+                if lhs.proj.is_empty() {
+                    let cur = self.load_place(f, allocas, &Place::local(lhs.base))?;
+                    迹.存(vi, cur);
+                    记(迹, Some(cur));
+                    迹.记(lhs.base, vi);
+                }
             }
             Tag::ListSetStmt => {
                 let lid = ffn.extra.get(inst.a as usize).copied().ok_or_else(|| "缺列表".to_string())?;
@@ -1099,12 +1120,35 @@ impl<'ctx> Lower<'ctx> {
                     )?;
                 } else {
                     let slot = self.to_slot(vraw)?;
-                    self.call_rt(
-                        "prion_list_setat",
-                        &[self.pty(), self.ity(), self.ity()],
-                        None,
-                        &[lraw, iraw, slot.into()],
-                    )?;
+                    if self.release {
+                        let lp = lraw.into_pointer_value();
+                        let 位 = self
+                            .builder
+                            .build_int_sub(iraw.into_int_value(), self.ity().into_int_type().const_int(1, false), "idx")
+                            .map_err(|e| e.to_string())?;
+                        let 数据 = match self.列表字段(lp, 4)? {
+                            BasicValueEnum::PointerValue(pp) => pp,
+                            _ => return Err("列表数据指针类型不对".into()),
+                        };
+                        let 偏 = self
+                            .builder
+                            .build_int_mul(位, self.ity().into_int_type().const_int(8, false), "off")
+                            .map_err(|e| e.to_string())?;
+                        let 偏64 = self
+                            .builder
+                            .build_int_s_extend(偏, self.ctx.i64_type(), "sext")
+                            .map_err(|e| e.to_string())?;
+                        let 址 = unsafe { self.builder.build_gep(self.ctx.i8_type(), 数据, &[偏64], "at") }
+                            .map_err(|e| e.to_string())?;
+                        self.builder.build_store(址, slot).map_err(|e| e.to_string())?;
+                    } else {
+                        self.call_rt(
+                            "prion_list_setat",
+                            &[self.pty(), self.ity(), self.ity()],
+                            None,
+                            &[lraw, iraw, slot.into()],
+                        )?;
+                    }
                 }
             }
             Tag::MapSetStmt => {
@@ -1227,7 +1271,7 @@ impl<'ctx> Lower<'ctx> {
                 }
             }
             
-            Tag::Alloc | Tag::Bind | Tag::Kill => {}
+            Tag::Alloc | Tag::Bind => {}
             Tag::AccessBegin | Tag::AccessEnd => {}
             
             Tag::ListSet | Tag::MapSet => return Err("扁平载体不出现表达式式容器写".into()),

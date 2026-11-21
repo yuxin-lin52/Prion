@@ -111,7 +111,13 @@ impl<'ctx, 'a> 发射器<'ctx, 'a> {
             Some(BasicTypeEnum::StructType(t)) => t.fn_type(&mps, va),
             Some(_) => self.ctx.void_type().fn_type(&mps, va),
         };
-        self.m.add_function(name, fty, None)
+        let f = self.m.add_function(name, fty, None);
+        let kind = inkwell::attributes::Attribute::get_named_enum_kind_id("noinline");
+        f.add_attribute(
+            inkwell::attributes::AttributeLoc::Function,
+            self.ctx.create_enum_attribute(kind, 0),
+        );
+        f
     }
 
     fn 入口(&self, f: FunctionValue<'ctx>) -> bool {
@@ -251,6 +257,7 @@ impl<'ctx, 'a> 发射器<'ctx, 'a> {
     fn 打印(&self) {
         self.bool_str();
         self.at();
+        self.print_raw();
     }
 
     fn bool_str(&self) {
@@ -2466,7 +2473,7 @@ impl<'ctx, 'a> 发射器<'ctx, 'a> {
         self.b.build_conditional_branch(stop, b_done, b_loop).unwrap();
         self.b.position_at_end(b_done);
         let neg8 = self.b.build_int_z_extend(negv, self.i64t(), "ng").unwrap();
-        let total = self.b.build_int_add(ni, neg8, "tot").unwrap();
+        let total = self.b.build_int_add(n1, neg8, "tot").unwrap();
         let sz = self.b.build_int_add(total, self.i64t().const_int(1, false), "sz").unwrap();
         let alloc = self.函数("prion_str_alloc", Some(self.p()), &[self.i64t().into()], false);
         let b = self.调(alloc, &[sz.into()], "b").unwrap().into_pointer_value();
@@ -2488,7 +2495,7 @@ impl<'ctx, 'a> 发射器<'ctx, 'a> {
         self.b.build_unconditional_branch(b_fl).unwrap();
         self.b.position_at_end(b_fl);
         let n2 = self.b.build_phi(self.i64t(), "in2").unwrap();
-        n2.add_incoming(&[(&ni, b_fill)]);
+        n2.add_incoming(&[(&n1, b_fill)]);
         let k2 = self.b.build_phi(self.i64t(), "ik2").unwrap();
         k2.add_incoming(&[(&k0.as_basic_value().into_int_value(), b_fill)]);
         let bp2 = self.b.build_phi(self.p(), "ibp2").unwrap();
@@ -2592,6 +2599,110 @@ impl<'ctx, 'a> 发射器<'ctx, 'a> {
     fn 系统(&self) {
         self.sleep();
         self.random();
+        self.now();
+        self.sqrt();
+    }
+
+    fn sqrt(&self) {
+        let ft = BasicTypeEnum::from(self.ctx.f64_type());
+        let f = self.函数("prion_sqrt", Some(ft), &[ft], false);
+        if !self.入口(f) {
+            return;
+        }
+        let x = f.get_nth_param(0).unwrap().into_float_value();
+        let sf = self.函数("sqrt", Some(ft), &[ft], false);
+        let r = self.调(sf, &[x.into()], "sq").unwrap();
+        self.b.build_return(Some(&r)).unwrap();
+    }
+
+    fn print_raw(&self) {
+        let f = self.函数("prion_print_raw", None, &[self.p()], false);
+        if !self.入口(f) {
+            return;
+        }
+        let sp = f.get_nth_param(0).unwrap().into_pointer_value();
+        let st = self.串型();
+        let b_null = self.块(f, "prn");
+        let b_go = self.块(f, "prg");
+        let isnull = self.b.build_is_null(sp, "spn").unwrap();
+        self.b.build_conditional_branch(isnull, b_null, b_go).unwrap();
+        self.b.position_at_end(b_null);
+        self.b.build_return(None).unwrap();
+        self.b.position_at_end(b_go);
+        let pp = self.b.build_struct_gep(st, sp, 0, "prp").unwrap();
+        let pv = self.b.build_load(self.p(), pp, "prv").unwrap().into_pointer_value();
+        let lp = self.b.build_struct_gep(st, sp, 1, "prl").unwrap();
+        let ln = self.b.build_load(self.i64t(), lp, "plen").unwrap();
+        let out = if self.windows {
+            let iob = self.函数("__acrt_iob_func", Some(self.p()), &[self.i32t().into()], false);
+            self.调(iob, &[self.i32t().const_int(1, false).into()], "out")
+                .unwrap()
+                .into_pointer_value()
+        } else {
+            let g = self.外ptr("stdout");
+            self.b.build_load(self.p(), g.as_pointer_value(), "out").unwrap().into_pointer_value()
+        };
+        let fw = self.函数(
+            "fwrite",
+            Some(self.i64t().into()),
+            &[self.p(), self.i64t().into(), self.i64t().into(), self.p()],
+            false,
+        );
+        self.调(fw, &[pv.into(), self.i64t().const_int(1, false).into(), ln.into(), out.into()], "");
+        self.b.build_return(None).unwrap();
+    }
+
+    fn now(&self) {
+        let f = self.函数("prion_now", Some(self.i64t().into()), &[], false);
+        if !self.入口(f) {
+            return;
+        }
+        let 十亿 = self.i64t().const_int(1_000_000_000, false);
+        if self.windows {
+            let fr = self.内部tli64("prion_qpfreq", 0);
+            let bp = fr.as_pointer_value();
+            let cur = self.b.build_load(self.i64t(), bp, "f0").unwrap().into_int_value();
+            let 空 = self
+                .b
+                .build_int_compare(IntPredicate::EQ, cur, self.i64t().const_zero(), "fz")
+                .unwrap();
+            let b_init = self.块(f, "qfi");
+            let b_get = self.块(f, "qfg");
+            self.b.build_conditional_branch(空, b_init, b_get).unwrap();
+            self.b.position_at_end(b_init);
+            let tf = self.b.build_alloca(self.i64t(), "freq").unwrap();
+            let qf = self.函数("QueryPerformanceFrequency", Some(self.i32t().into()), &[self.p()], false);
+            self.调(qf, &[tf.into()], "");
+            let fv = self.b.build_load(self.i64t(), tf, "fv").unwrap();
+            self.b.build_store(bp, fv).unwrap();
+            self.b.build_unconditional_branch(b_get).unwrap();
+            self.b.position_at_end(b_get);
+            let freq = self.b.build_load(self.i64t(), bp, "fq").unwrap().into_int_value();
+            let tc = self.b.build_alloca(self.i64t(), "cnt").unwrap();
+            let qc = self.函数("QueryPerformanceCounter", Some(self.i32t().into()), &[self.p()], false);
+            self.调(qc, &[tc.into()], "");
+            let c = self.b.build_load(self.i64t(), tc, "cv").unwrap().into_int_value();
+            let q = self.b.build_int_signed_div(c, freq, "q").unwrap();
+            let r = self.b.build_int_signed_rem(c, freq, "r").unwrap();
+            let qn = self.b.build_int_mul(q, 十亿, "qn").unwrap();
+            let rn = self.b.build_int_mul(r, 十亿, "rn").unwrap();
+            let rq = self.b.build_int_signed_div(rn, freq, "rq").unwrap();
+            let ns = self.b.build_int_add(qn, rq, "ns").unwrap();
+            self.b.build_return(Some(&ns)).unwrap();
+        } else {
+            let ty = self.i64t().array_type(2);
+            let ts = self.b.build_alloca(ty, "ts").unwrap();
+            let cg = self.函数("clock_gettime", Some(self.i32t().into()), &[self.i32t().into(), self.p()], false);
+            self.调(cg, &[self.i32t().const_int(1, false).into(), ts.into()], "");
+            let z = self.i64t().const_zero();
+            let sp = unsafe { self.b.build_gep(ty, ts, &[z, z], "sp") }.unwrap();
+            let np = unsafe { self.b.build_gep(ty, ts, &[z, self.i64t().const_int(1, false)], "np") }.unwrap();
+            let sec = self.b.build_load(self.i64t(), sp, "sec").unwrap().into_int_value();
+            let nsec = self.b.build_load(self.i64t(), np, "nsec").unwrap().into_int_value();
+            let sn = self.b.build_int_mul(sec, 十亿, "sn").unwrap();
+            let ns = self.b.build_int_add(sn, nsec, "n2").unwrap();
+            self.b.build_return(Some(&ns)).unwrap();
+        }
     }
 
     fn 并发(&self) -> Result<(), String> {

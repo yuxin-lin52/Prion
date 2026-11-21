@@ -261,7 +261,7 @@ fn 换语句(s: &mut Stmt, 版: &BTreeMap<prion_ir::LocalId, prion_ir::LocalId>)
                 换值(v, 版);
             }
         }
-        Stmt::Alloc { .. } | Stmt::Bind { .. } | Stmt::Drop { .. } | Stmt::DropVar { .. } | Stmt::Kill { .. } => {}
+        Stmt::Alloc { .. } | Stmt::Bind { .. } | Stmt::Drop { .. } | Stmt::DropVar { .. } => {}
     }
 }
 
@@ -333,7 +333,7 @@ fn 重命名(
     for si in 0..长 {
         let mut s = std::mem::replace(
             &mut f.blocks[块 as usize].stmts[si],
-            Stmt::Kill { block: String::new() },
+            Stmt::Assign { lhs: prion_ir::Place::local(0), rhs: prion_ir::Rvalue::Const(prion_ir::Value::Int(0)) },
         );
         
         let 原写 = match &s {
@@ -623,7 +623,7 @@ fn 走语句<F: FnMut(&mut prion_ir::LocalId)>(s: &mut Stmt, g: &mut F) {
                 走值(v, g);
             }
         }
-        Stmt::Alloc { .. } | Stmt::Drop { .. } | Stmt::DropVar { .. } | Stmt::Kill { .. } => {}
+        Stmt::Alloc { .. } | Stmt::Drop { .. } | Stmt::DropVar { .. } => {}
     }
 }
 

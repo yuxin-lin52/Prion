@@ -147,7 +147,7 @@ const KEYWORDS: &[&str] = &[
     
     "match", "case",
     
-    "unsafe", "pub", "sle", "ABI", "kill", "asm",
+    "unsafe", "pub", "sle", "ABI", "asm",
     
     "fix",
     
