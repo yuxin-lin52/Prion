@@ -6,7 +6,7 @@ A `fix` is a constant whose value is computed at compile time. It is used for va
 
 ## Declaration and reading
 
-```anle
+```prion
 add fix "pi" float = 3.14159
 add fix "buf" int = 4096
 add fix "sum" int = 2 * 3 + 4 * 5
@@ -14,7 +14,7 @@ add fix "sum" int = 2 * 3 + 4 * 5
 
 A constant is read with its own verb, `call fix`:
 
-```anle
+```prion
 print(call fix "pi" * 2.0)
 ```
 
@@ -24,14 +24,14 @@ Using `call val` on a constant is an error: `val` and `fix` are separate familie
 
 The right-hand side must be evaluable at compile time: literals, operators, and calls to `fn`s whose arguments are all constants.
 
-```anle
+```prion
 add fn "double" (n int) int = n * 2
 add fix "twice_six" int = call fn "double"(6)
 ```
 
 ## Example
 
-```anle
+```prion
 #: main b
     add fix "pi" float = 3.14159
     add fix "buf" int = 4096

@@ -6,7 +6,7 @@ Concurrency is expressed with task tokens. `spawn` starts a task body and yields
 
 ## Spawn and join
 
-```anle
+```prion
 add val "t" token(int) = spawn:
     give 42
 ;
@@ -17,7 +17,7 @@ add val "r" int = join(call val "t")
 
 A task that needs no result ends with a lone `join` and is self-terminating:
 
-```anle
+```prion
 add val "t" token(void) = spawn:
     add val "x" int = 1 + 1
     join
@@ -37,7 +37,7 @@ By default a task may not touch outer values, because the compiler cannot decide
 
 ## Example
 
-```anle
+```prion
 #: main b
     add val "t" token(int) = spawn:
         give 42

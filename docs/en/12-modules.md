@@ -12,7 +12,7 @@ A file containing one or more blocks is a program. Every block that no other blo
 
 Blocks reach each other through three channels: passing arguments, return values, and taking a value with `call #:block`. To run another block, write `call #:block`.
 
-```anle
+```prion
 #: tools b
     add fn "double" (x int) int = x * 2
     add val "constant" int = 9
@@ -49,7 +49,7 @@ myproject/
 
 A module is referenced by its dotted path:
 
-```anle
+```prion
 call ##:std.strings #:strings fn "split"(call val "text", " ")
 ```
 
@@ -60,7 +60,7 @@ call ##:std.strings #:strings fn "split"(call val "text", " ")
 - A block is callable across modules only when it is declared `pub`.
 - `hide` removes an item from a `pub` block's public surface:
 
-```anle
+```prion
 #: api b pub
     add fn "public_fn" (x int) int = x
     add hide fn "helper"

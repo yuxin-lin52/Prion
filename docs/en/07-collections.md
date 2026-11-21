@@ -6,7 +6,7 @@ Prion provides four builtin containers: `list`, `map`, `que` (queue) and `stack`
 
 ## Lists
 
-```anle
+```prion
 add val "l" list(int) = [3, 1, 2]
 push(call val "l", 4)
 sort(call val "l")
@@ -20,7 +20,7 @@ Other list operations: `insert(list, i, v)`, `remove(list, i)`, `has`, `index`, 
 
 ## Maps
 
-```anle
+```prion
 add val "m" map(str, int) = {}
 put(call val "m", "a", 1)
 put(call val "m", "b", 2)
@@ -33,7 +33,7 @@ Keys may be `str` or `int`. Use `has` before reading a key that may be absent.
 
 ## Queue and stack
 
-```anle
+```prion
 add val "q" que(int) = que([1, 2])
 add val "first" int = pop(call val "q")   // FIFO
 
@@ -47,7 +47,7 @@ Queues and stacks are push/pop only; slicing and sorting apply to lists.
 
 ## Example
 
-```anle
+```prion
 #: main b
     add val "l" list(int) = [3, 1, 2]
     push(call val "l", 4)

@@ -18,7 +18,7 @@ The same division runs through the whole language. The syntax is small and regul
 
 ## Language overview
 
-```anle
+```prion
 #: main b
     add val "total" int = 0
     add val "i" int = 1

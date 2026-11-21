@@ -21,7 +21,7 @@ A unary minus must be followed by a numeric literal. Chained comparison such as 
 
 These forms are part of a `call val` expression:
 
-```anle
+```prion
 call val "list"[1]     // one element (indices start at 1)
 call val "list"[1~2]   // inclusive slice
 call val "point".x     // a field
@@ -31,13 +31,13 @@ call val "point".x     // a field
 
 An `if` used in value position produces a value; both branches must have the same type:
 
-```anle
+```prion
 add fn "max" (p int, q int) int = if p > q { p } else { q }
 ```
 
 ## Example
 
-```anle
+```prion
 #: main b
     print("arith", 1 + 2 * 3, 7 % 2)
     print("compare", 5 > 3, 2 == 2)

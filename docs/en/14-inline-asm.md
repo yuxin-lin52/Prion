@@ -6,7 +6,7 @@ Inline assembly allows machine instructions to be embedded inside an `unsafe` bl
 
 ## Form
 
-```anle
+```prion
 asm("template" : output : input : clobber)
 ```
 
@@ -19,7 +19,7 @@ The four segments are separated by `:`. Register names map to Prion registers, e
 
 ## Example
 
-```anle
+```prion
 #: raw b unsafe
     add val "reg" uint_8 = 0
     asm("movb $9, %[reg]" : al -> reg : : memory)

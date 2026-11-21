@@ -18,7 +18,7 @@ Prion 三种取舍都不取。程序按块结构化，值长在声明它的块�
 
 ## 语言概览
 
-```anle
+```prion
 #: 主块 b
     add val "和" int = 0
     add val "i" int = 1

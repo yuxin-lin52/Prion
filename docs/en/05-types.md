@@ -6,7 +6,7 @@ Prion distinguishes scalar types, container types, product types, sum types, nul
 
 ## Scalars
 
-```anle
+```prion
 int  float  bool  str
 int_8 int_16 int_32 int_64  uint_8 uint_16 uint_32 uint_64
 ```
@@ -15,7 +15,7 @@ int_8 int_16 int_32 int_64  uint_8 uint_16 uint_32 uint_64
 
 ## Containers
 
-```anle
+```prion
 list(T)  map(K, V)  que(T)  stack(T)
 ```
 
@@ -23,7 +23,7 @@ A `map` key may only be `str` or `int`. A container cannot directly hold another
 
 ## Product and sum types
 
-```anle
+```prion
 add type "point" = (x int, y int)              // product: named fields
 add type "expr" = "num"(int) | "add"(int)      // sum: variants
 ```
@@ -34,7 +34,7 @@ A product with a single unnamed field is a newtype: `add type "UserId" = (int)`.
 
 ## Aliases and refined types
 
-```anle
+```prion
 add type "Len" = int        // alias: Len and int are the same type
 add val "p" int(>0) = 5     // refined: the condition is checked at compile time
 ```
@@ -45,7 +45,7 @@ A value that violates a refinement condition (for example `int(>0) = -5`) is rej
 
 A nullable type is written `?T`:
 
-```anle
+```prion
 add val "found" ?int = null
 ```
 
@@ -53,7 +53,7 @@ Append `*` to a user-defined type to make it a **handle** (reference): `point*`.
 
 ## Example
 
-```anle
+```prion
 #: main b
     add type "Len" = int
     add val "n" "Len" = 3

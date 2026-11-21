@@ -23,7 +23,7 @@ Loop variables are ordinary `val` names. Names may be written with or without qu
 
 ## Assignment forms
 
-```anle
+```prion
 val "x" = 5              // re-bind
 val "x" = val "x" (+1)   // delta: read the current value, apply the expression, store
 val "list"[1] = 7        // index write
@@ -38,7 +38,7 @@ Memory is released when the owning block ends. There is no statement that releas
 
 ## Example
 
-```anle
+```prion
 #: main b
     add val "sum" int = 0
     for "i" in 1~3:

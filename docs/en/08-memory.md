@@ -16,7 +16,7 @@ There is no statement that releases memory early. To shorten a value's lifetime,
 
 `call val` references the freshest value. To obtain an independent copy, use `take`, which deep-copies the value as it is at that moment:
 
-```anle
+```prion
 add val "a" list(int) = [1, 2, 3]
 add val "b" list(int) = take val "a"
 ```
@@ -27,7 +27,7 @@ add val "b" list(int) = take val "a"
 
 Some capabilities are available only inside a block marked `unsafe`:
 
-```anle
+```prion
 #: raw b unsafe
     ...
 #: raw d
@@ -39,7 +39,7 @@ Inside such a block the raw address operations (`read_8` / `write_8` …), C int
 
 A value in another block is read explicitly:
 
-```anle
+```prion
 call #:tools val "constant"
 ```
 

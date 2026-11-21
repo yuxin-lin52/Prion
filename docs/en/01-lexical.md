@@ -6,7 +6,7 @@ Prion source is UTF-8 without BOM with LF line endings. A `.an` file is one comp
 
 ## A minimal program
 
-```anle
+```prion
 #: main b
     print("hello, prion")
 #: main d
@@ -61,7 +61,7 @@ Structural markers:
 
 Comments are whole-line `//` only; there are no block comments and no trailing comments on a code line. The remainder of a `//` line is ignored by the compiler.
 
-```anle
+```prion
 #: main b
     // this line is a comment
     print("done")

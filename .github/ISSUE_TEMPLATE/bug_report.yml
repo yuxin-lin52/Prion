@@ -19,7 +19,7 @@ body:
     attributes:
       label: Minimal reproduction
       description: The smallest program that shows the problem, plus the exact command you ran
-      render: anle
+      render: prion
     validations:
       required: true
   - type: textarea

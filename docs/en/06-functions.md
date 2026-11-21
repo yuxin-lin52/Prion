@@ -6,14 +6,14 @@ A function is created with `add fn`, called with `call fn "name"(…)`, and may 
 
 ## Expression bodies
 
-```anle
+```prion
 add fn "double" (x int) int = x * 2
 add fn "add" (a int, b int) int = a + b
 ```
 
 The body after `=` is a single expression. Recursive and mutually recursive functions use a declaration (an `add fn` with no `=`) followed by a body form (`fn` without `add`):
 
-```anle
+```prion
 add fn "try_div" (n int, i int) bool
 add fn "is_prime" (n int) bool = if n < 2 { fa } else { call fn "try_div"(n, 2) }
 fn "try_div" (n int, i int) bool = if i * i > n { re } else { if n % i == 0 { fa } else { call fn "try_div"(n, i + 1) } }
@@ -23,7 +23,7 @@ fn "try_div" (n int, i int) bool = if i * i > n { re } else { if n % i == 0 { fa
 
 A body that needs intermediate steps opens with `:` and returns with `give`:
 
-```anle
+```prion
 add fn "total"(n int) int:
     add val "s" int = 0
     add val "i" int = 1
@@ -41,7 +41,7 @@ An intermediate `give` returns immediately. Every `give`, intermediate or final,
 
 A function value is written `fn "name"`; its type is `fn(args) ret`. It is called through a value with `call val "f"(…)`:
 
-```anle
+```prion
 add fn "inc" (x int) int = x + 1
 add fn "twice" (f fn(int) int, n int) int = call val "f"(n)
 add val "op" fn(int) int = fn "inc"
@@ -50,7 +50,7 @@ print(call fn "twice"(call val "op", 41))
 
 ## Example
 
-```anle
+```prion
 #: main b
     add fn "try_div" (n int, i int) bool
     add fn "is_prime" (n int) bool = if n < 2 { fa } else { call fn "try_div"(n, 2) }

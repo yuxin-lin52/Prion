@@ -14,7 +14,7 @@ At run time blocks form chains. A block that no other block references is a chai
 
 A name is created with `add`, exactly once:
 
-```anle
+```prion
 add val "x" int = 1
 add fn "f" (n int) int = n
 add type "point" = (x int, y int)
@@ -22,7 +22,7 @@ add type "point" = (x int, y int)
 
 Re-binding does not use `add`:
 
-```anle
+```prion
 val "x" = 2
 val "x" = val "x" (+1)
 ```
@@ -42,14 +42,14 @@ Memory is released when the owning block ends; there is no statement that releas
 
 ## Scalar types
 
-```anle
+```prion
 int  float  bool  str
 int_8 int_16 int_32 int_64  uint_8 uint_16 uint_32 uint_64
 ```
 
 ## Example
 
-```anle
+```prion
 #: main b
     add val "i" int = 42
     add val "r" float = 1.5

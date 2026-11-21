@@ -6,7 +6,7 @@ Prion has no exceptions. An operation that can fail returns a **sum type**, and 
 
 ## Modelling errors
 
-```anle
+```prion
 add type "Result" = Err(str) | Ok(int)
 ```
 
@@ -14,7 +14,7 @@ The error variant is declared first. `?` treats the first variant as the error a
 
 A function returns `Ok(value)` on success and `Err(message)` on failure:
 
-```anle
+```prion
 add fn "parse" (s str) "Result" = if s == "bad" { Err("oops") } else { Ok(42) }
 ```
 
@@ -22,7 +22,7 @@ add fn "parse" (s str) "Result" = if s == "bad" { Err("oops") } else { Ok(42) }
 
 Inside a function that returns the same sum type, `?` unwraps a success value and returns the error immediately if the value is a failure:
 
-```anle
+```prion
 add fn "doit" (s str) "Result":
     add val "n" int = call fn "parse"(call val s)?
     give Ok(call val "n")
@@ -33,13 +33,13 @@ add fn "doit" (s str) "Result":
 
 Expression form transforms a result while passing the error through:
 
-```anle
+```prion
 add fn "double" (n int) "Result" = match call fn "parse"("good") { case Ok("v"): Ok(call val "v" * 2), case Err("e"): Err(call val "e") }
 ```
 
 Statement form consumes a result at the call site:
 
-```anle
+```prion
 match call fn "doit"("good"):
     case Ok("v"):
         print(call val "v")
@@ -52,7 +52,7 @@ match call fn "doit"("good"):
 
 ## Example
 
-```anle
+```prion
 #: main b
     add type "Result" = Err(str) | Ok(int)
     add fn "parse" (s str) "Result" = if s == "bad" { Err("oops") } else { Ok(42) }
