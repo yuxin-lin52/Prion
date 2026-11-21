@@ -90,53 +90,52 @@ pub fn render_full(parts: &DiagParts, tone: Tone, cx: &RenderCtx) -> String {
     let 哪 = parts.哪.trim();
     match (cx.file.is_empty(), 哪.is_empty(), parts.做.is_empty()) {
         (false, false, false) => s.push_str(&format!(
-            "位于 {} {}的「{}」发生错误",
+            "error at {} {}, in {}",
             cx.file, 哪, parts.做
         )),
-        
-        (false, false, true) => s.push_str(&format!("位于 {} {}发生错误", cx.file, 哪)),
-        
+        (false, false, true) => s.push_str(&format!("error at {} {}", cx.file, 哪)),
         (false, true, false) => {
-            s.push_str(&format!("位于 {} 的「{}」发生错误", cx.file, parts.做))
+            s.push_str(&format!("error in {} at {}", cx.file, parts.做))
         }
-        (false, true, true) => s.push_str(&format!("位于 {} 发生错误", cx.file)),
-        (true, false, false) => s.push_str(&format!("{}的「{}」发生错误", 哪, parts.做)),
-        (true, false, true) => s.push_str(&format!("{}发生错误", 哪)),
-        (_, true, false) => s.push_str(&format!("「{}」发生错误", parts.做)),
-        _ => s.push_str("发生错误"),
+        (false, true, true) => s.push_str(&format!("error in {}", cx.file)),
+        (true, false, false) => s.push_str(&format!("error at {}, in {}", 哪, parts.做)),
+        (true, false, true) => s.push_str(&format!("error at {}", 哪)),
+        (_, true, false) => s.push_str(&format!("error in {}", parts.做)),
+        _ => s.push_str("error"),
     }
     
-    if !cx.src_line.is_empty() {
-        s.push_str(&format!("，源码为：{}", cx.src_line.trim()));
-    }
-    
-    let mut 错 = parts.缺.clone();
+    let mut bad = parts.缺.clone();
     if !parts.致.is_empty() {
-        错.push_str(&format!("「{}」", parts.致));
+        bad.push_str(&format!(" \"{}\"", parts.致));
     }
-    if !错.is_empty() {
-        s.push_str(&format!("，错误为：{}", 错));
+    if !bad.is_empty() {
+        s.push_str(": ");
+        s.push_str(&bad);
     }
+    if !cx.src_line.is_empty() {
+        s.push_str(&format!("; source: {}", cx.src_line.trim()));
+    }
+    s.push('.');
     
     if !parts.预期.is_empty() {
-        s.push_str(&format!("，编译器预期为：{}", parts.预期));
+        s.push_str(&format!(" Expected: {}.", parts.预期));
     }
-    s.push('。');
     
     if !parts.改.is_empty() {
+        s.push(' ');
         s.push_str(match tone {
-            Tone::Suggest => "建议：",
-            Tone::Fix => "改法：",
+            Tone::Suggest => "Suggestion: ",
+            Tone::Fix => "Fix: ",
         });
         s.push_str(&parts.改);
         if !parts.可应用.is_empty() {
-            s.push_str(&format!("（可直接套用：{}）", parts.可应用));
+            s.push_str(&format!(" (apply as-is: {})", parts.可应用));
         }
-        s.push('。');
+        s.push('.');
     }
     
     if !parts.详解.is_empty() {
-        s.push_str(&format!("详细解释如下：{}", parts.详解));
+        s.push_str(&format!(" Details: {}", parts.详解));
     }
     s
 }
@@ -147,211 +146,177 @@ pub fn render_full(parts: &DiagParts, tone: Tone, cx: &RenderCtx) -> String {
 pub fn code_defaults(code: &str) -> (&'static str, &'static str) {
     match code {
         "E202" => (
-            "两边的类型要一致（要换类型就显式转换）",
-            "Prion 不悄悄转换类型：int / float / bool / str 之间要换，就显式写 int(值) / \
-             float(值) / str(值) / bool(值)；容器按 fn 边界拷贝，X* 复制把手共享同一个对象。",
+            "the operand types must be the same (convert explicitly to change a type)",
+            "Prion never converts types implicitly: to change between int / float / bool / str, write int(value) / float(value) / str(value) / bool(value) explicitly; containers are copied at function boundaries, and an X* copy shares the same object.",
         ),
         "E203" => (
-            "遵守这条规则的正书面貌（见改法给出的写法）",
-            "这一类是「写得不合契约」——不是程序错了，是写法超出规则；按改法给出的写法\
-             即可，规则出处见设计正本对应章节。",
+            "follow the documented form (see Fix for the expected form)",
+            "This means the code breaks a contract rather than being logically wrong; use the form given under Fix.",
         ),
         "E204" => (
-            "match 要覆盖和类型的所有变体（或写 case _: 兜底）",
-            "和类型的每个变体都是一条真实可能走到的路径；漏掉一条，程序遇到它时就没有\
-             行为。编译器在这里替你查——补上缺的 case，或用 case _: 一把兜住。",
+            "a match must cover every variant of the sum type (or add a `case _:` fallback)",
+            "Every variant is a reachable path; a missing case leaves that path without behavior. Add the missing cases, or use `case _:` to cover the rest.",
         ),
         "E205" => (
-            "编译期求值超过配额上限",
-            "编译期求值跑在编译器里，得有个边界，否则写错的递归或循环会让构建一直不返回。\
-             超限不是语法错，把 --const-depth / --const-steps 调高即可；给 0 表示不设上限。",
+            "compile-time evaluation exceeded its limit",
+            "Compile-time evaluation runs inside the compiler and must be bounded, otherwise a mistaken recursion or loop would make the build never return. This is not a syntax error; raise --const-depth / --const-steps (0 means no limit).",
         ),
         "E201" => (
-            "这里的名字应当是本块已建过的 val / 函数",
-            "Prion 的规则是「先建后用」：名字要先由 add val（值）/ add fn（函数）/ \
-             add type（类型）建出来，才能在表达式里读。名字在别的块里时：取 val 写 \
-             call #:块 val \"名\"，调函数写 call #:块 fn \"名\"(…)，同块直接用。",
+            "this name must be a val or function already declared in the current block",
+            "Prion requires declare-before-use: a name must first be created with add val (value) / add fn (function) / add type (type) before it can be read. For a name in another block, read a value with call #:block val \"name\" and call a function with call #:block fn \"name\"(...); within the same block, use it directly.",
         ),
         "E101" => (
-            "结构行开体之后，用独占一行的 ; 收体",
-            "Prion 用「独占一行的 ;」表示结构体结束——if / while / for / match 都一样；\
-             缩进只是装饰，收体必须靠那个单独的 ;。",
+            "after a construct opens its body, close it with a `;` on its own line",
+            "Prion ends a construct body with a `;` on its own line — the same for if / while / for / match. Indentation is cosmetic; the body closes only at that lone `;`.",
         ),
         "E102" => (
-            "按正本的语句与层级写法书写",
-            "结构行的层级用「冒号开体 + 独占一行 ; 收体」表达；深度前缀（;数字）已废止，\
-             缩进不参与解析。",
+            "write statements and nesting as documented",
+            "Nesting is expressed by opening a body with `:` and closing it with a `;` on its own line; depth prefixes (`;number`) are removed, and indentation is not parsed.",
         ),
         "E103" => (
-            "名字要先创建才能改值",
-            "Prion 只有 add 一条创建路：先 add val \"名\" 类型 = 初值，之后才能 \
-             val \"名\" = 新值。没建过就直接改值 = 编译报错。",
+            "a name must be created before its value can be changed",
+            "Prion has a single creation path, add: first add val \"name\" type = initial, then val \"name\" = new. Changing the value of a name that was never created is a compile error.",
         ),
         "E104" => (
-            "块开关必须配对：每个 b 都要有一个对应的 d",
-            "代码块用 #: 名 b 开、#: 名 d 关；少一个 d 会让整份源码的块结构错乱，\
-             编译器无从判断哪些语句属于哪个块。",
+            "block markers must pair: every b needs a matching d",
+            "A block opens with #: name b and closes with #: name d. A missing d corrupts the block structure of the whole file, so the compiler cannot tell which statements belong to which block.",
         ),
         "E105" => (
-            "行首 ; 之后只写层级收束，不再接别的",
-            "; 独占一行才是收体；行首 ; 后面再跟内容不是合法语句。",
+            "after a leading `;` write only the nesting close, nothing else",
+            "A lone `;` on its own line closes a body; a leading `;` followed by more content is not a valid statement.",
         ),
         "E001" => (
-            "字符要在 Prion 的词法表里",
-            "Prion 用通用 ASCII：英文关键字、运算符与井号、冒号、引号等 ASCII 符号；中文标点、\
-             全角空格、特殊 Unicode 符号都不在词表里。若以为是拼写问题，注意中文近形字\
-             （报告 ≠ 报吿）。",
+            "characters must be in Prion's lexical set",
+            "Prion uses plain ASCII: English keywords, operators, and symbols such as #, :, and quotes. Chinese punctuation, full-width spaces, and special Unicode symbols are not in the set. Watch for look-alike characters.",
         ),
         "E002" => (
-            "nt 注释只能写在行首第 0 列，且后面接一个空格",
-            "整行注释只此一种形态：行首裸写 nt + 空格 + 内容；前面有缩进、或写在行中，\
-             都不算注释。",
+            "an nt comment must start at column 0 followed by a space",
+            "A full-line comment has exactly one form: `nt` at the start of the line, then a space, then the text. Indentation before it, or placing it mid-line, is not a comment.",
         ),
         "E003" => (
-            "数字字面量用合法进制与分隔",
-            "支持 0x（十六进制）/ 0b（二进制）/ 0o（八进制）前缀与下划线分隔（如 1_000）；\
-             十进制直接写。写错前缀或分隔位置就会到这里。",
+            "use a valid base and separator for numeric literals",
+            "Supported prefixes are 0x (hex), 0b (binary), 0o (octal), with `_` separators (e.g. 1_000); decimal is written directly. A wrong prefix or misplaced separator lands here.",
         ),
         "E004" => (
-            "字符串里只允许四种转义",
-            "字符串字面量用双引号包裹；转义只有 \\n（换行）/ \\t（制表）/ \\\\（反斜杠）/ \
-             \\\"（引号）四种，其他写法不解析。",
+            "a string allows only four escapes",
+            "A string literal is wrapped in double quotes; the only escapes are newline, tab, backslash, and quote. Anything else is not parsed.",
         ),
         "E005" => (
-            "原样串写作 @\\\"…\\\"",
-            "原样串（不解析转义）用 @ 加双引号开头，如 @\\\"C:\\\\path\\\"；少了 @ 或引号\
-             不闭合会到这里。",
+            "a raw string starts with @ followed by a double quote",
+            "A raw string (escapes not parsed) starts with an at-sign and a double quote. A missing @ or an unclosed quote lands here.",
         ),
         "E006" => (
-            "源文件须纯 LF 换行",
-            "Prion 的源码契约：UTF-8 无 BOM + 每行 LF 结束。CRLF（Windows 常见）会让\
-             词法器把 \\r 当非法字符——用编辑器另存为「UTF-8 + LF」即可。",
+            "source files must use LF line endings",
+            "Prion requires UTF-8 without BOM and LF line endings. CRLF (common on Windows) makes the lexer treat a carriage return as an illegal character; save the file as UTF-8 with LF.",
         ),
         "E007" => (
-            "源文件要 UTF-8 无 BOM",
-            "Prion 的源码契约：UTF-8 **无 BOM** + LF 换行。Windows 编辑器常默认加 BOM\
-             （文件头三个字节 EF BB BF）——用编辑器把编码改成「UTF-8（不带 BOM）」再编。",
+            "source files must be UTF-8 without BOM",
+            "Prion requires UTF-8 without BOM and LF line endings. Windows editors often add a BOM (the three bytes EF BB BF); switch the encoding to UTF-8 without BOM and rebuild.",
         ),
         "E301" => (
-            "表达式与语句要写完整（每个结构有头有尾）",
-            "这一类是「写到一半」：表达式没闭合、if 表达式缺 else、一元负号后面没跟字面量。\
-             顺着报错位置把结构补完整即可。",
+            "write expressions and statements completely (every construct has an opening and a close)",
+            "This category means the code stops halfway: an unclosed expression, an if expression without else, or a unary minus with no operand. Complete the construct at the reported location.",
         ),
         "E302" => (
-            "容器操作要在该容器的能力范围内",
-            "list / map / que / stack 各有各的操作面：que 与 stack 只进只出（push/pop），\
-             按位置删改与排序只对 list；map 按键取用、增改用 put。用错了操作会到这里。",
+            "use only operations the container supports",
+            "list / map / que / stack each expose different operations: que and stack are push/pop only; positional insert/remove and sorting apply only to list; map is accessed by key with put. Using a wrong operation lands here.",
         ),
         "E303" => (
-            "字段访问与构造要符合类型定义",
-            "自定义类型的字段名、个数、类型都由 add type 说了算：. 后面必须是该类型有的\
-             字段；构造时实参个数要和字段数一致；带 * 的字段是把手（共享），不带是值拷贝。",
+            "field access and construction must match the type definition",
+            "For a user type, field names, counts, and types come from add type: after `.` must be a field of that type; a constructor must pass exactly as many arguments as there are fields; a field with `*` is a handle (shared), one without is a value copy.",
         ),
         "E304" => (
-            "跨块取用前先满足前置条件",
-            "取别块的 val / 调别块的函数，都要先让那个块跑起来（call #:块 把槽开出来）；\
-             槽没开就取，或取了不存在的名字，都会在这里报。",
+            "satisfy the prerequisites before cross-block access",
+            "Reading another block's val or calling its function requires that block to have run first (call #:block opens its slots). Reading before the slots exist, or reading a name that does not exist, is reported here.",
         ),
         "E305" => (
-            "和类型的构造与判别要落在已声明的变体上",
-            "变体名、携带字段的个数与类型都以 add type 的竖线清单为准；match 的 case 要\
-             对上变体名，漏变体或写错名会到这里（漏变体另有穷尽性检查 E204）。",
+            "constructing and matching a sum type must use declared variants",
+            "Variant names and their carried fields come from the `|` list in add type; a match case must name a declared variant. A missing variant is reported here (exhaustiveness has its own check, E204).",
         ),
         "E306" => (
-            "类型标注要写成合法形态",
-            "容器标注带元素类型：list(int) / map(str, int) / que(int)；自定义类型名直接写，\
-             把手加 *（如 node*）。拼错或括号不闭合会到这里。",
+            "write type annotations in a valid form",
+            "Container annotations carry an element type: list(int) / map(str, int) / que(int); user type names are written directly, with `*` for a handle (e.g. node*). A typo or unclosed bracket lands here.",
         ),
         "E309" => (
-            "按报错给出的写法修正源码",
-            "这一条是中间表示层的兜底码——具体原因见「错误为」与「改法」。",
+            "fix the source as the message indicates",
+            "This is a fallback code from the intermediate representation layer; see the message and Fix for the concrete cause.",
         ),
         "E401" => (
-            "块之间 call 不能成环，也不能留下执行不到的块",
-            "块 A call 块 B、块 B 又 call 回 A，两个块就都「只被对方引用」——\
-             没有起点，程序跑不到它们。断开其中一处引用（或让其中一个块不再被别人引用）即可。",
+            "block calls must not form a cycle, and no block may be unreachable",
+            "If block A calls block B and block B calls back to A, both are referenced only by each other, so neither has a start and the program cannot reach them. Break one of the references (or make one block unreferenced).",
         ),
         "E402" => (
-            "用后端已支持的特性",
-            "这一条是「后端还没实现这个特性」——不是你的代码错，是编译器没排上。\
-             可先绕开该写法，或在项目里登记该特性需求。",
+            "use a feature the backend supports",
+            "This means the backend does not implement the feature yet; it is not an error in your code. Work around it, or file a feature request.",
         ),
         "E403" => (
-            "产出的中间产物要能被编译器接受",
-            "后端把 IR 翻成目标产物（当前 C 后端翻成 C）之后交由系统里的编译器编；\
-             这一步失败说明产物有问题（编译器内部缺陷）。请把源码与报错一起提交到项目 issue。",
+            "the produced artifact must be accepted by the compiler",
+            "After lowering IR to a target artifact, the system compiler compiles it; a failure here means the artifact is malformed (an internal defect). Please file the source and this message as an issue.",
         ),
         "E404" => (
-            "后端按契约处理",
-            "后端遇到了它不该遇到的状态（内部缺陷）。请把源码提交到项目 issue。",
+            "the backend must handle input by contract",
+            "The backend reached a state it should never reach (an internal defect). Please file the source as an issue.",
         ),
         "E501" => (
-            "命令要是 build / run / check / clean 之一",
-            "`prionc -h` 会列出全部命令。命令是动词，后面跟一个可选的名字（源文件名或项目名）。",
+            "the command must be one of build / run / check / clean",
+            "`prionc -h` lists all commands. A command is a verb, optionally followed by a name (source file or project).",
         ),
         "E502" => (
-            "选项要在该命令支持的清单里",
-            "各命令的选项不同：`prionc build -h` 看 build 支持哪些。选项写作 `--名 值` 或 `--名=值`。",
+            "the option must be one the command supports",
+            "Each command has its own options: see `prionc build -h`. Options are written as `--name value` or `--name=value`.",
         ),
         "E503" => (
-            "选项取值要合法",
-            "`--mode` 只收 `debug` / `release`，`--opt` 只收 0-3；`--backend` 已移除，LLVM 是唯一后端。",
+            "the option value must be valid",
+            "`--mode` accepts only `debug` / `release`; `--opt` accepts 0-3; `--backend` has been removed, and LLVM is the only backend.",
         ),
         "E504" => (
-            "一个命令最多给一个名字",
-            "名字说明「编哪个」——省略 = 当前目录的项目或唯一 `.an`；给了 = `<名>.an` 或同名项目目录。",
+            "a command takes at most one name",
+            "The name selects what to build: omit it for the current directory's project or sole `.an`; provide it for `<name>.an` or a project directory of the same name.",
         ),
         "E505" => (
-            "名字要指向当前目录下的 `.an` 文件或同名项目目录",
-            "查名字的顺序：`<名>.an` → `<名>/lib.prion` 项目 → 当前目录项目的包名。都没有就报这条。",
+            "the name must refer to a `.an` file or a project directory in the current directory",
+            "Lookup order: `<name>.an` -> `<name>/lib.prion` project -> the current project's package name. If none exists, this is reported.",
         ),
         "E601" => (
-            "环境里要有一个能用的编译器",
-            "Prion 产中间产物后交给后端编译器编。后端取法按顺序：`PRION_CC` → SDK 同根 \
-             `tools/clang/bin` → PATH 里的 `clang`。三条都没有就报这条；\
-             装了 SDK 的 clang 组件会被自动用上。clang 要能编 C 并链接 \
-             （Windows 上 MSVC target 与 GNU target 均可），前提是它找得到系统 C 头文件与链接器。",
+            "a usable compiler must be available in the environment",
+            "Prion produces an intermediate artifact and hands it to a backend compiler. The backend is resolved in order: `PRION_CC` -> SDK's sibling `tools/clang/bin` -> `clang` on PATH. If none is found, this is reported; the SDK's clang is used automatically if installed. clang must compile and link C (MSVC or GNU target on Windows), provided it can find the system C headers and linker.",
         ),
         "E602" => (
-            "文件 / 目录要能读写",
-            "这一步是编译器在读写你的文件或目录。检查路径是否存在、有没有读写权限、\
-             文件有没有被别的程序占着。",
+            "files and directories must be readable/writable",
+            "The compiler is reading or writing your files or directories. Check that the path exists, has read/write permission, and is not held by another program.",
         ),
         "E603" => (
-            "程序要能跑起来",
-            "`run` 会把编好的可执行文件起成子进程。起不来通常是产物路径不可执行\
-             （权限 / 被杀软拦 / 路径被占用）。",
+            "the program must start",
+            "`run` starts the built executable as a child process. Failure to start usually means the artifact path is not executable (permissions, antivirus, or a busy path).",
         ),
         "E604" => (
-            "程序的结束状态要能用退出码表达",
-            "`run` 会把被运行程序的退出码原样交出去。0–255 能透传；退出码超出 8 位、\
-             或被信号终止时没有可透传的退出码，所以在这里报告——这不是编译错误。",
+            "the program's exit status must be expressible as an exit code",
+            "`run` forwards the child's exit code. 0-255 pass through; an exit code beyond 8 bits, or termination by a signal, has no code to forward, so it is reported here - this is not a compile error.",
         ),
         "E701" => (
-            "这不该发生",
-            "这是编译器的缺陷，不是你代码的问题。把源码与这条报错一起提交到项目 issue 即可。",
+            "this should not happen",
+            "This is a compiler defect, not an issue in your code. File the source and this message as an issue.",
         ),
         _ => ("", ""),
     }
 }
 
-
 pub fn render(parts: &DiagParts, tone: Tone) -> String {
     let mut s = String::new();
     match (parts.哪.is_empty(), parts.做.is_empty()) {
-        (false, false) => s.push_str(&format!("{} 处 {} 的 ", parts.哪, parts.做)),
-        (false, true) => s.push_str(&format!("{} 处的 ", parts.哪)),
-        (true, false) => s.push_str(&format!("执行 {} 时的 ", parts.做)),
+        (false, false) => s.push_str(&format!("{} at {}: ", parts.做, parts.哪)),
+        (false, true) => s.push_str(&format!("at {}: ", parts.哪)),
+        (true, false) => s.push_str(&format!("in {}: ", parts.做)),
         (true, true) => {}
     }
     s.push_str(&parts.缺);
     if !parts.致.is_empty() {
-        s.push_str(&format!("「{}」", parts.致));
+        s.push_str(&format!(" \"{}\"", parts.致));
     }
     if !parts.改.is_empty() {
         s.push_str(match tone {
-            Tone::Suggest => "，建议",
-            Tone::Fix => "，正确做法是",
+            Tone::Suggest => ", suggestion: ",
+            Tone::Fix => ", fix: ",
         });
         s.push_str(&parts.改);
     }
